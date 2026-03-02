@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Gravity Tic Tac Toe</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px 0;
+    }
+
+    #gameContainer {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    #gameMain {
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    #sequenceBar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .roundBox {
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      min-width: 60px;
+      transition: 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .roundLabel {
+      font-size: 14px;
+    }
+
+    .roundFirst {
+      font-size: 11px;
+      margin-top: 3px;
+    }
+
+    .roundFirst .O { color: #b2ebf2; }
+    .roundFirst .X { color: #f48fb1; }
+    .activeRound .roundFirst .O { color: #006064; }
+    .activeRound .roundFirst .X { color: #c2185b; }
+
+    .roundGravity {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
+    .activeRound {
+      background: #00e5ff;
+      color: #002b36;
+      font-weight: bold;
+      transform: scale(1.1);
+    }
+
+    .activeRound .roundGravity {
+      opacity: 0.6;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      gap: 12px;
+      justify-content: center;
+      margin: 20px auto;
+    }
+
+    .cell {
+      width: 100px;
+      height: 100px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      cursor: pointer;
+    }
+
+    .cell.locked {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .cell:hover:not(.locked):not(.disabled) {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .O { color: #00e5ff; }
+    .X { color: #ff4081; }
+
+    .cell.disabled {
+      background: rgba(255, 255, 255, 0.06);
+      cursor: not-allowed;
+      opacity: 0.35;
+      border: 2px dashed rgba(255, 255, 255, 0.25);
+    }
+
+    .scoreboard {
+      font-size: 20px;
+      margin-top: 10px;
+    }
+
+    #resultsSection {
+      margin-top: 16px;
+      padding: 16px 28px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      display: inline-block;
+    }
+
+    #resultsSection h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      letter-spacing: 0.5px;
+    }
+
+    .resultLine {
+      margin: 4px 0;
+      font-size: 14px;
+    }
+
+    .resultPositive { color: #76ff03; }
+    .resultNeutral  { color: rgba(255, 255, 255, 0.45); }
+
+    .finalScore {
+      margin-top: 12px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #replayControls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .replayBtn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .replayBtn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    .replayBtn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .replayInfo {
+      font-size: 13px;
+      opacity: 0.8;
+      min-width: 220px;
+      text-align: center;
+    }
+
+    .newGameBtn {
+      margin-top: 15px;
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      background: white;
+      color: #2a5298;
+      font-weight: bold;
+    }
+
+    #setupScreen {
+      text-align: center;
+      max-width: 480px;
+    }
+
+    #setupScreen h1 {
+      margin-bottom: 24px;
+    }
+
+    .setupSection {
+      margin-bottom: 20px;
+    }
+
+    .setupLabel {
+      font-size: 16px;
+      margin-bottom: 12px;
+      opacity: 0.9;
+    }
+
+    .modeToggle {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .modeBtn {
+      padding: 10px 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .modeBtn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .modeBtn.selected {
+      border-color: #00e5ff;
+      background: rgba(0, 229, 255, 0.15);
+      font-weight: bold;
+    }
+
+    #manualPickers {
+      margin-top: 16px;
+    }
+
+    .dirRow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .dirRowLabel {
+      font-size: 13px;
+      opacity: 0.7;
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .dirBtnGroup {
+      display: flex;
+      gap: 5px;
+    }
+
+    .dirBtn {
+      width: 38px;
+      height: 38px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      transition: 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dirBtn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .dirBtn.picked {
+      border-color: #00e5ff;
+      background: rgba(0, 229, 255, 0.25);
+    }
+
+    .startBtn {
+      margin-top: 24px;
+      padding: 12px 36px;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      cursor: pointer;
+      background: #00e5ff;
+      color: #002b36;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .startBtn:hover {
+      background: #18ffff;
+    }
+
+    .hidden { display: none !important; }
+
+    .rulesLink {
+      display: inline-block;
+      margin-top: 20px;
+      font-size: 14px;
+      opacity: 0.7;
+      cursor: pointer;
+      text-decoration: underline;
+      transition: opacity 0.2s;
+    }
+
+    .rulesLink:hover {
+      opacity: 1;
+    }
+
+    #rulesOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .rulesCard {
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 16px;
+      padding: 28px 32px;
+      max-width: 480px;
+      max-height: 80vh;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 1.6;
+    }
+
+    .rulesCard h2 {
+      margin: 0 0 16px;
+      text-align: center;
+    }
+
+    .rulesCard h3 {
+      margin: 14px 0 6px;
+      font-size: 15px;
+      color: #00e5ff;
+    }
+
+    .rulesCard p, .rulesCard li {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .rulesCard ul {
+      padding-left: 20px;
+      margin: 4px 0 10px;
+    }
+
+    .rulesCard li {
+      margin-bottom: 4px;
+    }
+
+    .rulesCloseBtn {
+      display: block;
+      margin: 18px auto 0;
+      padding: 8px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-weight: bold;
+    }
+
+    .rulesCloseBtn:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    #lobbyScreen {
+      text-align: center;
+      max-width: 480px;
+    }
+
+    #lobbyScreen h1 {
+      margin-bottom: 24px;
+    }
+
+    .lobbyText {
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    .lobbyLinkWrap {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .lobbyLinkInput {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      color: white;
+      padding: 8px 12px;
+      font-size: 13px;
+      width: 280px;
+      outline: none;
+    }
+
+    .lobbyCopyBtn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: #00e5ff;
+      color: #002b36;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      transition: 0.2s;
+    }
+
+    .lobbyCopyBtn:hover {
+      background: #18ffff;
+    }
+
+    .lobbyError {
+      color: #ff4081;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    @keyframes lobbyPulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .lobbyWaiting {
+      opacity: 0.6;
+      font-size: 14px;
+      animation: lobbyPulse 1.5s ease-in-out infinite;
+    }
+
+    #turnIndicator {
+      font-size: 15px;
+      min-height: 24px;
+      margin-bottom: 4px;
+    }
+
+    #matchRoundIndicator {
+      font-size: 14px;
+      opacity: 0.85;
+      margin-bottom: 10px;
+      min-height: 20px;
+    }
+
+    #matchControls {
+      min-height: 10px;
+    }
+
+    #leaderboard {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 210px;
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    #leaderboard h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      opacity: 0.9;
+    }
+
+    #leaderboard table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    #leaderboard th,
+    #leaderboard td {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    #leaderboard thead th {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      opacity: 0.7;
+      font-weight: normal;
+    }
+
+    #leaderboard tbody td {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #leaderboard .current-round {
+      background: rgba(0, 229, 255, 0.1);
+    }
+
+    #leaderboard .total-row td,
+    #leaderboard .total-row th {
+      font-weight: bold;
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      padding-top: 8px;
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+
+  <div id="setupScreen">
+    <h1>Gravity Tic Tac Toe</h1>
+
+    <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div id="playerCountToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setPlayerCount(1)">1 Player</button>
+        <button class="modeBtn selected" onclick="setPlayerCount(2)">2 Players</button>
+        <button class="modeBtn" onclick="setPlayerCount('online')">2 Players Online</button>
+      </div>
+    </div>
+
+    <div id="symbolChoice" class="setupSection hidden">
+      <div class="setupLabel">Play as</div>
+      <div id="symbolToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setHumanSymbol('O')">O (First)</button>
+        <button class="modeBtn" onclick="setHumanSymbol('X')">X (Second)</button>
+      </div>
+    </div>
+
+    <div id="formatChoice" class="setupSection">
+      <div class="setupLabel">Match Format</div>
+      <div id="formatToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setMatchFormat(1)">1 Round</button>
+        <button class="modeBtn" onclick="setMatchFormat(2)">2 Rounds</button>
+        <button class="modeBtn" onclick="setMatchFormat(4)">4 Rounds</button>
+      </div>
+    </div>
+
+    <div class="setupLabel">Gravity Sequence</div>
+    <div id="gravityModeToggle" class="modeToggle">
+      <button class="modeBtn selected" onclick="setMode('auto')">Auto Generate</button>
+      <button class="modeBtn" onclick="setMode('manual')">Specify Manually</button>
+    </div>
+    <div id="manualPickers" class="hidden"></div>
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <div id="lobbyScreen" class="hidden">
+    <h1>Gravity Tic Tac Toe</h1>
+    <div id="lobbyContent"></div>
+    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <div id="gameContainer" class="hidden">
+    <div id="gameMain">
+      <h1>Gravity Tic Tac Toe</h1>
+      <div id="matchRoundIndicator"></div>
+      <div id="sequenceBar"></div>
+      <div id="turnIndicator"></div>
+      <div id="board"></div>
+      <div class="scoreboard" id="scoreInfo"></div>
+      <div id="resultsSection"></div>
+      <div id="replayControls"></div>
+      <div id="matchControls"></div>
+      <button class="newGameBtn" onclick="showSetup()">New Game</button>
+      <div class="rulesLink" onclick="showRules()">How to Play</div>
+    </div>
+    <div id="leaderboard" class="hidden"></div>
+  </div>
+
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard">
+      <h2>How to Play</h2>
+
+      <h3>Overview</h3>
+      <p>A twist on tic-tac-toe where gravity shifts the board between stages. Two players (O and X) compete over 4 stages to score the most points.</p>
+
+      <h3>Stages</h3>
+      <ul>
+        <li>There are <strong>4 placement stages</strong> (S0–S3). Each stage, O places first, then X.</li>
+        <li>After each stage, <strong>gravity</strong> is applied in a direction (shown in the sequence bar), sliding all pieces that way.</li>
+      </ul>
+
+      <h3>Scoring</h3>
+      <ul>
+        <li>After the <strong>3rd gravity</strong>: if a player has a 3-in-a-row, they earn <strong>3 points</strong>.</li>
+        <li>After the <strong>4th gravity</strong>: if a player has a 3-in-a-row, they earn <strong>2 points</strong>.</li>
+        <li>A player can score at <strong>both</strong> gravity stages (3 + 2 = 5 possible).</li>
+        <li>If both players have a line at the <strong>same</strong> gravity stage, <strong>neither scores</strong> for that stage.</li>
+      </ul>
+
+      <h3>Final Tile</h3>
+      <ul>
+        <li>After all 4 stages, one cell remains empty.</li>
+        <li>The game checks if placing each player's symbol there would complete a line.</li>
+        <li>Each player who would complete a line earns <strong>1 point</strong>.</li>
+      </ul>
+
+      <h3>Winning</h3>
+      <p>The player with the higher total score wins!</p>
+
+      <h3>Match Formats</h3>
+      <ul>
+        <li><strong>1 Round</strong> — a single game.</li>
+        <li><strong>2 Rounds</strong> — players swap O/X between rounds.</li>
+        <li><strong>4 Rounds</strong> — rounds 1–2 use the original gravity; rounds 3–4 use reversed gravity with swapped starting roles, so both players get to go first on each gravity configuration.</li>
+      </ul>
+
+      <button class="rulesCloseBtn" onclick="hideRules()">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    const SIZE = 3;
+    const DIR_ARROW = { N: '↑', S: '↓', E: '→', W: '←' };
+
+    const ALL_LINES = [
+      [[0,0],[0,1],[0,2]], [[1,0],[1,1],[1,2]], [[2,0],[2,1],[2,2]],
+      [[0,0],[1,0],[2,0]], [[0,1],[1,1],[2,1]], [[0,2],[1,2],[2,2]],
+      [[0,0],[1,1],[2,2]], [[0,2],[1,1],[2,0]]
+    ];
+
+    /* ── game (single-round) state ── */
+    let board, stage, gravityOrder;
+    let score, movesThisStage;
+    let animating = false;
+    let gameOver = false;
+
+    /* ── match state ── */
+    let matchFormat = 1;
+    let currentRound = 1;
+    let totalRounds = 1;
+    let roundScores = [];
+    let baseGravityOrder = [];
+    let matchOver = false;
+
+    /* ── player mode ── */
+    let playerCount = 2;
+    let humanSymbol = 'O';
+    let cpuSymbol = 'X';
+
+    /* ── online ── */
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+    let mySymbol = '';
+    let myInitialSymbol = '';
+    let onlineMode = false;
+
+    /* ── history / replay ── */
+    let history = [];
+    let replayIndex = null;
+    let finalResult = null;
+
+    /* ── setup ── */
+    let setupMode = 'auto';
+    let manualDirs = ['N', 'N', 'N', 'N'];
+    const DIRS = ['N', 'S', 'W', 'E'];
+    const DIR_LABELS = { N: '↑', S: '↓', W: '←', E: '→' };
+    const STAGE_LABELS = ['After S0', 'After S1', 'After S2', 'After S3'];
+
+    /* ═══════════════════ utilities ═══════════════════ */
+
+    function dirArrow(d) { return DIR_ARROW[d] || d; }
+    function deepCopyBoard() { return board.map(r => [...r]); }
+
+    function saveState(label) {
+      history.push({ board: deepCopyBoard(), stage, score: { ...score }, label });
+    }
+
+    function generateGravity() {
+      const dirs = ["N", "E", "W", "S"];
+      const opp = { N:"S", S:"N", E:"W", W:"E" };
+      do { dirs.sort(() => Math.random() - 0.5); }
+      while (dirs.some((d, i) => i > 0 && d === opp[dirs[i - 1]]));
+      gravityOrder = dirs;
+    }
+
+    /* ═══════════════════ match logic ═══════════════════ */
+
+    function getSymbolForRound(rn) {
+      if (matchFormat === 1) return myInitialSymbol;
+      const sw = myInitialSymbol === 'O' ? 'X' : 'O';
+      if (matchFormat === 2) return rn % 2 === 1 ? myInitialSymbol : sw;
+      /* 4-round: initial, swapped, swapped, initial */
+      return [myInitialSymbol, sw, sw, myInitialSymbol][rn - 1];
+    }
+
+    function getP1SymbolForRound(rn) {
+      if (matchFormat === 1) return 'O';
+      if (matchFormat === 2) return rn % 2 === 1 ? 'O' : 'X';
+      return ['O', 'X', 'X', 'O'][rn - 1];
+    }
+
+    function getGravityForRound(rn) {
+      if (matchFormat === 4 && rn >= 3) return [...baseGravityOrder].reverse();
+      return [...baseGravityOrder];
+    }
+
+    function startMatch() {
+      currentRound = 1;
+      roundScores = [];
+      matchOver = false;
+      if (onlineMode || playerCount === 1) {
+        mySymbol = getSymbolForRound(1);
+        if (playerCount === 1) {
+          humanSymbol = mySymbol;
+          cpuSymbol = mySymbol === 'O' ? 'X' : 'O';
+        }
+      }
+      gravityOrder = getGravityForRound(1);
+      startRound();
+    }
+
+    function startRound() {
+      board = Array(SIZE).fill().map(() => Array(SIZE).fill(""));
+      stage = 0;
+      score = { O: 0, X: 0 };
+      movesThisStage = 0;
+      animating = false;
+      gameOver = false;
+      history = [];
+      replayIndex = null;
+      finalResult = null;
+      saveState("Start");
+      render();
+      scheduleComputerMoveIfNeeded();
+    }
+
+    function onRoundEnd() {
+      roundScores.push({ mySymbol, scores: { O: score.O, X: score.X } });
+      if (currentRound >= totalRounds) matchOver = true;
+    }
+
+    function requestNextRound() {
+      if (!gameOver || matchOver) return;
+      if (onlineMode && conn) conn.send({ type: 'nextRound' });
+      proceedToNextRound();
+    }
+
+    function proceedToNextRound() {
+      if (!gameOver || matchOver || currentRound >= totalRounds) return;
+      currentRound++;
+      if (onlineMode || playerCount === 1) {
+        mySymbol = getSymbolForRound(currentRound);
+        if (playerCount === 1) {
+          humanSymbol = mySymbol;
+          cpuSymbol = mySymbol === 'O' ? 'X' : 'O';
+        }
+      }
+      gravityOrder = getGravityForRound(currentRound);
+      startRound();
+    }
+
+    function requestRematch() {
+      if (!matchOver) return;
+      if (onlineMode && conn) conn.send({ type: 'rematch' });
+      doRematch();
+    }
+
+    function doRematch() {
+      if (!matchOver) return;
+      myInitialSymbol = myInitialSymbol === 'O' ? 'X' : 'O';
+      startMatch();
+    }
+
+    /* ═══════════════════ rendering ═══════════════════ */
+
+    function renderMatchInfo() {
+      const el = document.getElementById("matchRoundIndicator");
+      if (matchFormat === 1) { el.textContent = ''; return; }
+      let t = 'Round ' + currentRound + ' of ' + totalRounds;
+      if (playerCount === 1) t += ' · You are ' + humanSymbol;
+      else if (onlineMode && mySymbol) t += ' · You are ' + mySymbol;
+      else if (playerCount === 2 && !onlineMode) t += ' · P1 is ' + getP1SymbolForRound(currentRound);
+      if (matchFormat === 4 && currentRound >= 3) t += ' · Reversed gravity';
+      el.textContent = t;
+    }
+
+    function renderSequenceBar() {
+      const bar = document.getElementById("sequenceBar");
+      bar.innerHTML = "";
+      const ds = replayIndex !== null ? history[replayIndex].stage : stage;
+
+      const entries = [
+        { label: "S0", num: 0, gravity: gravityOrder[0], first: "O" },
+        { label: "S1", num: 1, gravity: gravityOrder[1], first: "O" },
+        { label: "S2", num: 2, gravity: gravityOrder[2], first: "O" },
+        { label: "S3", num: 3, gravity: gravityOrder[3], first: "O" },
+        { label: "Final", num: 5, gravity: null, first: null }
+      ];
+
+      entries.forEach(e => {
+        const box = document.createElement("div");
+        box.className = "roundBox";
+        if (ds === e.num || (e.num === 5 && ds >= 4)) box.classList.add("activeRound");
+
+        const lb = document.createElement("div");
+        lb.className = "roundLabel";
+        lb.textContent = e.label;
+        box.appendChild(lb);
+
+        if (e.first) {
+          const fd = document.createElement("div");
+          fd.className = "roundFirst";
+          fd.innerHTML = '<span class="' + e.first + '">' + e.first + '</span> · <span class="' + (e.first === 'O' ? 'X' : 'O') + '">' + (e.first === 'O' ? 'X' : 'O') + '</span>';
+          box.appendChild(fd);
+        }
+        if (e.gravity) {
+          const gd = document.createElement("div");
+          gd.className = "roundGravity";
+          gd.textContent = 'next: ' + dirArrow(e.gravity);
+          box.appendChild(gd);
+        }
+        bar.appendChild(box);
+      });
+    }
+
+    function render() {
+      renderMatchInfo();
+      renderSequenceBar();
+
+      const db = replayIndex !== null ? history[replayIndex].board : board;
+      const ds = replayIndex !== null ? history[replayIndex].score : score;
+
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      for (let r = SIZE - 1; r >= 0; r--) {
+        for (let c = 0; c < SIZE; c++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          if (gameOver) cell.classList.add("locked");
+          if (!gameOver) cell.onclick = () => handleClick(r, c);
+
+          const v = db[r][c];
+          if (v === "O") cell.innerHTML = '<span class="O">O</span>';
+          else if (v === "X") cell.innerHTML = '<span class="X">X</span>';
+          else if (v === "BOTH") cell.classList.add("disabled");
+          boardDiv.appendChild(cell);
+        }
+      }
+
+      if (!onlineMode && playerCount === 2 && matchFormat > 1) {
+        const p1s = getP1SymbolForRound(currentRound);
+        const p2s = p1s === 'O' ? 'X' : 'O';
+        document.getElementById("scoreInfo").innerHTML =
+          'P1 <span class="' + p1s + '">' + p1s + '</span> ' + ds[p1s] +
+          ' &nbsp;—&nbsp; P2 <span class="' + p2s + '">' + p2s + '</span> ' + ds[p2s];
+      } else {
+        document.getElementById("scoreInfo").innerHTML =
+          '<span class="O">O</span> ' + ds.O + ' &nbsp;—&nbsp; <span class="X">X</span> ' + ds.X;
+      }
+
+      /* turn indicator */
+      const ti = document.getElementById("turnIndicator");
+      if (onlineMode && !gameOver) {
+        const cp = movesThisStage === 0 ? "O" : "X";
+        const mine = cp === mySymbol;
+        ti.innerHTML = mine
+          ? 'Your turn (<span class="' + mySymbol + '">' + mySymbol + '</span>)'
+          : "Opponent's turn...";
+        ti.style.opacity = mine ? '1' : '0.6';
+      } else if (onlineMode && gameOver) {
+        ti.innerHTML = 'You played as <span class="' + mySymbol + '">' + mySymbol + '</span>';
+      } else {
+        ti.textContent = '';
+      }
+
+      renderResults();
+      renderReplayControls();
+      renderMatchControls();
+      if (matchFormat > 1) renderLeaderboard();
+    }
+
+    function renderResults() {
+      const sec = document.getElementById("resultsSection");
+      const atEnd = replayIndex !== null && replayIndex === history.length - 1;
+      if (!gameOver || !finalResult || !atEnd) { sec.innerHTML = ""; return; }
+
+      const s = history[replayIndex].score;
+      let h = '<h3>Final Tile Evaluation</h3>';
+      h += '<p class="resultLine ' + (finalResult.oLine ? 'resultPositive' : 'resultNeutral') + '">';
+      h += finalResult.oLine ? 'O completes a line → +1' : 'O does not complete a line → +0';
+      h += '</p><p class="resultLine ' + (finalResult.xLine ? 'resultPositive' : 'resultNeutral') + '">';
+      h += finalResult.xLine ? 'X completes a line → +1' : 'X does not complete a line → +0';
+      if (!onlineMode && playerCount === 2 && matchFormat > 1) {
+        const p1s = getP1SymbolForRound(currentRound);
+        const p2s = p1s === 'O' ? 'X' : 'O';
+        h += '</p><p class="finalScore">P1 <span class="' + p1s + '">' + p1s + '</span> ' + s[p1s] +
+          ' &nbsp;—&nbsp; P2 <span class="' + p2s + '">' + p2s + '</span> ' + s[p2s] + '</p>';
+      } else {
+        h += '</p><p class="finalScore"><span class="O">O</span> ' + s.O +
+          ' &nbsp;—&nbsp; <span class="X">X</span> ' + s.X + '</p>';
+      }
+      sec.innerHTML = h;
+    }
+
+    function renderReplayControls() {
+      const ctl = document.getElementById("replayControls");
+      if (!gameOver || history.length === 0) { ctl.innerHTML = ""; return; }
+      const i = replayIndex !== null ? replayIndex : history.length - 1;
+      const e = history[i];
+      ctl.innerHTML =
+        '<button class="replayBtn" onclick="goToStep(' + (i-1) + ')" ' + (i===0?'disabled':'') + '>◄ Prev</button>' +
+        '<span class="replayInfo">' + (i+1) + ' / ' + history.length + ' — ' + e.label + '</span>' +
+        '<button class="replayBtn" onclick="goToStep(' + (i+1) + ')" ' + (i===history.length-1?'disabled':'') + '>Next ►</button>';
+    }
+
+    function renderMatchControls() {
+      const ctl = document.getElementById("matchControls");
+      if (!gameOver) { ctl.innerHTML = ""; return; }
+
+      if (!matchOver && currentRound < totalRounds) {
+        ctl.innerHTML = '<button class="startBtn" style="margin-top:12px;font-size:15px;" onclick="requestNextRound()">Next Round →</button>';
+      } else if (matchOver && matchFormat > 1) {
+        const hasId = onlineMode || playerCount === 1;
+        let l1, l2, t1 = 0, t2 = 0;
+        if (hasId) {
+          l1 = 'You'; l2 = playerCount === 1 ? 'CPU' : 'Opponent';
+          roundScores.forEach(e => {
+            t1 += e.scores[e.mySymbol];
+            t2 += e.scores[e.mySymbol === 'O' ? 'X' : 'O'];
+          });
+        } else {
+          l1 = 'P1'; l2 = 'P2';
+          roundScores.forEach((e, idx) => {
+            const p1s = getP1SymbolForRound(idx + 1);
+            t1 += e.scores[p1s]; t2 += e.scores[p1s === 'O' ? 'X' : 'O'];
+          });
+        }
+        const verdict = t1 > t2 ? l1 + ' wins the match!'
+          : t1 < t2 ? l2 + ' wins the match!'
+          : 'Match is tied!';
+        let html = '<p style="margin-top:12px;font-size:16px;font-weight:bold;">' + verdict + '</p>';
+        if (onlineMode) {
+          html += '<button class="startBtn" style="margin-top:10px;font-size:15px;" onclick="requestRematch()">Rematch (swap roles)</button>';
+        }
+        ctl.innerHTML = html;
+      } else if (onlineMode && matchOver) {
+        ctl.innerHTML = '<button class="startBtn" style="margin-top:12px;font-size:15px;" onclick="requestRematch()">Rematch (swap roles)</button>';
+      } else {
+        ctl.innerHTML = "";
+      }
+    }
+
+    function renderLeaderboard() {
+      const el = document.getElementById('leaderboard');
+      if (matchFormat === 1) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+
+      const hasId = onlineMode || playerCount === 1;
+      const col1 = hasId ? 'You' : 'P1';
+      const col2 = hasId ? (playerCount === 1 ? 'CPU' : 'Opp') : 'P2';
+
+      let h = '<h3>Match Scoreboard</h3><table><thead><tr><th></th><th>' + col1 + '</th><th>' + col2 + '</th></tr></thead><tbody>';
+      let tM = 0, tO = 0;
+
+      for (let i = 0; i < totalRounds; i++) {
+        const rn = i + 1;
+        const cur = rn === currentRound && !matchOver;
+        const done = i < roundScores.length;
+
+        h += '<tr' + (cur ? ' class="current-round"' : '') + '>';
+
+        if (hasId) {
+          const sym = getSymbolForRound(rn);
+          h += '<td>R' + rn + ' <small class="' + sym + '">(' + sym + ')</small></td>';
+        } else {
+          h += '<td>R' + rn + '</td>';
+        }
+
+        const s1 = hasId ? (done ? roundScores[i].mySymbol : mySymbol) : getP1SymbolForRound(rn);
+        const s2 = s1 === 'O' ? 'X' : 'O';
+
+        if (done) {
+          const e = roundScores[i];
+          const m = e.scores[s1], o = e.scores[s2];
+          tM += m; tO += o;
+          if (hasId) {
+            h += '<td>' + m + '</td><td>' + o + '</td>';
+          } else {
+            h += '<td><span class="' + s1 + '">' + s1 + '</span> ' + m + '</td>';
+            h += '<td><span class="' + s2 + '">' + s2 + '</span> ' + o + '</td>';
+          }
+        } else if (cur) {
+          const m = score[s1] || 0, o = score[s2] || 0;
+          if (hasId) {
+            h += '<td>' + m + '</td><td>' + o + '</td>';
+          } else {
+            h += '<td><span class="' + s1 + '">' + s1 + '</span> ' + m + '</td>';
+            h += '<td><span class="' + s2 + '">' + s2 + '</span> ' + o + '</td>';
+          }
+        } else {
+          if (hasId) {
+            h += '<td>-</td><td>-</td>';
+          } else {
+            h += '<td><span class="' + s1 + '">' + s1 + '</span> -</td>';
+            h += '<td><span class="' + s2 + '">' + s2 + '</span> -</td>';
+          }
+        }
+        h += '</tr>';
+      }
+
+      if (!matchOver && score && roundScores.length < currentRound) {
+        const ts = hasId ? mySymbol : getP1SymbolForRound(currentRound);
+        tM += score[ts] || 0; tO += score[ts === 'O' ? 'X' : 'O'] || 0;
+      }
+
+      h += '</tbody><tfoot><tr class="total-row"><th>Total</th><td>' + tM + '</td><td>' + tO + '</td></tr></tfoot></table>';
+      el.innerHTML = h;
+    }
+
+    function goToStep(index) {
+      if (index < 0 || index >= history.length) return;
+      replayIndex = index;
+      render();
+    }
+
+    /* ═══════════════════ game logic ═══════════════════ */
+
+    function handleClick(r, c, isRemote) {
+      if (animating || gameOver) return;
+      if (board[r][c] !== "") return;
+      if (stage >= 4) return;
+
+      const cp = movesThisStage === 0 ? "O" : "X";
+      if (onlineMode && !isRemote && cp !== mySymbol) return;
+
+      board[r][c] = cp;
+      movesThisStage++;
+
+      if (onlineMode && !isRemote && conn) {
+        conn.send({ type: 'move', r, c });
+      }
+
+      saveState('S' + stage + ' · ' + cp + ' placed');
+
+      if (movesThisStage === 2) nextStage();
+
+      render();
+      scheduleComputerMoveIfNeeded();
+    }
+
+    function nextStage() {
+      movesThisStage = 0;
+      stage++;
+
+      if (stage === 5) { startFinalEvaluation(); return; }
+
+      if (stage >= 1 && stage <= 4) {
+        animating = true;
+        setTimeout(() => {
+          const gd = gravityOrder[stage - 1];
+          applyGravity(gd);
+
+          const sb = { ...score };
+          if (stage === 3 || stage === 4) evaluateScoring();
+
+          let lbl = 'Gravity ' + dirArrow(gd);
+          if (score.O > sb.O) lbl += ' · O +' + (score.O - sb.O);
+          if (score.X > sb.X) lbl += ' · X +' + (score.X - sb.X);
+          saveState(lbl);
+
+          if (stage === 4) {
+            animating = false;
+            render();
+            setTimeout(() => { stage = 5; startFinalEvaluation(); }, 600);
+          } else {
+            animating = false;
+            render();
+            scheduleComputerMoveIfNeeded();
+          }
+        }, 300);
+      } else {
+        render();
+      }
+    }
+
+    function startFinalEvaluation() {
+      gameOver = true;
+
+      let ec = null;
+      for (let r = 0; r < SIZE; r++)
+        for (let c = 0; c < SIZE; c++)
+          if (board[r][c] === "") ec = { r, c };
+
+      if (!ec) {
+        finalResult = { oLine: false, xLine: false };
+        saveState("Final Tile");
+        replayIndex = history.length - 1;
+        onRoundEnd();
+        render();
+        return;
+      }
+
+      const { r, c } = ec;
+      board[r][c] = "O";
+      const oLine = hasLineThroughCell("O", r, c);
+      board[r][c] = "X";
+      const xLine = hasLineThroughCell("X", r, c);
+      board[r][c] = "BOTH";
+
+      if (oLine) score.O += 1;
+      if (xLine) score.X += 1;
+
+      finalResult = { oLine, xLine };
+      saveState("Final Tile");
+      replayIndex = history.length - 1;
+      onRoundEnd();
+      render();
+    }
+
+    function applyGravity(dir) {
+      if (dir === "S") {
+        for (let c = 0; c < SIZE; c++) {
+          let s = []; for (let r = 0; r < SIZE; r++) if (board[r][c] !== "") s.push(board[r][c]);
+          for (let r = 0; r < SIZE; r++) board[r][c] = s[r] || "";
+        }
+      }
+      if (dir === "N") {
+        for (let c = 0; c < SIZE; c++) {
+          let s = []; for (let r = SIZE-1; r >= 0; r--) if (board[r][c] !== "") s.push(board[r][c]);
+          for (let r = SIZE-1, i = 0; r >= 0; r--, i++) board[r][c] = s[i] || "";
+        }
+      }
+      if (dir === "W") {
+        for (let r = 0; r < SIZE; r++) {
+          let s = []; for (let c = 0; c < SIZE; c++) if (board[r][c] !== "") s.push(board[r][c]);
+          for (let c = 0; c < SIZE; c++) board[r][c] = s[c] || "";
+        }
+      }
+      if (dir === "E") {
+        for (let r = 0; r < SIZE; r++) {
+          let s = []; for (let c = SIZE-1; c >= 0; c--) if (board[r][c] !== "") s.push(board[r][c]);
+          for (let c = SIZE-1, i = 0; c >= 0; c--, i++) board[r][c] = s[i] || "";
+        }
+      }
+    }
+
+    function hasLine(p) {
+      return ALL_LINES.some(l => l.every(([r,c]) => board[r][c] === p));
+    }
+
+    function hasLineThroughCell(p, tr, tc) {
+      return ALL_LINES
+        .filter(l => l.some(([r,c]) => r === tr && c === tc))
+        .some(l => l.every(([r,c]) => board[r][c] === p));
+    }
+
+    function evaluateScoring() {
+      const oHas = hasLine("O");
+      const xHas = hasLine("X");
+      if (oHas && xHas) return;
+      const pts = stage === 3 ? 3 : 2;
+      if (oHas) score.O += pts;
+      if (xHas) score.X += pts;
+    }
+
+    /* ═══════════════════ CPU ═══════════════════ */
+
+    function scheduleComputerMoveIfNeeded() {
+      if (playerCount !== 1 || gameOver || animating || stage >= 4) return;
+      const cp = movesThisStage === 0 ? "O" : "X";
+      if (cp !== cpuSymbol) return;
+      animating = true;
+      setTimeout(() => { animating = false; cpuMove(); }, 400);
+    }
+
+    function cpuMove() {
+      if (gameOver || stage >= 4) return;
+      const empty = [];
+      for (let r = 0; r < SIZE; r++)
+        for (let c = 0; c < SIZE; c++)
+          if (board[r][c] === "") empty.push({ r, c });
+      if (!empty.length) return;
+
+      const pick = empty[Math.floor(Math.random() * empty.length)];
+      board[pick.r][pick.c] = cpuSymbol;
+      movesThisStage++;
+
+      saveState('S' + stage + ' · ' + cpuSymbol + ' placed (CPU)');
+      if (movesThisStage === 2) nextStage();
+      render();
+    }
+
+    /* ═══════════════════ online ═══════════════════ */
+
+    function generateRoomId() {
+      const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'gravittt-';
+      for (let i = 0; i < 8; i++) id += ch[Math.floor(Math.random() * ch.length)];
+      return id;
+    }
+
+    function createRoom() {
+      baseGravityOrder = [...gravityOrder];
+      const roomId = generateRoomId();
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
+
+      peer = new Peer(roomId);
+      isHost = true;
+
+      peer.on('open', id => {
+        const link = window.location.origin + window.location.pathname + '#room=' + id;
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyText">Share this link with your opponent:</p>' +
+          '<div class="lobbyLinkWrap">' +
+            '<input class="lobbyLinkInput" id="roomLink" value="' + link + '" readonly>' +
+            '<button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<p class="lobbyWaiting">Waiting for opponent to join...</p>';
+      });
+
+      peer.on('connection', connection => {
+        conn = connection;
+        conn.on('open', () => {
+          const hs = Math.random() < 0.5 ? 'O' : 'X';
+          const gs = hs === 'O' ? 'X' : 'O';
+          mySymbol = hs;
+          myInitialSymbol = hs;
+
+          conn.send({
+            type: 'setup',
+            guestSymbol: gs,
+            gravityOrder: baseGravityOrder,
+            matchFormat: matchFormat
+          });
+
+          onlineMode = true;
+          totalRounds = matchFormat;
+          document.getElementById('lobbyScreen').classList.add('hidden');
+          document.getElementById('gameContainer').classList.remove('hidden');
+          startMatch();
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!matchOver) alert('Opponent disconnected.'); });
+      });
+
+      peer.on('error', err => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Error: ' + err.message + '</p>';
+      });
+    }
+
+    function joinRoom(roomId) {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
+
+      peer = new Peer();
+      isHost = false;
+
+      peer.on('open', () => {
+        conn = peer.connect(roomId, { reliable: true });
+        conn.on('open', () => {
+          document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!matchOver) alert('Host disconnected.'); });
+      });
+
+      peer.on('error', () => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>';
+      });
+    }
+
+    function handleOnlineData(data) {
+      if (data.type === 'setup') {
+        mySymbol = data.guestSymbol;
+        myInitialSymbol = data.guestSymbol;
+        baseGravityOrder = data.gravityOrder;
+        gravityOrder = [...baseGravityOrder];
+        matchFormat = data.matchFormat;
+        totalRounds = data.matchFormat;
+        onlineMode = true;
+        document.getElementById('lobbyScreen').classList.add('hidden');
+        document.getElementById('gameContainer').classList.remove('hidden');
+        startMatch();
+      } else if (data.type === 'move') {
+        handleClick(data.r, data.c, true);
+      } else if (data.type === 'nextRound') {
+        proceedToNextRound();
+      } else if (data.type === 'rematch') {
+        doRematch();
+      }
+    }
+
+    function copyLink() {
+      const inp = document.getElementById('roomLink');
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    function backToSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null; onlineMode = false; mySymbol = ''; myInitialSymbol = '';
+      matchOver = false;
+      window.location.hash = '';
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('gameContainer').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+    }
+
+    /* ═══════════════════ keyboard ═══════════════════ */
+
+    document.addEventListener('keydown', e => {
+      if (!gameOver || replayIndex === null) return;
+      if (e.key === 'ArrowLeft') goToStep(replayIndex - 1);
+      if (e.key === 'ArrowRight') goToStep(replayIndex + 1);
+    });
+
+    /* ═══════════════════ setup UI ═══════════════════ */
+
+    function setPlayerCount(count) {
+      playerCount = count;
+      document.querySelectorAll('#playerCountToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected',
+          (i === 0 && count === 1) || (i === 1 && count === 2) || (i === 2 && count === 'online'));
+      });
+      document.getElementById('symbolChoice').classList.toggle('hidden', count !== 1);
+    }
+
+    function setHumanSymbol(symbol) {
+      humanSymbol = symbol;
+      cpuSymbol = symbol === 'O' ? 'X' : 'O';
+      document.querySelectorAll('#symbolToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && symbol === 'O') || (i === 1 && symbol === 'X'));
+      });
+    }
+
+    function setMatchFormat(fmt) {
+      matchFormat = fmt;
+      totalRounds = fmt;
+      document.querySelectorAll('#formatToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected',
+          (i === 0 && fmt === 1) || (i === 1 && fmt === 2) || (i === 2 && fmt === 4));
+      });
+    }
+
+    function setMode(mode) {
+      setupMode = mode;
+      document.querySelectorAll('#gravityModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'auto') || (i === 1 && mode === 'manual'));
+      });
+      const p = document.getElementById('manualPickers');
+      if (mode === 'manual') { p.classList.remove('hidden'); renderPickers(); }
+      else p.classList.add('hidden');
+    }
+
+    function renderPickers() {
+      const ct = document.getElementById('manualPickers');
+      let h = '';
+      STAGE_LABELS.forEach((label, i) => {
+        h += '<div class="dirRow"><span class="dirRowLabel">' + label + ':</span><div class="dirBtnGroup">';
+        DIRS.forEach(d => {
+          h += '<button class="dirBtn ' + (manualDirs[i] === d ? 'picked' : '') + '" onclick="pickDir(' + i + ',\'' + d + '\')">' + DIR_LABELS[d] + '</button>';
+        });
+        h += '</div></div>';
+      });
+      ct.innerHTML = h;
+    }
+
+    function pickDir(i, d) { manualDirs[i] = d; renderPickers(); }
+
+    /* ═══════════════════ navigation ═══════════════════ */
+
+    function launchGame() {
+      if (setupMode === 'auto') generateGravity();
+      else gravityOrder = [...manualDirs];
+
+      baseGravityOrder = [...gravityOrder];
+
+      if (playerCount === 'online') { createRoom(); return; }
+
+      totalRounds = matchFormat;
+      if (playerCount === 1) {
+        myInitialSymbol = humanSymbol;
+        mySymbol = humanSymbol;
+      }
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('gameContainer').classList.remove('hidden');
+      startMatch();
+    }
+
+    function showSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null; onlineMode = false; mySymbol = ''; myInitialSymbol = '';
+      matchOver = false;
+      window.location.hash = '';
+      document.getElementById('leaderboard').classList.add('hidden');
+      document.getElementById('gameContainer').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+    }
+
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay'))
+        document.getElementById('rulesOverlay').classList.add('hidden');
+    }
+
+    /* ═══════════════════ init ═══════════════════ */
+
+    (function checkForRoomLink() {
+      const m = window.location.hash.match(/room=(.+)/);
+      if (m) joinRoom(m[1]);
+    })();
+  </script>
+
+</body>
+
+</html>
