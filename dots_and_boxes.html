@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Dots and Boxes</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a0533, #3b1466, #24243e);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .homeLink {
+      position: fixed;
+      top: 18px;
+      left: 22px;
+      font-size: 14px;
+      opacity: 0.6;
+      cursor: pointer;
+      text-decoration: none;
+      color: white;
+      transition: opacity 0.2s;
+      z-index: 50;
+    }
+
+    .homeLink:hover { opacity: 1; }
+
+    .hidden { display: none !important; }
+
+    /* ── setup ── */
+
+    #setupScreen {
+      text-align: center;
+      max-width: 420px;
+    }
+
+    #setupScreen h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .setup-sub {
+      font-size: 14px;
+      opacity: 0.5;
+      margin-bottom: 32px;
+    }
+
+    .setupSection {
+      margin-bottom: 24px;
+    }
+
+    .setupLabel {
+      font-size: 15px;
+      margin-bottom: 10px;
+      opacity: 0.85;
+    }
+
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .slider-wrap input[type="range"] {
+      width: 200px;
+      accent-color: #a044ff;
+    }
+
+    .size-display {
+      font-size: 20px;
+      font-weight: bold;
+      min-width: 55px;
+      text-align: center;
+      color: #d0a0ff;
+    }
+
+    .name-inputs {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .name-field {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .name-field label {
+      font-size: 13px;
+      opacity: 0.65;
+    }
+
+    .name-field input {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      color: white;
+      padding: 8px 12px;
+      font-size: 14px;
+      width: 140px;
+      outline: none;
+      text-align: center;
+    }
+
+    .name-field input:focus {
+      border-color: #a044ff;
+    }
+
+    .startBtn {
+      margin-top: 28px;
+      padding: 12px 40px;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #a044ff, #6a3093);
+      color: white;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .startBtn:hover {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+    }
+
+    .rulesLink {
+      display: inline-block;
+      margin-top: 20px;
+      font-size: 14px;
+      opacity: 0.55;
+      cursor: pointer;
+      text-decoration: underline;
+      transition: opacity 0.2s;
+    }
+
+    .rulesLink:hover { opacity: 1; }
+
+    /* ── game screen ── */
+
+    #gameScreen {
+      text-align: center;
+    }
+
+    #gameScreen h1 {
+      font-size: 26px;
+      margin-bottom: 6px;
+    }
+
+    #turnIndicator {
+      font-size: 16px;
+      margin-bottom: 14px;
+      min-height: 24px;
+    }
+
+    .p1-color { color: #7dd3fc; }
+    .p2-color { color: #ff6ec7; }
+
+    .scoreboard {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin-bottom: 18px;
+      font-size: 18px;
+    }
+
+    .score-item {
+      padding: 8px 18px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      transition: background 0.3s;
+    }
+
+    .score-item.active-p1 {
+      background: rgba(125, 211, 252, 0.15);
+      box-shadow: 0 0 12px rgba(125, 211, 252, 0.2);
+    }
+
+    .score-item.active-p2 {
+      background: rgba(255, 110, 199, 0.15);
+      box-shadow: 0 0 12px rgba(255, 110, 199, 0.2);
+    }
+
+    /* ── board ── */
+
+    #boardContainer {
+      display: inline-block;
+      margin: 0 auto 20px;
+    }
+
+    #board {
+      display: inline-grid;
+      gap: 0;
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+      z-index: 2;
+    }
+
+    .hline-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 1;
+    }
+
+    .hline-bar {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      transition: background 0.2s, height 0.15s;
+    }
+
+    .hline-cell:hover .hline-bar.available {
+      background: rgba(255, 255, 255, 0.35);
+      height: 8px;
+    }
+
+    .hline-bar.drawn-p1 {
+      background: #7dd3fc;
+      height: 6px;
+      box-shadow: 0 0 6px rgba(125, 211, 252, 0.4);
+    }
+
+    .hline-bar.drawn-p2 {
+      background: #ff6ec7;
+      height: 6px;
+      box-shadow: 0 0 6px rgba(255, 110, 199, 0.4);
+    }
+
+    .vline-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 1;
+    }
+
+    .vline-bar {
+      width: 6px;
+      height: 100%;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      transition: background 0.2s, width 0.15s;
+    }
+
+    .vline-cell:hover .vline-bar.available {
+      background: rgba(255, 255, 255, 0.35);
+      width: 8px;
+    }
+
+    .vline-bar.drawn-p1 {
+      background: #7dd3fc;
+      width: 6px;
+      box-shadow: 0 0 6px rgba(125, 211, 252, 0.4);
+    }
+
+    .vline-bar.drawn-p2 {
+      background: #ff6ec7;
+      width: 6px;
+      box-shadow: 0 0 6px rgba(255, 110, 199, 0.4);
+    }
+
+    .box-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+      border-radius: 4px;
+      transition: background 0.3s;
+    }
+
+    .box-cell.claimed-p1 {
+      background: rgba(125, 211, 252, 0.2);
+      color: #7dd3fc;
+    }
+
+    .box-cell.claimed-p2 {
+      background: rgba(255, 110, 199, 0.2);
+      color: #ff6ec7;
+    }
+
+    @keyframes boxPop {
+      0% { transform: scale(0.6); opacity: 0; }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .box-cell.just-claimed {
+      animation: boxPop 0.35s ease-out;
+    }
+
+    .btn-row {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .actionBtn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .actionBtn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ── game over ── */
+
+    #gameOverBanner {
+      margin-top: 14px;
+      padding: 16px 28px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      display: inline-block;
+    }
+
+    #gameOverBanner h2 {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    #gameOverBanner p {
+      font-size: 15px;
+      opacity: 0.8;
+    }
+
+    /* ── rules overlay ── */
+
+    #rulesOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .rulesCard {
+      background: linear-gradient(135deg, #1a0533, #3b1466);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 16px;
+      padding: 28px 32px;
+      max-width: 460px;
+      max-height: 80vh;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 1.6;
+    }
+
+    .rulesCard h2 { margin: 0 0 16px; text-align: center; }
+
+    .rulesCard h3 {
+      margin: 14px 0 6px;
+      font-size: 15px;
+      color: #d0a0ff;
+    }
+
+    .rulesCard p, .rulesCard li { font-size: 14px; opacity: 0.9; }
+
+    .rulesCard ul { padding-left: 20px; margin: 4px 0 10px; }
+
+    .rulesCard li { margin-bottom: 4px; }
+
+    .rulesCloseBtn {
+      display: block;
+      margin: 18px auto 0;
+      padding: 8px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-weight: bold;
+    }
+
+    .rulesCloseBtn:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+  </style>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div id="setupScreen">
+    <h1>Dots and Boxes</h1>
+    <p class="setup-sub">Two-player strategy game</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Grid Size</div>
+      <div class="slider-wrap">
+        <input type="range" id="sizeSlider" min="4" max="10" value="5" oninput="updateSizeDisplay()">
+        <span class="size-display" id="sizeDisplay">5 × 5</span>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Player Names</div>
+      <div class="name-inputs">
+        <div class="name-field">
+          <label class="p1-color">Player 1</label>
+          <input id="p1Name" value="Player 1" maxlength="12">
+        </div>
+        <div class="name-field">
+          <label class="p2-color">Player 2</label>
+          <input id="p2Name" value="Player 2" maxlength="12">
+        </div>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="startGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ GAME ═══════ -->
+  <div id="gameScreen" class="hidden">
+    <h1>Dots and Boxes</h1>
+    <div id="turnIndicator"></div>
+    <div class="scoreboard" id="scoreboard"></div>
+    <div id="boardContainer">
+      <div id="board"></div>
+    </div>
+    <div id="gameOverBanner" class="hidden"></div>
+    <div class="btn-row">
+      <button class="actionBtn" onclick="restartGame()">Restart</button>
+      <button class="actionBtn" onclick="backToSetup()">New Setup</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ RULES ═══════ -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard">
+      <h2>How to Play</h2>
+
+      <h3>Setup</h3>
+      <p>A grid of dots is created (from 4×4 up to 10×10). Two players take turns.</p>
+
+      <h3>Taking Turns</h3>
+      <ul>
+        <li>On your turn, click any available line between two adjacent dots to draw it.</li>
+        <li>Lines can be horizontal or vertical.</li>
+      </ul>
+
+      <h3>Claiming Boxes</h3>
+      <ul>
+        <li>If your line completes the 4th side of a box, you <strong>claim</strong> that box — it gets marked with your initial.</li>
+        <li>You can claim multiple boxes with a single line if it completes more than one.</li>
+        <li>After claiming a box, you <strong>must take another turn</strong> immediately.</li>
+      </ul>
+
+      <h3>Winning</h3>
+      <ul>
+        <li>The game ends when all possible lines have been drawn.</li>
+        <li>The player who claimed the most boxes wins!</li>
+      </ul>
+
+      <button class="rulesCloseBtn" onclick="hideRules()">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════ state ═══════════════════ */
+
+    let gridSize = 5;
+    let p1 = { name: 'Player 1', initial: '' };
+    let p2 = { name: 'Player 2', initial: '' };
+    let currentPlayer = 1;
+    let scores = { 1: 0, 2: 0 };
+    let totalBoxes = 0;
+    let gameOver = false;
+
+    // hLines[row][col] — horizontal line below dot (row, col): gridSize rows, (gridSize-1) cols
+    let hLines = [];
+    // vLines[row][col] — vertical line right of dot (row, col): (gridSize-1) rows, gridSize cols
+    let vLines = [];
+    // boxes[row][col] — (gridSize-1) x (gridSize-1)
+    let boxes = [];
+
+    /* ═══════════════════ setup UI ═══════════════════ */
+
+    function updateSizeDisplay() {
+      const v = document.getElementById('sizeSlider').value;
+      document.getElementById('sizeDisplay').textContent = v + ' × ' + v;
+    }
+
+    function getInitial(name) {
+      const trimmed = name.trim();
+      return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
+    }
+
+    /* ═══════════════════ game init ═══════════════════ */
+
+    function startGame() {
+      gridSize = parseInt(document.getElementById('sizeSlider').value);
+      p1.name = document.getElementById('p1Name').value.trim() || 'Player 1';
+      p2.name = document.getElementById('p2Name').value.trim() || 'Player 2';
+      p1.initial = getInitial(p1.name);
+      p2.initial = getInitial(p2.name);
+
+      if (p1.initial === p2.initial) {
+        p1.initial = p1.name.trim().charAt(0).toUpperCase();
+        p2.initial = p2.name.trim().charAt(0).toUpperCase();
+        if (p1.initial === p2.initial) {
+          p1.initial = '1';
+          p2.initial = '2';
+        }
+      }
+
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+      initBoard();
+    }
+
+    function initBoard() {
+      const n = gridSize;
+      currentPlayer = 1;
+      scores = { 1: 0, 2: 0 };
+      totalBoxes = (n - 1) * (n - 1);
+      gameOver = false;
+
+      hLines = [];
+      for (let r = 0; r < n; r++) {
+        hLines[r] = [];
+        for (let c = 0; c < n - 1; c++) hLines[r][c] = 0;
+      }
+
+      vLines = [];
+      for (let r = 0; r < n - 1; r++) {
+        vLines[r] = [];
+        for (let c = 0; c < n; c++) vLines[r][c] = 0;
+      }
+
+      boxes = [];
+      for (let r = 0; r < n - 1; r++) {
+        boxes[r] = [];
+        for (let c = 0; c < n - 1; c++) boxes[r][c] = 0;
+      }
+
+      document.getElementById('gameOverBanner').classList.add('hidden');
+      renderBoard();
+      renderScoreboard();
+      renderTurn();
+    }
+
+    /* ═══════════════════ rendering ═══════════════════ */
+
+    function renderBoard() {
+      const n = gridSize;
+      const gridRows = 2 * n - 1;
+      const gridCols = 2 * n - 1;
+
+      const lineLen = Math.max(24, Math.min(48, Math.floor(360 / (n - 1))));
+      const dotSize = 14;
+
+      const colTemplate = [];
+      for (let gc = 0; gc < gridCols; gc++) {
+        colTemplate.push(gc % 2 === 0 ? dotSize + 'px' : lineLen + 'px');
+      }
+      const rowTemplate = [];
+      for (let gr = 0; gr < gridRows; gr++) {
+        rowTemplate.push(gr % 2 === 0 ? dotSize + 'px' : lineLen + 'px');
+      }
+
+      const board = document.getElementById('board');
+      board.style.gridTemplateColumns = colTemplate.join(' ');
+      board.style.gridTemplateRows = rowTemplate.join(' ');
+      board.innerHTML = '';
+
+      for (let gr = 0; gr < gridRows; gr++) {
+        for (let gc = 0; gc < gridCols; gc++) {
+          const isEvenRow = gr % 2 === 0;
+          const isEvenCol = gc % 2 === 0;
+
+          if (isEvenRow && isEvenCol) {
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            board.appendChild(dot);
+          } else if (isEvenRow && !isEvenCol) {
+            const r = gr / 2;
+            const c = (gc - 1) / 2;
+            const cell = document.createElement('div');
+            cell.className = 'hline-cell';
+            const bar = document.createElement('div');
+            const v = hLines[r][c];
+            bar.className = 'hline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
+            if (v === 0 && !gameOver) {
+              cell.onclick = () => drawLine('h', r, c);
+            } else {
+              cell.style.cursor = 'default';
+            }
+            cell.appendChild(bar);
+            board.appendChild(cell);
+          } else if (!isEvenRow && isEvenCol) {
+            const r = (gr - 1) / 2;
+            const c = gc / 2;
+            const cell = document.createElement('div');
+            cell.className = 'vline-cell';
+            const bar = document.createElement('div');
+            const v = vLines[r][c];
+            bar.className = 'vline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
+            if (v === 0 && !gameOver) {
+              cell.onclick = () => drawLine('v', r, c);
+            } else {
+              cell.style.cursor = 'default';
+            }
+            cell.appendChild(bar);
+            board.appendChild(cell);
+          } else {
+            const r = (gr - 1) / 2;
+            const c = (gc - 1) / 2;
+            const cell = document.createElement('div');
+            cell.className = 'box-cell';
+            const v = boxes[r][c];
+            if (v === 1) {
+              cell.classList.add('claimed-p1');
+              cell.textContent = p1.initial;
+            } else if (v === 2) {
+              cell.classList.add('claimed-p2');
+              cell.textContent = p2.initial;
+            }
+            board.appendChild(cell);
+          }
+        }
+      }
+    }
+
+    function renderScoreboard() {
+      const sb = document.getElementById('scoreboard');
+      sb.innerHTML =
+        '<div class="score-item' + (currentPlayer === 1 && !gameOver ? ' active-p1' : '') + '">' +
+          '<span class="p1-color">' + p1.name + '</span>: ' + scores[1] +
+        '</div>' +
+        '<div class="score-item' + (currentPlayer === 2 && !gameOver ? ' active-p2' : '') + '">' +
+          '<span class="p2-color">' + p2.name + '</span>: ' + scores[2] +
+        '</div>';
+    }
+
+    function renderTurn() {
+      const ti = document.getElementById('turnIndicator');
+      if (gameOver) {
+        ti.textContent = '';
+        return;
+      }
+      const info = currentPlayer === 1 ? p1 : p2;
+      const cls = currentPlayer === 1 ? 'p1-color' : 'p2-color';
+      ti.innerHTML = '<span class="' + cls + '">' + info.name + '</span>\'s turn';
+    }
+
+    /* ═══════════════════ game logic ═══════════════════ */
+
+    function countBoxSides(r, c) {
+      let count = 0;
+      if (hLines[r][c]) count++;       // top
+      if (hLines[r + 1][c]) count++;   // bottom
+      if (vLines[r][c]) count++;       // left
+      if (vLines[r][c + 1]) count++;   // right
+      return count;
+    }
+
+    function drawLine(type, r, c) {
+      if (gameOver) return;
+
+      if (type === 'h') {
+        if (hLines[r][c] !== 0) return;
+        hLines[r][c] = currentPlayer;
+      } else {
+        if (vLines[r][c] !== 0) return;
+        vLines[r][c] = currentPlayer;
+      }
+
+      let claimed = 0;
+
+      if (type === 'h') {
+        // top side of box (r, c) — if r > 0, check box (r-1, c)
+        if (r > 0 && c < gridSize - 1 && boxes[r - 1][c] === 0) {
+          if (countBoxSides(r - 1, c) === 4) {
+            boxes[r - 1][c] = currentPlayer;
+            scores[currentPlayer]++;
+            claimed++;
+          }
+        }
+        // bottom side of box (r, c) — check box (r, c)
+        if (r < gridSize - 1 && c < gridSize - 1 && boxes[r][c] === 0) {
+          if (countBoxSides(r, c) === 4) {
+            boxes[r][c] = currentPlayer;
+            scores[currentPlayer]++;
+            claimed++;
+          }
+        }
+      } else {
+        // left side of box (r, c) — if c > 0, check box (r, c-1)
+        if (c > 0 && r < gridSize - 1 && boxes[r][c - 1] === 0) {
+          if (countBoxSides(r, c - 1) === 4) {
+            boxes[r][c - 1] = currentPlayer;
+            scores[currentPlayer]++;
+            claimed++;
+          }
+        }
+        // right side of box (r, c) — check box (r, c)
+        if (c < gridSize - 1 && r < gridSize - 1 && boxes[r][c] === 0) {
+          if (countBoxSides(r, c) === 4) {
+            boxes[r][c] = currentPlayer;
+            scores[currentPlayer]++;
+            claimed++;
+          }
+        }
+      }
+
+      if (scores[1] + scores[2] === totalBoxes) {
+        gameOver = true;
+        renderBoard();
+        renderScoreboard();
+        renderTurn();
+        showGameOver();
+        return;
+      }
+
+      if (claimed === 0) {
+        currentPlayer = currentPlayer === 1 ? 2 : 1;
+      }
+
+      renderBoard();
+      renderScoreboard();
+      renderTurn();
+    }
+
+    function showGameOver() {
+      const banner = document.getElementById('gameOverBanner');
+      banner.classList.remove('hidden');
+      let verdict, detail;
+      if (scores[1] > scores[2]) {
+        verdict = p1.name + ' wins!';
+        detail = scores[1] + ' – ' + scores[2];
+      } else if (scores[2] > scores[1]) {
+        verdict = p2.name + ' wins!';
+        detail = scores[1] + ' – ' + scores[2];
+      } else {
+        verdict = "It's a tie!";
+        detail = scores[1] + ' – ' + scores[2];
+      }
+      banner.innerHTML = '<h2>' + verdict + '</h2><p>' + detail + '</p>';
+    }
+
+    /* ═══════════════════ navigation ═══════════════════ */
+
+    function restartGame() {
+      initBoard();
+    }
+
+    function backToSetup() {
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+    }
+
+    function showRules() {
+      document.getElementById('rulesOverlay').classList.remove('hidden');
+    }
+
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay'))
+        document.getElementById('rulesOverlay').classList.add('hidden');
+    }
+  </script>
+</body>
+
+</html>
