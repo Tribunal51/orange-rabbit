@@ -990,42 +990,21 @@
         const done = i < roundScores.length;
 
         h += '<tr' + (cur ? ' class="current-round"' : '') + '>';
-
-        if (hasId) {
-          const sym = getSymbolForRound(rn);
-          h += '<td>R' + rn + ' <small class="' + sym + '">(' + sym + ')</small></td>';
-        } else {
-          h += '<td>R' + rn + '</td>';
-        }
+        h += '<td>R' + rn + '</td>';
 
         const s1 = hasId ? (done ? roundScores[i].mySymbol : mySymbol) : getP1SymbolForRound(rn);
         const s2 = s1 === 'O' ? 'X' : 'O';
+        const c = function(sym, val) { return '<td><span class="' + sym + '">' + sym + '</span> ' + val + '</td>'; };
 
         if (done) {
           const e = roundScores[i];
           const m = e.scores[s1], o = e.scores[s2];
           tM += m; tO += o;
-          if (hasId) {
-            h += '<td>' + m + '</td><td>' + o + '</td>';
-          } else {
-            h += '<td><span class="' + s1 + '">' + s1 + '</span> ' + m + '</td>';
-            h += '<td><span class="' + s2 + '">' + s2 + '</span> ' + o + '</td>';
-          }
+          h += c(s1, m) + c(s2, o);
         } else if (cur) {
-          const m = score[s1] || 0, o = score[s2] || 0;
-          if (hasId) {
-            h += '<td>' + m + '</td><td>' + o + '</td>';
-          } else {
-            h += '<td><span class="' + s1 + '">' + s1 + '</span> ' + m + '</td>';
-            h += '<td><span class="' + s2 + '">' + s2 + '</span> ' + o + '</td>';
-          }
+          h += c(s1, score[s1] || 0) + c(s2, score[s2] || 0);
         } else {
-          if (hasId) {
-            h += '<td>-</td><td>-</td>';
-          } else {
-            h += '<td><span class="' + s1 + '">' + s1 + '</span> -</td>';
-            h += '<td><span class="' + s2 + '">' + s2 + '</span> -</td>';
-          }
+          h += c(s1, '-') + c(s2, '-');
         }
         h += '</tr>';
       }
