@@ -954,6 +954,32 @@
 
     /* ═══════════════════ online ═══════════════════ */
 
+    async function generateTurnCredentials() {
+      const secret = 'openrelayprojectsecret';
+      const unixTime = Math.floor(Date.now() / 1000) + 24 * 3600;
+      const username = unixTime.toString();
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw', enc.encode(secret),
+        { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
+      );
+      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(username));
+      const credential = btoa(String.fromCharCode(...new Uint8Array(sig)));
+      return { username, credential };
+    }
+
+    function buildIceConfig(username, credential) {
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          { urls: 'turn:staticauth.openrelay.metered.ca:80', username, credential },
+          { urls: 'turn:staticauth.openrelay.metered.ca:443', username, credential },
+          { urls: 'turns:staticauth.openrelay.metered.ca:443?transport=tcp', username, credential }
+        ]
+      };
+    }
+
     function generateRoomId() {
       const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
       let id = 'dotbox-';
@@ -961,13 +987,17 @@
       return id;
     }
 
-    function createRoom() {
+    let joinTimer = null;
+    let lastRoomId = '';
+
+    async function createRoom() {
       const roomId = generateRoomId();
       document.getElementById('setupScreen').classList.add('hidden');
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
 
-      peer = new Peer(roomId);
+      const { username, credential } = await generateTurnCredentials();
+      peer = new Peer(roomId, { config: buildIceConfig(username, credential) });
       isHost = true;
 
       peer.on('open', id => {
@@ -1013,17 +1043,31 @@
       });
     }
 
-    function joinRoom(roomId) {
+    async function joinRoom(roomId) {
+      lastRoomId = roomId;
+      if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+
       document.getElementById('setupScreen').classList.add('hidden');
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
 
-      peer = new Peer();
+      const { username, credential } = await generateTurnCredentials();
+      peer = new Peer({ config: buildIceConfig(username, credential) });
       isHost = false;
+
+      joinTimer = setTimeout(() => {
+        if (!onlineMode) {
+          document.getElementById('lobbyContent').innerHTML =
+            '<p class="lobbyError">Connection timed out.</p>' +
+            '<p style="font-size:13px;opacity:0.7;margin-bottom:14px;">The host may have closed their tab, or the room no longer exists.</p>' +
+            '<button class="lobbyCopyBtn" style="margin-top:4px" onclick="retryJoin()">Try Again</button>';
+        }
+      }, 15000);
 
       peer.on('open', () => {
         conn = peer.connect(roomId, { reliable: true });
         conn.on('open', () => {
+          if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
           document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
         });
         conn.on('data', handleOnlineData);
@@ -1031,9 +1075,17 @@
       });
 
       peer.on('error', () => {
+        if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
         document.getElementById('lobbyContent').innerHTML =
-          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>';
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>' +
+          '<button class="lobbyCopyBtn" style="margin-top:12px" onclick="retryJoin()">Try Again</button>';
       });
+    }
+
+    function retryJoin() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      joinRoom(lastRoomId);
     }
 
     function handleOnlineData(data) {
