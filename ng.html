@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
   <title>Gravity Tic Tac Toe</title>
 
   <style>
@@ -1212,6 +1212,28 @@
 
     /* ═══════════════════ online ═══════════════════ */
 
+    async function fetchIceServers() {
+      try {
+        const resp = await fetch(
+          'https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6'
+        );
+        if (!resp.ok) throw new Error('TURN credential fetch failed');
+        const servers = await resp.json();
+        return { iceServers: servers };
+      } catch (e) {
+        console.warn('TURN credential fetch failed, using static fallback:', e);
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
     function generateRoomId() {
       const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
       let id = 'gravittt-';
@@ -1219,14 +1241,18 @@
       return id;
     }
 
-    function createRoom() {
+    let joinTimer = null;
+    let lastRoomId = '';
+
+    async function createRoom() {
       baseGravityOrder = [...gravityOrder];
       const roomId = generateRoomId();
       document.getElementById('setupScreen').classList.add('hidden');
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
 
-      peer = new Peer(roomId);
+      const iceConfig = await fetchIceServers();
+      peer = new Peer(roomId, { config: iceConfig });
       isHost = true;
 
       peer.on('open', id => {
@@ -1271,17 +1297,31 @@
       });
     }
 
-    function joinRoom(roomId) {
+    async function joinRoom(roomId) {
+      lastRoomId = roomId;
+      if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+
       document.getElementById('setupScreen').classList.add('hidden');
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
 
-      peer = new Peer();
+      const iceConfig = await fetchIceServers();
+      peer = new Peer({ config: iceConfig });
       isHost = false;
+
+      joinTimer = setTimeout(() => {
+        if (!onlineMode) {
+          document.getElementById('lobbyContent').innerHTML =
+            '<p class="lobbyError">Connection timed out.</p>' +
+            '<p style="font-size:13px;opacity:0.7;margin-bottom:14px;">The host may have closed their tab, or the room no longer exists.</p>' +
+            '<button class="lobbyCopyBtn" style="margin-top:4px" onclick="retryJoin()">Try Again</button>';
+        }
+      }, 15000);
 
       peer.on('open', () => {
         conn = peer.connect(roomId, { reliable: true });
         conn.on('open', () => {
+          if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
           document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
         });
         conn.on('data', handleOnlineData);
@@ -1289,9 +1329,17 @@
       });
 
       peer.on('error', () => {
+        if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
         document.getElementById('lobbyContent').innerHTML =
-          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>';
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>' +
+          '<button class="lobbyCopyBtn" style="margin-top:12px" onclick="retryJoin()">Try Again</button>';
       });
+    }
+
+    function retryJoin() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      joinRoom(lastRoomId);
     }
 
     function handleOnlineData(data) {

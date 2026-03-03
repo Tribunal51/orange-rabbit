@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
   <title>Dots and Boxes</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -954,30 +954,26 @@
 
     /* ═══════════════════ online ═══════════════════ */
 
-    async function generateTurnCredentials() {
-      const secret = 'openrelayprojectsecret';
-      const unixTime = Math.floor(Date.now() / 1000) + 24 * 3600;
-      const username = unixTime.toString();
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw', enc.encode(secret),
-        { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
-      );
-      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(username));
-      const credential = btoa(String.fromCharCode(...new Uint8Array(sig)));
-      return { username, credential };
-    }
-
-    function buildIceConfig(username, credential) {
-      return {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun.cloudflare.com:3478' },
-          { urls: 'turn:staticauth.openrelay.metered.ca:80', username, credential },
-          { urls: 'turn:staticauth.openrelay.metered.ca:443', username, credential },
-          { urls: 'turns:staticauth.openrelay.metered.ca:443?transport=tcp', username, credential }
-        ]
-      };
+    async function fetchIceServers() {
+      try {
+        const resp = await fetch(
+          'https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6'
+        );
+        if (!resp.ok) throw new Error('TURN credential fetch failed');
+        const servers = await resp.json();
+        return { iceServers: servers };
+      } catch (e) {
+        console.warn('TURN credential fetch failed, using static fallback:', e);
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
     }
 
     function generateRoomId() {
@@ -996,8 +992,8 @@
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
 
-      const { username, credential } = await generateTurnCredentials();
-      peer = new Peer(roomId, { config: buildIceConfig(username, credential) });
+      const iceConfig = await fetchIceServers();
+      peer = new Peer(roomId, { config: iceConfig });
       isHost = true;
 
       peer.on('open', id => {
@@ -1051,8 +1047,8 @@
       document.getElementById('lobbyScreen').classList.remove('hidden');
       document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
 
-      const { username, credential } = await generateTurnCredentials();
-      peer = new Peer({ config: buildIceConfig(username, credential) });
+      const iceConfig = await fetchIceServers();
+      peer = new Peer({ config: iceConfig });
       isHost = false;
 
       joinTimer = setTimeout(() => {
