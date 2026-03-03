@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
   <title>Dots and Boxes</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,6 +62,35 @@
       font-size: 15px;
       margin-bottom: 10px;
       opacity: 0.85;
+    }
+
+    .modeToggle {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .modeBtn {
+      padding: 10px 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .modeBtn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .modeBtn.selected {
+      border-color: #a044ff;
+      background: rgba(160, 68, 255, 0.2);
+      font-weight: bold;
     }
 
     .slider-wrap {
@@ -146,6 +176,87 @@
     }
 
     .rulesLink:hover { opacity: 1; }
+
+    /* ── lobby ── */
+
+    #lobbyScreen {
+      text-align: center;
+      max-width: 480px;
+    }
+
+    #lobbyScreen h1 {
+      font-size: 32px;
+      margin-bottom: 24px;
+    }
+
+    .lobbyText {
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    .lobbyLinkWrap {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .lobbyLinkInput {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      color: white;
+      padding: 8px 12px;
+      font-size: 13px;
+      width: 280px;
+      outline: none;
+    }
+
+    .lobbyCopyBtn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: #a044ff;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      transition: 0.2s;
+    }
+
+    .lobbyCopyBtn:hover {
+      background: #b366ff;
+    }
+
+    .lobbyError {
+      color: #ff4081;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    @keyframes lobbyPulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .lobbyWaiting {
+      opacity: 0.6;
+      font-size: 14px;
+      animation: lobbyPulse 1.5s ease-in-out infinite;
+    }
+
+    .newGameBtn {
+      margin-top: 15px;
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      background: white;
+      color: #3b1466;
+      font-weight: bold;
+    }
 
     /* ── game screen ── */
 
@@ -407,6 +518,7 @@
       background: rgba(255, 255, 255, 0.35);
     }
   </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 
 <body>
@@ -418,6 +530,14 @@
     <p class="setup-sub">Two-player strategy game</p>
 
     <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div id="playerModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setPlayerMode('local')">2 Players Local</button>
+        <button class="modeBtn" onclick="setPlayerMode('online')">2 Players Online</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
       <div class="setupLabel">Grid Size</div>
       <div class="slider-wrap">
         <input type="range" id="sizeSlider" min="4" max="10" value="5" oninput="updateSizeDisplay()">
@@ -425,7 +545,7 @@
       </div>
     </div>
 
-    <div class="setupSection">
+    <div id="nameSection" class="setupSection">
       <div class="setupLabel">Player Names</div>
       <div class="name-inputs">
         <div class="name-field">
@@ -439,7 +559,15 @@
       </div>
     </div>
 
-    <button class="startBtn" onclick="startGame()">Start Game</button>
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ LOBBY ═══════ -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Dots and Boxes</h1>
+    <div id="lobbyContent"></div>
+    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
 
@@ -452,8 +580,8 @@
       <div id="board"></div>
     </div>
     <div id="gameOverBanner" class="hidden"></div>
-    <div class="btn-row">
-      <button class="actionBtn" onclick="restartGame()">Restart</button>
+    <div class="btn-row" id="btnRow">
+      <button class="actionBtn" onclick="requestRematch()">Rematch</button>
       <button class="actionBtn" onclick="backToSetup()">New Setup</button>
     </div>
     <div class="rulesLink" onclick="showRules()">How to Play</div>
@@ -501,18 +629,33 @@
     let totalBoxes = 0;
     let gameOver = false;
 
-    // hLines[row][col] — horizontal line below dot (row, col): gridSize rows, (gridSize-1) cols
     let hLines = [];
-    // vLines[row][col] — vertical line right of dot (row, col): (gridSize-1) rows, gridSize cols
     let vLines = [];
-    // boxes[row][col] — (gridSize-1) x (gridSize-1)
     let boxes = [];
+
+    /* ── player mode ── */
+    let playerMode = 'local';
+
+    /* ── online ── */
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+    let onlineMode = false;
+    let myPlayerNum = 0; // 1 or 2
 
     /* ═══════════════════ setup UI ═══════════════════ */
 
     function updateSizeDisplay() {
       const v = document.getElementById('sizeSlider').value;
       document.getElementById('sizeDisplay').textContent = v + ' × ' + v;
+    }
+
+    function setPlayerMode(mode) {
+      playerMode = mode;
+      document.querySelectorAll('#playerModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'local') || (i === 1 && mode === 'online'));
+      });
+      document.getElementById('nameSection').classList.toggle('hidden', mode === 'online');
     }
 
     function getInitial(name) {
@@ -522,25 +665,30 @@
 
     /* ═══════════════════ game init ═══════════════════ */
 
-    function startGame() {
+    function launchGame() {
       gridSize = parseInt(document.getElementById('sizeSlider').value);
+
+      if (playerMode === 'online') {
+        createRoom();
+        return;
+      }
+
       p1.name = document.getElementById('p1Name').value.trim() || 'Player 1';
       p2.name = document.getElementById('p2Name').value.trim() || 'Player 2';
-      p1.initial = getInitial(p1.name);
-      p2.initial = getInitial(p2.name);
-
-      if (p1.initial === p2.initial) {
-        p1.initial = p1.name.trim().charAt(0).toUpperCase();
-        p2.initial = p2.name.trim().charAt(0).toUpperCase();
-        if (p1.initial === p2.initial) {
-          p1.initial = '1';
-          p2.initial = '2';
-        }
-      }
+      resolveInitials();
 
       document.getElementById('setupScreen').classList.add('hidden');
       document.getElementById('gameScreen').classList.remove('hidden');
       initBoard();
+    }
+
+    function resolveInitials() {
+      p1.initial = getInitial(p1.name);
+      p2.initial = getInitial(p2.name);
+      if (p1.initial === p2.initial) {
+        p1.initial = '1';
+        p2.initial = '2';
+      }
     }
 
     function initBoard() {
@@ -598,6 +746,8 @@
       board.style.gridTemplateRows = rowTemplate.join(' ');
       board.innerHTML = '';
 
+      const isMyTurn = !onlineMode || currentPlayer === myPlayerNum;
+
       for (let gr = 0; gr < gridRows; gr++) {
         for (let gc = 0; gc < gridCols; gc++) {
           const isEvenRow = gr % 2 === 0;
@@ -615,7 +765,7 @@
             const bar = document.createElement('div');
             const v = hLines[r][c];
             bar.className = 'hline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver) {
+            if (v === 0 && !gameOver && isMyTurn) {
               cell.onclick = () => drawLine('h', r, c);
             } else {
               cell.style.cursor = 'default';
@@ -630,7 +780,7 @@
             const bar = document.createElement('div');
             const v = vLines[r][c];
             bar.className = 'vline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver) {
+            if (v === 0 && !gameOver && isMyTurn) {
               cell.onclick = () => drawLine('v', r, c);
             } else {
               cell.style.cursor = 'default';
@@ -673,24 +823,36 @@
         ti.textContent = '';
         return;
       }
-      const info = currentPlayer === 1 ? p1 : p2;
-      const cls = currentPlayer === 1 ? 'p1-color' : 'p2-color';
-      ti.innerHTML = '<span class="' + cls + '">' + info.name + '</span>\'s turn';
+      if (onlineMode) {
+        const mine = currentPlayer === myPlayerNum;
+        const cls = currentPlayer === 1 ? 'p1-color' : 'p2-color';
+        ti.innerHTML = mine
+          ? 'Your turn (<span class="' + cls + '">' + (currentPlayer === 1 ? p1.name : p2.name) + '</span>)'
+          : "Opponent's turn...";
+        ti.style.opacity = mine ? '1' : '0.6';
+      } else {
+        const info = currentPlayer === 1 ? p1 : p2;
+        const cls = currentPlayer === 1 ? 'p1-color' : 'p2-color';
+        ti.innerHTML = '<span class="' + cls + '">' + info.name + '</span>\'s turn';
+        ti.style.opacity = '1';
+      }
     }
 
     /* ═══════════════════ game logic ═══════════════════ */
 
     function countBoxSides(r, c) {
       let count = 0;
-      if (hLines[r][c]) count++;       // top
-      if (hLines[r + 1][c]) count++;   // bottom
-      if (vLines[r][c]) count++;       // left
-      if (vLines[r][c + 1]) count++;   // right
+      if (hLines[r][c]) count++;
+      if (hLines[r + 1][c]) count++;
+      if (vLines[r][c]) count++;
+      if (vLines[r][c + 1]) count++;
       return count;
     }
 
-    function drawLine(type, r, c) {
+    function drawLine(type, r, c, isRemote) {
       if (gameOver) return;
+
+      if (onlineMode && !isRemote && currentPlayer !== myPlayerNum) return;
 
       if (type === 'h') {
         if (hLines[r][c] !== 0) return;
@@ -700,10 +862,13 @@
         vLines[r][c] = currentPlayer;
       }
 
+      if (onlineMode && !isRemote && conn) {
+        conn.send({ type: 'move', lineType: type, r: r, c: c });
+      }
+
       let claimed = 0;
 
       if (type === 'h') {
-        // top side of box (r, c) — if r > 0, check box (r-1, c)
         if (r > 0 && c < gridSize - 1 && boxes[r - 1][c] === 0) {
           if (countBoxSides(r - 1, c) === 4) {
             boxes[r - 1][c] = currentPlayer;
@@ -711,7 +876,6 @@
             claimed++;
           }
         }
-        // bottom side of box (r, c) — check box (r, c)
         if (r < gridSize - 1 && c < gridSize - 1 && boxes[r][c] === 0) {
           if (countBoxSides(r, c) === 4) {
             boxes[r][c] = currentPlayer;
@@ -720,7 +884,6 @@
           }
         }
       } else {
-        // left side of box (r, c) — if c > 0, check box (r, c-1)
         if (c > 0 && r < gridSize - 1 && boxes[r][c - 1] === 0) {
           if (countBoxSides(r, c - 1) === 4) {
             boxes[r][c - 1] = currentPlayer;
@@ -728,7 +891,6 @@
             claimed++;
           }
         }
-        // right side of box (r, c) — check box (r, c)
         if (c < gridSize - 1 && r < gridSize - 1 && boxes[r][c] === 0) {
           if (countBoxSides(r, c) === 4) {
             boxes[r][c] = currentPlayer;
@@ -773,13 +935,155 @@
       banner.innerHTML = '<h2>' + verdict + '</h2><p>' + detail + '</p>';
     }
 
-    /* ═══════════════════ navigation ═══════════════════ */
+    /* ═══════════════════ online ═══════════════════ */
 
-    function restartGame() {
+    function generateRoomId() {
+      const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'dotbox-';
+      for (let i = 0; i < 8; i++) id += ch[Math.floor(Math.random() * ch.length)];
+      return id;
+    }
+
+    function createRoom() {
+      const roomId = generateRoomId();
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
+
+      peer = new Peer(roomId);
+      isHost = true;
+
+      peer.on('open', id => {
+        const link = window.location.origin + window.location.pathname + '#room=' + id;
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyText">Share this link with your opponent:</p>' +
+          '<div class="lobbyLinkWrap">' +
+            '<input class="lobbyLinkInput" id="roomLink" value="' + link + '" readonly>' +
+            '<button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<p class="lobbyWaiting">Waiting for opponent to join...</p>';
+      });
+
+      peer.on('connection', connection => {
+        conn = connection;
+        conn.on('open', () => {
+          myPlayerNum = Math.random() < 0.5 ? 1 : 2;
+          const guestNum = myPlayerNum === 1 ? 2 : 1;
+
+          conn.send({
+            type: 'setup',
+            guestPlayerNum: guestNum,
+            gridSize: gridSize
+          });
+
+          onlineMode = true;
+          p1.name = myPlayerNum === 1 ? 'You' : 'Opponent';
+          p2.name = myPlayerNum === 2 ? 'You' : 'Opponent';
+          p1.initial = '1';
+          p2.initial = '2';
+
+          document.getElementById('lobbyScreen').classList.add('hidden');
+          document.getElementById('gameScreen').classList.remove('hidden');
+          initBoard();
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!gameOver) alert('Opponent disconnected.'); });
+      });
+
+      peer.on('error', err => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Error: ' + err.message + '</p>';
+      });
+    }
+
+    function joinRoom(roomId) {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
+
+      peer = new Peer();
+      isHost = false;
+
+      peer.on('open', () => {
+        conn = peer.connect(roomId, { reliable: true });
+        conn.on('open', () => {
+          document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!gameOver) alert('Host disconnected.'); });
+      });
+
+      peer.on('error', () => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>';
+      });
+    }
+
+    function handleOnlineData(data) {
+      if (data.type === 'setup') {
+        myPlayerNum = data.guestPlayerNum;
+        gridSize = data.gridSize;
+        onlineMode = true;
+
+        p1.name = myPlayerNum === 1 ? 'You' : 'Opponent';
+        p2.name = myPlayerNum === 2 ? 'You' : 'Opponent';
+        p1.initial = '1';
+        p2.initial = '2';
+
+        document.getElementById('lobbyScreen').classList.add('hidden');
+        document.getElementById('gameScreen').classList.remove('hidden');
+        initBoard();
+      } else if (data.type === 'move') {
+        drawLine(data.lineType, data.r, data.c, true);
+      } else if (data.type === 'rematch') {
+        doRematch(data.gridSize);
+      }
+    }
+
+    function copyLink() {
+      const inp = document.getElementById('roomLink');
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    /* ═══════════════════ rematch ═══════════════════ */
+
+    function requestRematch() {
+      if (!gameOver) {
+        initBoard();
+        return;
+      }
+
+      if (onlineMode && conn) {
+        conn.send({ type: 'rematch', gridSize: gridSize });
+      }
+      doRematch(gridSize);
+    }
+
+    function doRematch(size) {
+      if (onlineMode) {
+        myPlayerNum = myPlayerNum === 1 ? 2 : 1;
+        p1.name = myPlayerNum === 1 ? 'You' : 'Opponent';
+        p2.name = myPlayerNum === 2 ? 'You' : 'Opponent';
+      }
+      gridSize = size;
       initBoard();
     }
 
+    /* ═══════════════════ navigation ═══════════════════ */
+
     function backToSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      onlineMode = false;
+      myPlayerNum = 0;
+      gameOver = false;
+      window.location.hash = '';
+      document.getElementById('lobbyScreen').classList.add('hidden');
       document.getElementById('gameScreen').classList.add('hidden');
       document.getElementById('setupScreen').classList.remove('hidden');
     }
@@ -792,6 +1096,13 @@
       if (!e || e.target === document.getElementById('rulesOverlay'))
         document.getElementById('rulesOverlay').classList.add('hidden');
     }
+
+    /* ═══════════════════ init ═══════════════════ */
+
+    (function checkForRoomLink() {
+      const m = window.location.hash.match(/room=(.+)/);
+      if (m) joinRoom(m[1]);
+    })();
   </script>
 </body>
 
