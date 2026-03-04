@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Bulls and Cows</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a472a, #2d6a4f);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { margin: 0 0 6px; font-size: 32px; }
+
+    .setup-sub {
+      opacity: 0.55;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    .homeLink {
+      position: fixed;
+      top: 16px;
+      left: 20px;
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      font-size: 14px;
+      z-index: 100;
+    }
+    .homeLink:hover { color: white; }
+
+    /* ── setup ── */
+    .setupSection {
+      margin-bottom: 22px;
+      width: 340px;
+      max-width: 100%;
+    }
+
+    .setupLabel {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.6;
+      margin-bottom: 8px;
+    }
+
+    .modeToggle {
+      display: flex;
+      gap: 6px;
+    }
+
+    .modeBtn {
+      flex: 1;
+      padding: 10px 0;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.7);
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .modeBtn.selected {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-weight: bold;
+      border-color: rgba(255,255,255,0.4);
+    }
+
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .slider-wrap input[type=range] {
+      flex: 1;
+      accent-color: #74c69d;
+    }
+
+    .size-display {
+      min-width: 30px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    .startBtn {
+      margin-top: 10px;
+      padding: 14px 50px;
+      font-size: 17px;
+      font-weight: bold;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #52b788, #40916c);
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .startBtn:hover { transform: scale(1.04); }
+
+    /* ── lobby ── */
+    .lobbyText { font-size: 15px; margin-bottom: 12px; }
+    .lobbyWaiting { opacity: 0.6; font-size: 14px; margin-top: 12px; }
+    .lobbyError { color: #ff6b6b; font-size: 15px; }
+
+    .lobbyLinkWrap {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .lobbyLinkInput {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.25);
+      color: white;
+      font-size: 13px;
+    }
+
+    .lobbyCopyBtn {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.18);
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .lobbyCopyBtn:hover { background: rgba(255,255,255,0.3); }
+
+    .newGameBtn {
+      margin-top: 20px;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.12);
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .newGameBtn:hover { background: rgba(255,255,255,0.22); }
+
+    /* ── game area ── */
+    .game-area {
+      width: 420px;
+      max-width: 100%;
+      text-align: center;
+    }
+
+    .round-indicator {
+      font-size: 14px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+
+    .word-slots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 18px 0;
+    }
+
+    .word-slot {
+      width: 44px;
+      height: 52px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      text-transform: uppercase;
+      transition: 0.15s;
+    }
+
+    .word-slot.filled {
+      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.12);
+    }
+
+    .word-slot.active {
+      border-color: #74c69d;
+      box-shadow: 0 0 12px rgba(116,198,157,0.3);
+    }
+
+    .guess-input-wrap {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 14px 0 6px;
+    }
+
+    .guess-input {
+      width: 220px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.2);
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 6px;
+      text-align: center;
+      outline: none;
+    }
+
+    .guess-input:focus { border-color: #74c69d; }
+
+    .guess-btn {
+      padding: 12px 22px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #52b788, #40916c);
+      color: white;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+
+    .guess-btn:hover { transform: scale(1.05); }
+    .guess-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+    .guess-error {
+      color: #ff8a80;
+      font-size: 13px;
+      min-height: 20px;
+      margin-bottom: 6px;
+    }
+
+    /* ── guess history ── */
+    .history-section {
+      margin-top: 20px;
+    }
+
+    .history-label {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.5;
+      margin-bottom: 8px;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .history-table th {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.5;
+      padding: 6px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .history-table td {
+      padding: 8px 4px;
+      font-size: 15px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .history-table .attempt-num {
+      opacity: 0.4;
+      font-size: 13px;
+      width: 30px;
+    }
+
+    .history-table .guess-word {
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .bull-val { color: #81c784; font-weight: bold; }
+    .cow-val { color: #ffb74d; font-weight: bold; }
+
+    .history-table .solved-row {
+      background: rgba(129,199,132,0.12);
+    }
+
+    .history-table .solved-row .guess-word {
+      color: #81c784;
+    }
+
+    /* ── opponent panel (online) ── */
+    .panels-wrap {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+      max-width: 800px;
+      align-items: flex-start;
+    }
+
+    .panel {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .panel-header {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .panel-you .panel-header { background: rgba(129,199,132,0.15); color: #a5d6a7; }
+    .panel-opp .panel-header { background: rgba(255,183,77,0.15); color: #ffcc80; }
+
+    .opp-attempt {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 14px;
+    }
+
+    .opp-attempt .attempt-num { opacity: 0.4; font-size: 12px; min-width: 20px; }
+    .opp-attempt .guess-word { font-weight: bold; letter-spacing: 2px; text-transform: uppercase; flex: 1; }
+    .opp-attempt.solved-row { background: rgba(129,199,132,0.12); }
+
+    .opp-status {
+      font-size: 13px;
+      opacity: 0.6;
+      padding: 10px;
+      text-align: center;
+    }
+
+    /* ── word setting (round 2) ── */
+    .set-word-section {
+      margin: 24px 0;
+      padding: 20px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.2);
+    }
+
+    .set-word-section p {
+      margin-bottom: 12px;
+      font-size: 15px;
+    }
+
+    /* ── results ── */
+    .results-card {
+      background: rgba(0,0,0,0.25);
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 20px;
+      text-align: center;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .results-card h2 {
+      margin: 0 0 4px;
+      font-size: 22px;
+    }
+
+    .results-card .subtitle {
+      opacity: 0.6;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    .results-scores {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 16px;
+    }
+
+    .results-player {
+      text-align: center;
+    }
+
+    .results-player .name {
+      font-size: 13px;
+      opacity: 0.6;
+      margin-bottom: 4px;
+    }
+
+    .results-player .score {
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    .results-player .score-label {
+      font-size: 11px;
+      opacity: 0.5;
+    }
+
+    .results-player.winner .score { color: #81c784; }
+
+    .results-verdict {
+      font-size: 16px;
+      margin: 12px 0;
+      font-weight: bold;
+    }
+
+    .actionBtn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.12);
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      margin: 6px;
+    }
+
+    .actionBtn:hover { background: rgba(255,255,255,0.22); }
+
+    /* ── rules ── */
+    .rulesLink {
+      margin-top: 20px;
+      font-size: 13px;
+      opacity: 0.5;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .rulesLink:hover { opacity: 0.8; }
+
+    #rulesOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 20px;
+    }
+
+    .rulesCard {
+      background: #1b3a2a;
+      border-radius: 16px;
+      padding: 28px 24px;
+      max-width: 440px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 1.6;
+    }
+
+    .rulesCard h2 { margin: 0 0 16px; text-align: center; }
+    .rulesCard h3 { margin: 14px 0 6px; font-size: 15px; color: #74c69d; }
+    .rulesCard p, .rulesCard li { font-size: 14px; opacity: 0.9; }
+    .rulesCard ul { padding-left: 20px; margin: 4px 0 10px; }
+    .rulesCard li { margin-bottom: 4px; }
+
+    .rulesCloseBtn {
+      display: block;
+      margin: 18px auto 0;
+      padding: 8px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      font-weight: bold;
+    }
+
+    .rulesCloseBtn:hover { background: rgba(255,255,255,0.35); }
+
+    @media (max-width: 600px) {
+      .panels-wrap { flex-direction: column; }
+      .game-area { width: 100%; }
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="words.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div id="setupScreen">
+    <h1>Bulls and Cows</h1>
+    <p class="setup-sub">Guess the secret word</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div id="playerModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setPlayerMode('solo')">1 Player</button>
+        <button class="modeBtn" onclick="setPlayerMode('online')">2 Players Online</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Word Length</div>
+      <div class="slider-wrap">
+        <input type="range" id="lengthSlider" min="4" max="7" value="5" oninput="updateLengthDisplay()">
+        <span class="size-display" id="lengthDisplay">5</span>
+      </div>
+    </div>
+
+    <div id="roundsSection" class="setupSection hidden">
+      <div class="setupLabel">Format</div>
+      <div id="roundsToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setRounds(1)">1 Round</button>
+        <button class="modeBtn" onclick="setRounds(2)">2 Rounds</button>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ LOBBY ═══════ -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Bulls and Cows</h1>
+    <div id="lobbyContent"></div>
+    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
+  </div>
+
+  <!-- ═══════ GAME (solo) ═══════ -->
+  <div id="soloScreen" class="hidden">
+    <h1>Bulls and Cows</h1>
+    <p class="round-indicator" id="soloRoundLabel"></p>
+    <div class="game-area">
+      <div class="word-slots" id="soloSlots"></div>
+      <div class="guess-input-wrap">
+        <input class="guess-input" id="soloInput" maxlength="5" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="">
+        <button class="guess-btn" id="soloGuessBtn" onclick="submitSoloGuess()">Guess</button>
+      </div>
+      <div class="guess-error" id="soloError"></div>
+      <div class="history-section">
+        <div class="history-label">Your Guesses</div>
+        <table class="history-table" id="soloHistory">
+          <thead><tr><th>#</th><th>Word</th><th>Bulls</th><th>Cows</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="soloResult" class="hidden"></div>
+    <div class="btn-row" id="soloBtnRow" style="display:flex;justify-content:center;gap:12px;margin-top:16px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ GAME (online) ═══════ -->
+  <div id="onlineScreen" class="hidden">
+    <h1>Bulls and Cows</h1>
+    <p class="round-indicator" id="onlineRoundLabel"></p>
+    <div class="panels-wrap">
+      <div class="panel panel-you">
+        <div class="panel-header">You</div>
+        <div class="game-area" id="myGameArea">
+          <div class="word-slots" id="onlineSlots"></div>
+          <div class="guess-input-wrap" id="onlineInputWrap">
+            <input class="guess-input" id="onlineInput" maxlength="5" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button class="guess-btn" id="onlineGuessBtn" onclick="submitOnlineGuess()">Guess</button>
+          </div>
+          <div class="guess-error" id="onlineError"></div>
+          <div class="history-section">
+            <table class="history-table" id="myHistory">
+              <thead><tr><th>#</th><th>Word</th><th>Bulls</th><th>Cows</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel-opp">
+        <div class="panel-header">Opponent</div>
+        <div id="oppGuesses"></div>
+        <div class="opp-status" id="oppStatus">Waiting for opponent...</div>
+      </div>
+    </div>
+
+    <div id="setWordSection" class="set-word-section hidden">
+      <p>Set a word for your opponent to guess:</p>
+      <div class="guess-input-wrap">
+        <input class="guess-input" id="setWordInput" maxlength="5" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="guess-btn" id="setWordBtn" onclick="submitSetWord()">Set Word</button>
+      </div>
+      <div class="guess-error" id="setWordError"></div>
+    </div>
+
+    <div id="onlineResult" class="hidden"></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:16px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ RULES ═══════ -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard">
+      <h2>How to Play</h2>
+
+      <h3>Objective</h3>
+      <p>Guess the secret word in as few attempts as possible.</p>
+
+      <h3>Feedback</h3>
+      <ul>
+        <li><strong>Bull</strong> — a letter in your guess is in the word <em>and</em> at the correct position.</li>
+        <li><strong>Cow</strong> — a letter in your guess is in the word but at the <em>wrong</em> position.</li>
+      </ul>
+      <p>Only the count of bulls and cows is shown, not which letters they refer to.</p>
+
+      <h3>1 Player</h3>
+      <p>The game picks a random word. Keep guessing until you find it.</p>
+
+      <h3>2 Players Online</h3>
+      <ul>
+        <li><strong>1 Round:</strong> Both players guess the same randomly chosen word. Fewer guesses wins.</li>
+        <li><strong>2 Rounds:</strong> Round 1 is a common word. In Round 2, each player sets a word for the other to guess. Total guesses across both rounds determines the winner.</li>
+      </ul>
+
+      <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════ scoring ═══════════════════ */
+
+    function scoreGuess(target, guess) {
+      let bulls = 0;
+      const tRemain = [], gRemain = [];
+      for (let i = 0; i < target.length; i++) {
+        if (guess[i] === target[i]) bulls++;
+        else { tRemain.push(target[i]); gRemain.push(guess[i]); }
+      }
+      let cows = 0;
+      for (const ch of gRemain) {
+        const idx = tRemain.indexOf(ch);
+        if (idx !== -1) { cows++; tRemain.splice(idx, 1); }
+      }
+      return { bulls, cows };
+    }
+
+    function pickWord(len) {
+      const arr = Array.from(VALID_WORDS[len]);
+      return arr[Math.floor(Math.random() * arr.length)].toUpperCase();
+    }
+
+    function isValidWord(word) {
+      const w = word.toLowerCase();
+      return VALID_WORDS[w.length] && VALID_WORDS[w.length].has(w);
+    }
+
+    /* ═══════════════════ state ═══════════════════ */
+
+    let wordLength = 5;
+    let playerMode = 'solo';
+    let totalRounds = 1;
+
+    let targetWord = '';
+    let guesses = [];
+    let solved = false;
+
+    let peer = null, conn = null, isHost = false, onlineMode = false;
+    let oppGuesses = [];
+    let oppSolved = false;
+
+    let currentRound = 1;
+    let r1MyGuesses = 0, r1OppGuesses = 0;
+    let r2TargetWord = '';
+    let r2MyWord = '';
+    let r2OppWord = '';
+    let r2OppWordSet = false;
+    let r2MyWordSet = false;
+    let r2MyGuesses = [];
+    let r2OppGuesses = [];
+    let r2MySolved = false;
+    let r2OppSolved = false;
+    let waitingForWords = false;
+
+    /* ═══════════════════ setup UI ═══════════════════ */
+
+    function updateLengthDisplay() {
+      document.getElementById('lengthDisplay').textContent =
+        document.getElementById('lengthSlider').value;
+    }
+
+    function setPlayerMode(mode) {
+      playerMode = mode;
+      document.querySelectorAll('#playerModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'solo') || (i === 1 && mode === 'online'));
+      });
+      document.getElementById('roundsSection').classList.toggle('hidden', mode !== 'online');
+    }
+
+    function setRounds(n) {
+      totalRounds = n;
+      document.querySelectorAll('#roundsToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && n === 1) || (i === 1 && n === 2));
+      });
+    }
+
+    /* ═══════════════════ launch ═══════════════════ */
+
+    function launchGame() {
+      wordLength = parseInt(document.getElementById('lengthSlider').value);
+      if (playerMode === 'solo') {
+        startSoloGame();
+      } else {
+        createRoom();
+      }
+    }
+
+    /* ═══════════════════ solo game ═══════════════════ */
+
+    function startSoloGame() {
+      targetWord = pickWord(wordLength);
+      guesses = [];
+      solved = false;
+
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('soloScreen').classList.remove('hidden');
+      document.getElementById('soloRoundLabel').textContent = wordLength + '-letter word';
+
+      const inp = document.getElementById('soloInput');
+      inp.maxLength = wordLength;
+      inp.placeholder = '·'.repeat(wordLength);
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('soloGuessBtn').disabled = false;
+
+      renderSoloSlots('');
+      document.getElementById('soloHistory').querySelector('tbody').innerHTML = '';
+      document.getElementById('soloResult').classList.add('hidden');
+      document.getElementById('soloInput').focus();
+    }
+
+    function renderSoloSlots(word) {
+      const container = document.getElementById('soloSlots');
+      container.innerHTML = '';
+      for (let i = 0; i < wordLength; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'word-slot' + (word[i] ? ' filled' : '') + (i === word.length && !solved ? ' active' : '');
+        slot.textContent = word[i] || '';
+        container.appendChild(slot);
+      }
+    }
+
+    function submitSoloGuess() {
+      const inp = document.getElementById('soloInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('soloError');
+
+      if (word.length !== wordLength) {
+        err.textContent = 'Enter a ' + wordLength + '-letter word';
+        return;
+      }
+      if (!/^[A-Z]+$/.test(word)) {
+        err.textContent = 'Letters only';
+        return;
+      }
+      if (!isValidWord(word)) {
+        err.textContent = 'Not a valid English word';
+        inp.focus();
+        return;
+      }
+      err.textContent = '';
+
+      const result = scoreGuess(targetWord, word);
+      guesses.push({ word, ...result });
+
+      renderSoloSlots(word);
+      renderSoloHistory();
+
+      if (result.bulls === wordLength) {
+        solved = true;
+        inp.disabled = true;
+        document.getElementById('soloGuessBtn').disabled = true;
+        const res = document.getElementById('soloResult');
+        res.classList.remove('hidden');
+        res.innerHTML = '<div class="results-card"><h2>You got it!</h2>' +
+          '<p class="subtitle">The word was <strong>' + targetWord + '</strong></p>' +
+          '<p style="font-size:20px;font-weight:bold;">' + guesses.length + ' guess' + (guesses.length > 1 ? 'es' : '') + '</p></div>';
+      }
+
+      inp.value = '';
+      inp.focus();
+    }
+
+    function renderSoloHistory() {
+      const tbody = document.getElementById('soloHistory').querySelector('tbody');
+      tbody.innerHTML = '';
+      for (let i = guesses.length - 1; i >= 0; i--) {
+        const g = guesses[i];
+        const tr = document.createElement('tr');
+        if (g.bulls === wordLength) tr.className = 'solved-row';
+        tr.innerHTML = '<td class="attempt-num">' + (i + 1) + '</td>' +
+          '<td class="guess-word">' + g.word + '</td>' +
+          '<td class="bull-val">' + g.bulls + '</td>' +
+          '<td class="cow-val">' + g.cows + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    /* ═══════════════════ TURN credentials ═══════════════════ */
+
+    async function fetchIceServers() {
+      try {
+        const resp = await fetch(
+          'https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6'
+        );
+        if (!resp.ok) throw new Error('TURN credential fetch failed');
+        const servers = await resp.json();
+        return { iceServers: servers };
+      } catch (e) {
+        console.warn('TURN credential fetch failed, using static fallback:', e);
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
+    /* ═══════════════════ online ═══════════════════ */
+
+    function generateRoomId() {
+      const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'bc-';
+      for (let i = 0; i < 8; i++) id += ch[Math.floor(Math.random() * ch.length)];
+      return id;
+    }
+
+    let joinTimer = null;
+    let lastRoomId = '';
+
+    async function createRoom() {
+      const roomId = generateRoomId();
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
+
+      const iceConfig = await fetchIceServers();
+      peer = new Peer(roomId, { config: iceConfig });
+      isHost = true;
+
+      peer.on('open', id => {
+        const link = window.location.origin + window.location.pathname + '#room=' + id;
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyText">Share this link with your opponent:</p>' +
+          '<div class="lobbyLinkWrap">' +
+            '<input class="lobbyLinkInput" id="roomLink" value="' + link + '" readonly>' +
+            '<button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<p class="lobbyWaiting">Waiting for opponent to join...</p>';
+      });
+
+      peer.on('connection', connection => {
+        conn = connection;
+        conn.on('open', () => {
+          targetWord = pickWord(wordLength);
+          conn.send({
+            type: 'setup',
+            wordLength: wordLength,
+            totalRounds: totalRounds,
+            targetWord: targetWord
+          });
+          onlineMode = true;
+          startOnlineRound();
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!solved || !oppSolved) alert('Opponent disconnected.'); });
+      });
+
+      peer.on('error', err => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Error: ' + err.message + '</p>';
+      });
+    }
+
+    async function joinRoom(roomId) {
+      lastRoomId = roomId;
+      if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
+
+      const iceConfig = await fetchIceServers();
+      peer = new Peer({ config: iceConfig });
+      isHost = false;
+
+      joinTimer = setTimeout(() => {
+        if (!onlineMode) {
+          document.getElementById('lobbyContent').innerHTML =
+            '<p class="lobbyError">Connection timed out.</p>' +
+            '<p style="font-size:13px;opacity:0.7;margin-bottom:14px;">The host may have closed their tab, or the room no longer exists.</p>' +
+            '<button class="lobbyCopyBtn" style="margin-top:4px" onclick="retryJoin()">Try Again</button>';
+        }
+      }, 15000);
+
+      peer.on('open', () => {
+        conn = peer.connect(roomId, { reliable: true });
+        conn.on('open', () => {
+          if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+          document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => { if (!solved || !oppSolved) alert('Host disconnected.'); });
+      });
+
+      peer.on('error', () => {
+        if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>' +
+          '<button class="lobbyCopyBtn" style="margin-top:12px" onclick="retryJoin()">Try Again</button>';
+      });
+    }
+
+    function retryJoin() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      joinRoom(lastRoomId);
+    }
+
+    function copyLink() {
+      const inp = document.getElementById('roomLink');
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    /* ═══════════════════ online round ═══════════════════ */
+
+    function startOnlineRound() {
+      guesses = [];
+      oppGuesses = [];
+      solved = false;
+      oppSolved = false;
+      currentRound = 1;
+      r1MyGuesses = 0;
+      r1OppGuesses = 0;
+      r2MyGuesses = [];
+      r2OppGuesses = [];
+      r2MySolved = false;
+      r2OppSolved = false;
+      r2OppWordSet = false;
+      r2MyWordSet = false;
+      waitingForWords = false;
+
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('onlineScreen').classList.remove('hidden');
+      document.getElementById('setWordSection').classList.add('hidden');
+      document.getElementById('onlineResult').classList.add('hidden');
+
+      const roundLabel = totalRounds === 2 ? 'Round 1 of 2 · ' + wordLength + '-letter word' : wordLength + '-letter word';
+      document.getElementById('onlineRoundLabel').textContent = roundLabel;
+
+      const inp = document.getElementById('onlineInput');
+      inp.maxLength = wordLength;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('onlineGuessBtn').disabled = false;
+      document.getElementById('onlineInputWrap').classList.remove('hidden');
+
+      renderOnlineSlots('');
+      document.getElementById('myHistory').querySelector('tbody').innerHTML = '';
+      document.getElementById('oppGuesses').innerHTML = '';
+      document.getElementById('oppStatus').textContent = 'Waiting for opponent to guess...';
+      document.getElementById('oppStatus').classList.remove('hidden');
+      document.getElementById('onlineInput').focus();
+    }
+
+    function renderOnlineSlots(word) {
+      const container = document.getElementById('onlineSlots');
+      container.innerHTML = '';
+      const len = r2TargetWord && currentRound === 2 ? r2TargetWord.length : wordLength;
+      for (let i = 0; i < len; i++) {
+        const slot = document.createElement('div');
+        const isSolved = currentRound === 2 ? r2MySolved : solved;
+        slot.className = 'word-slot' + (word[i] ? ' filled' : '') + (i === word.length && !isSolved ? ' active' : '');
+        slot.textContent = word[i] || '';
+        container.appendChild(slot);
+      }
+    }
+
+    function submitOnlineGuess() {
+      const inp = document.getElementById('onlineInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('onlineError');
+      const curTarget = currentRound === 2 ? r2TargetWord : targetWord;
+      const curLen = curTarget.length;
+
+      if (word.length !== curLen) {
+        err.textContent = 'Enter a ' + curLen + '-letter word';
+        return;
+      }
+      if (!/^[A-Z]+$/.test(word)) {
+        err.textContent = 'Letters only';
+        return;
+      }
+      if (!isValidWord(word)) {
+        err.textContent = 'Not a valid English word';
+        inp.focus();
+        return;
+      }
+      err.textContent = '';
+
+      const result = scoreGuess(curTarget, word);
+      const entry = { word, ...result };
+      const isSolved = result.bulls === curLen;
+
+      if (currentRound === 2) {
+        r2MyGuesses.push(entry);
+        if (isSolved) r2MySolved = true;
+      } else {
+        guesses.push(entry);
+        if (isSolved) solved = true;
+      }
+
+      renderOnlineSlots(word);
+      renderMyHistory();
+
+      conn.send({
+        type: currentRound === 2 ? 'r2guess' : 'guess',
+        attemptNum: currentRound === 2 ? r2MyGuesses.length : guesses.length,
+        bulls: result.bulls,
+        cows: result.cows,
+        word: word,
+        solved: isSolved
+      });
+
+      if (isSolved) {
+        inp.disabled = true;
+        document.getElementById('onlineGuessBtn').disabled = true;
+        if (currentRound === 1) {
+          r1MyGuesses = guesses.length;
+        }
+        checkRoundEnd();
+      }
+
+      inp.value = '';
+      if (!isSolved) inp.focus();
+    }
+
+    function renderMyHistory() {
+      const tbody = document.getElementById('myHistory').querySelector('tbody');
+      tbody.innerHTML = '';
+      const list = currentRound === 2 ? r2MyGuesses : guesses;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const g = list[i];
+        const tr = document.createElement('tr');
+        const curTarget = currentRound === 2 ? r2TargetWord : targetWord;
+        if (g.bulls === curTarget.length) tr.className = 'solved-row';
+        tr.innerHTML = '<td class="attempt-num">' + (i + 1) + '</td>' +
+          '<td class="guess-word">' + g.word + '</td>' +
+          '<td class="bull-val">' + g.bulls + '</td>' +
+          '<td class="cow-val">' + g.cows + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderOppGuesses() {
+      const container = document.getElementById('oppGuesses');
+      container.innerHTML = '';
+      const list = currentRound === 2 ? r2OppGuesses : oppGuesses;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const g = list[i];
+        const div = document.createElement('div');
+        const curTarget = currentRound === 2 ? r2TargetWord : targetWord;
+        div.className = 'opp-attempt' + (g.solved ? ' solved-row' : '');
+        div.innerHTML = '<span class="attempt-num">' + (i + 1) + '</span>' +
+          '<span style="flex:1"></span>' +
+          '<span class="bull-val">' + g.bulls + 'B</span>' +
+          '<span class="cow-val">' + g.cows + 'C</span>';
+        container.appendChild(div);
+      }
+    }
+
+    /* ═══════════════════ online data handler ═══════════════════ */
+
+    function handleOnlineData(data) {
+      if (data.type === 'setup') {
+        wordLength = data.wordLength;
+        totalRounds = data.totalRounds;
+        targetWord = data.targetWord;
+        onlineMode = true;
+        startOnlineRound();
+      } else if (data.type === 'guess') {
+        oppGuesses.push({ word: data.word, bulls: data.bulls, cows: data.cows, solved: data.solved });
+        if (data.solved) {
+          oppSolved = true;
+          r1OppGuesses = oppGuesses.length;
+          document.getElementById('oppStatus').textContent = 'Opponent found the word in ' + oppGuesses.length + ' guess' + (oppGuesses.length > 1 ? 'es' : '') + '!';
+        } else {
+          document.getElementById('oppStatus').textContent = 'Opponent has made ' + oppGuesses.length + ' guess' + (oppGuesses.length > 1 ? 'es' : '') + '...';
+        }
+        renderOppGuesses();
+        checkRoundEnd();
+      } else if (data.type === 'setWord') {
+        r2OppWord = data.word.toUpperCase();
+        r2OppWordSet = true;
+        if (r2MyWordSet && r2OppWordSet) {
+          beginRound2();
+        } else {
+          document.getElementById('oppStatus').textContent = 'Opponent has set their word. Waiting for yours...';
+        }
+      } else if (data.type === 'r2guess') {
+        r2OppGuesses.push({ word: data.word, bulls: data.bulls, cows: data.cows, solved: data.solved });
+        if (data.solved) {
+          r2OppSolved = true;
+          document.getElementById('oppStatus').textContent = 'Opponent found your word in ' + r2OppGuesses.length + ' guess' + (r2OppGuesses.length > 1 ? 'es' : '') + '!';
+        } else {
+          document.getElementById('oppStatus').textContent = 'Opponent has made ' + r2OppGuesses.length + ' guess' + (r2OppGuesses.length > 1 ? 'es' : '') + '...';
+        }
+        renderOppGuesses();
+        checkRound2End();
+      }
+    }
+
+    /* ═══════════════════ round transitions ═══════════════════ */
+
+    function checkRoundEnd() {
+      const mySolved = currentRound === 2 ? r2MySolved : solved;
+      const theirSolved = currentRound === 2 ? r2OppSolved : oppSolved;
+
+      if (!mySolved || !theirSolved) return;
+
+      if (totalRounds === 1 || (totalRounds === 2 && currentRound === 2)) {
+        showFinalResults();
+      } else if (totalRounds === 2 && currentRound === 1) {
+        startWordSettingPhase();
+      }
+    }
+
+    function startWordSettingPhase() {
+      waitingForWords = true;
+      document.getElementById('onlineInputWrap').classList.add('hidden');
+      document.getElementById('onlineRoundLabel').textContent = 'Round 2 — Set a word';
+
+      const section = document.getElementById('setWordSection');
+      section.classList.remove('hidden');
+      const swInp = document.getElementById('setWordInput');
+      swInp.maxLength = wordLength;
+      swInp.value = '';
+      swInp.focus();
+      document.getElementById('setWordError').textContent = '';
+      document.getElementById('setWordBtn').disabled = false;
+
+      document.getElementById('oppStatus').textContent = 'Waiting for both players to set a word...';
+      document.getElementById('oppStatus').classList.remove('hidden');
+    }
+
+    function submitSetWord() {
+      const inp = document.getElementById('setWordInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('setWordError');
+
+      if (word.length !== wordLength) {
+        err.textContent = 'Must be ' + wordLength + ' letters';
+        return;
+      }
+      if (!/^[A-Z]+$/.test(word)) {
+        err.textContent = 'Letters only';
+        return;
+      }
+      if (!isValidWord(word)) {
+        err.textContent = 'Not a valid English word';
+        inp.focus();
+        return;
+      }
+      err.textContent = '';
+
+      r2MyWord = word;
+      r2MyWordSet = true;
+      inp.disabled = true;
+      document.getElementById('setWordBtn').disabled = true;
+
+      conn.send({ type: 'setWord', word: word });
+
+      if (r2OppWordSet) {
+        beginRound2();
+      } else {
+        document.getElementById('setWordSection').querySelector('p').textContent = 'Word set! Waiting for opponent...';
+      }
+    }
+
+    function beginRound2() {
+      currentRound = 2;
+      waitingForWords = false;
+      r2TargetWord = r2OppWord;
+      r2MyGuesses = [];
+      r2OppGuesses = [];
+      r2MySolved = false;
+      r2OppSolved = false;
+
+      document.getElementById('setWordSection').classList.add('hidden');
+      document.getElementById('onlineRoundLabel').textContent = 'Round 2 of 2 · Guess opponent\'s word';
+
+      const inp = document.getElementById('onlineInput');
+      inp.maxLength = r2TargetWord.length;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('onlineGuessBtn').disabled = false;
+      document.getElementById('onlineInputWrap').classList.remove('hidden');
+
+      renderOnlineSlots('');
+      document.getElementById('myHistory').querySelector('tbody').innerHTML = '';
+      document.getElementById('oppGuesses').innerHTML = '';
+      document.getElementById('oppStatus').textContent = 'Opponent is guessing your word...';
+      document.getElementById('oppStatus').classList.remove('hidden');
+      inp.focus();
+    }
+
+    function checkRound2End() {
+      if (r2MySolved && r2OppSolved) {
+        showFinalResults();
+      }
+    }
+
+    /* ═══════════════════ results ═══════════════════ */
+
+    function showFinalResults() {
+      let myTotal, oppTotal;
+
+      if (totalRounds === 1) {
+        myTotal = guesses.length;
+        oppTotal = oppGuesses.length;
+      } else {
+        myTotal = r1MyGuesses + r2MyGuesses.length;
+        oppTotal = r1OppGuesses + r2OppGuesses.length;
+      }
+
+      let verdict, myClass = '', oppClass = '';
+      if (myTotal < oppTotal) {
+        verdict = 'You win!';
+        myClass = ' winner';
+      } else if (oppTotal < myTotal) {
+        verdict = 'Opponent wins!';
+        oppClass = ' winner';
+      } else {
+        verdict = 'It\'s a tie!';
+      }
+
+      let breakdown = '';
+      if (totalRounds === 2) {
+        breakdown = '<div style="font-size:13px;opacity:0.6;margin-top:8px;">' +
+          'R1: You ' + r1MyGuesses + ' · Opp ' + r1OppGuesses + ' | ' +
+          'R2: You ' + r2MyGuesses.length + ' · Opp ' + r2OppGuesses.length +
+          '</div>';
+      }
+
+      const html = '<div class="results-card">' +
+        '<h2>Game Over</h2>' +
+        '<div class="results-scores">' +
+          '<div class="results-player' + myClass + '"><div class="name">You</div><div class="score">' + myTotal + '</div><div class="score-label">guesses</div></div>' +
+          '<div class="results-player' + oppClass + '"><div class="name">Opponent</div><div class="score">' + oppTotal + '</div><div class="score-label">guesses</div></div>' +
+        '</div>' +
+        '<div class="results-verdict">' + verdict + '</div>' +
+        breakdown +
+        (totalRounds === 1 ? '<p style="font-size:13px;opacity:0.5;margin-top:8px;">The word was <strong>' + targetWord + '</strong></p>' :
+         '<p style="font-size:13px;opacity:0.5;margin-top:8px;">R1 word: <strong>' + targetWord + '</strong> · Your R2 word: <strong>' + r2MyWord + '</strong> · Their R2 word: <strong>' + r2OppWord + '</strong></p>') +
+      '</div>';
+
+      document.getElementById('onlineInputWrap').classList.add('hidden');
+      document.getElementById('onlineResult').innerHTML = html;
+      document.getElementById('onlineResult').classList.remove('hidden');
+    }
+
+    /* ═══════════════════ navigation ═══════════════════ */
+
+    function backToSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      onlineMode = false;
+      solved = false;
+      oppSolved = false;
+      window.location.hash = '';
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('soloScreen').classList.add('hidden');
+      document.getElementById('onlineScreen').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+    }
+
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn'))
+        document.getElementById('rulesOverlay').classList.add('hidden');
+    }
+
+    /* ═══════════════════ keyboard shortcut ═══════════════════ */
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        if (!document.getElementById('soloScreen').classList.contains('hidden') && !solved) {
+          submitSoloGuess();
+        } else if (!document.getElementById('onlineScreen').classList.contains('hidden')) {
+          if (!document.getElementById('setWordSection').classList.contains('hidden') && !r2MyWordSet) {
+            submitSetWord();
+          } else {
+            const isSolved = currentRound === 2 ? r2MySolved : solved;
+            if (!isSolved) submitOnlineGuess();
+          }
+        }
+      }
+    });
+
+    /* ═══════════════════ init ═══════════════════ */
+
+    (function checkForRoomLink() {
+      const m = window.location.hash.match(/room=(.+)/);
+      if (m) joinRoom(m[1]);
+    })();
+  </script>
+</body>
+
+</html>

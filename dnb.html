@@ -540,7 +540,7 @@
     <div class="setupSection">
       <div class="setupLabel">Grid Size</div>
       <div class="slider-wrap">
-        <input type="range" id="sizeSlider" min="4" max="10" value="5" oninput="updateSizeDisplay()">
+        <input type="range" id="sizeSlider" min="3" max="9" value="5" oninput="updateSizeDisplay()">
         <span class="size-display" id="sizeDisplay">5 × 5</span>
       </div>
     </div>
@@ -601,7 +601,7 @@
       <h2>How to Play</h2>
 
       <h3>Setup</h3>
-      <p>A grid of dots is created (from 4×4 up to 10×10). Two players take turns.</p>
+      <p>A grid of boxes is created (from 3×3 up to 9×9). Two players take turns.</p>
 
       <h3>Taking Turns</h3>
       <ul>
@@ -629,7 +629,7 @@
   <script>
     /* ═══════════════════ state ═══════════════════ */
 
-    let gridSize = 5;
+    let gridSize = 6;
     let p1 = { name: 'Player 1', initial: '' };
     let p2 = { name: 'Player 2', initial: '' };
     let currentPlayer = 1;
@@ -683,7 +683,7 @@
     /* ═══════════════════ game init ═══════════════════ */
 
     function launchGame() {
-      gridSize = parseInt(document.getElementById('sizeSlider').value);
+      gridSize = parseInt(document.getElementById('sizeSlider').value) + 1;
 
       if (playerMode === 'online') {
         createRoom();

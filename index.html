@@ -80,6 +80,40 @@
       background: linear-gradient(135deg, #6a3093, #a044ff);
     }
 
+    .game-icon.bulls-cows {
+      background: linear-gradient(135deg, #1a472a, #2d6a4f);
+    }
+
+    .bc-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 3px;
+      width: 56px;
+    }
+
+    .bc-slot {
+      width: 10px;
+      height: 12px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: bold;
+    }
+
+    .bc-slot.bull { background: rgba(129,199,132,0.4); color: #a5d6a7; }
+    .bc-slot.cow { background: rgba(255,183,77,0.35); color: #ffcc80; }
+    .bc-slot.miss { background: rgba(255,255,255,0.08); }
+
+    .bc-label {
+      margin-top: 6px;
+      font-size: 11px;
+      opacity: 0.8;
+      letter-spacing: 1px;
+    }
+
     .game-icon-inner {
       display: flex;
       flex-direction: column;
@@ -248,6 +282,33 @@
       <div class="game-title">Dots and Boxes</div>
       <div class="game-desc">Draw lines, claim boxes, outscore your opponent on a custom grid.</div>
       <span class="game-badge badge-players">2 Players · Online</span>
+    </a>
+    <a class="game-card" href="bc.html">
+      <div class="game-icon bulls-cows">
+        <div class="game-icon-inner">
+          <div class="bc-grid">
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot cow">C</div>
+            <div class="bc-slot miss"></div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot miss"></div>
+            <div class="bc-slot miss"></div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot cow">C</div>
+            <div class="bc-slot cow">C</div>
+            <div class="bc-slot miss"></div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot bull">B</div>
+            <div class="bc-slot bull">B</div>
+          </div>
+          <div class="bc-label">2B 1C → 5B</div>
+        </div>
+      </div>
+      <div class="game-title">Bulls and Cows</div>
+      <div class="game-desc">Guess the secret word — get bulls for correct positions, cows for wrong ones.</div>
+      <span class="game-badge badge-players">1–2 Players · Online</span>
     </a>
   </div>
 </body>
