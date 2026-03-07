@@ -3,9 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Game Hub</title>
+  <title>Orange Rabbit</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -84,6 +88,10 @@
       background: linear-gradient(135deg, #1a472a, #2d6a4f);
     }
 
+    .game-icon.hangman {
+      background: linear-gradient(135deg, #1a0a2e, #2d1b4e);
+    }
+
     .bc-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -94,7 +102,7 @@
     .bc-slot {
       width: 10px;
       height: 12px;
-      background: rgba(255,255,255,0.15);
+      background: rgba(255, 255, 255, 0.15);
       border-radius: 2px;
       display: flex;
       align-items: center;
@@ -103,9 +111,19 @@
       font-weight: bold;
     }
 
-    .bc-slot.bull { background: rgba(129,199,132,0.4); color: #a5d6a7; }
-    .bc-slot.cow { background: rgba(255,183,77,0.35); color: #ffcc80; }
-    .bc-slot.miss { background: rgba(255,255,255,0.08); }
+    .bc-slot.bull {
+      background: rgba(129, 199, 132, 0.4);
+      color: #a5d6a7;
+    }
+
+    .bc-slot.cow {
+      background: rgba(255, 183, 77, 0.35);
+      color: #ffcc80;
+    }
+
+    .bc-slot.miss {
+      background: rgba(255, 255, 255, 0.08);
+    }
 
     .bc-label {
       margin-top: 6px;
@@ -139,8 +157,13 @@
       font-weight: bold;
     }
 
-    .ttt-cell.o { color: #00e5ff; }
-    .ttt-cell.x { color: #ff4081; }
+    .ttt-cell.o {
+      color: #00e5ff;
+    }
+
+    .ttt-cell.x {
+      color: #ff4081;
+    }
 
     .gravity-arrow {
       font-size: 16px;
@@ -172,7 +195,9 @@
       border-radius: 2px;
     }
 
-    .dots-grid .hline.filled { background: #ff6ec7; }
+    .dots-grid .hline.filled {
+      background: #ff6ec7;
+    }
 
     .dots-grid .vline {
       width: 3px;
@@ -181,7 +206,9 @@
       border-radius: 2px;
     }
 
-    .dots-grid .vline.filled { background: #7dd3fc; }
+    .dots-grid .vline.filled {
+      background: #7dd3fc;
+    }
 
     .dots-grid .box {
       display: flex;
@@ -308,6 +335,27 @@
       </div>
       <div class="game-title">Bulls and Cows</div>
       <div class="game-desc">Guess the secret word — get bulls for correct positions, cows for wrong ones.</div>
+      <span class="game-badge badge-players">1–2 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="hm.html">
+      <div class="game-icon hangman">
+        <svg viewBox="0 0 60 60" width="60" height="60">
+          <line x1="8" y1="55" x2="35" y2="55" stroke="white" stroke-width="2" stroke-linecap="round" />
+          <line x1="22" y1="55" x2="22" y2="8" stroke="white" stroke-width="2" stroke-linecap="round" />
+          <line x1="22" y1="8" x2="44" y2="8" stroke="white" stroke-width="2" stroke-linecap="round" />
+          <line x1="44" y1="8" x2="44" y2="14" stroke="white" stroke-width="2" stroke-linecap="round" />
+          <circle cx="44" cy="20" r="6" fill="none" stroke="#e74c3c" stroke-width="2" />
+          <line x1="44" y1="26" x2="44" y2="38" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" />
+          <line x1="44" y1="30" x2="37" y2="35" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" />
+          <line x1="44" y1="30" x2="51" y2="35" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" />
+          <line x1="44" y1="38" x2="37" y2="48" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" />
+          <line x1="44" y1="38" x2="51" y2="48" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </div>
+      <div class="game-title">Hangman</div>
+      <div class="game-desc">Guess the word letter by letter — or guess the whole word before the hangman is complete.
+      </div>
       <span class="game-badge badge-players">1–2 Players · Online</span>
     </a>
   </div>

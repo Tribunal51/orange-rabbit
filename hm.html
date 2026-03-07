@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Hangman</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a0a2e, #16213e);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { margin: 0 0 6px; font-size: 32px; }
+
+    .setup-sub { opacity: 0.55; font-size: 14px; margin-bottom: 30px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,0.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: white; }
+
+    /* ── setup ── */
+    .setupSection { margin-bottom: 22px; width: 340px; max-width: 100%; }
+    .setupLabel { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 8px; }
+
+    .modeToggle { display: flex; gap: 6px; }
+    .modeBtn {
+      flex: 1; padding: 10px 0; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px; background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer; transition: 0.2s;
+    }
+    .modeBtn.selected {
+      background: rgba(255,255,255,0.2); color: white;
+      font-weight: bold; border-color: rgba(255,255,255,0.4);
+    }
+
+    .lenToggle { display: flex; gap: 6px; }
+    .lenBtn {
+      flex: 1; padding: 10px 0; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px; background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer; transition: 0.2s;
+      text-align: center;
+    }
+    .lenBtn.selected {
+      background: rgba(255,255,255,0.2); color: white;
+      font-weight: bold; border-color: rgba(255,255,255,0.4);
+    }
+
+    .slider-wrap { display: flex; align-items: center; gap: 14px; }
+    .slider-wrap input[type=range] { flex: 1; accent-color: #e94560; }
+    .size-display { min-width: 30px; text-align: center; font-weight: bold; font-size: 18px; }
+
+    .startBtn {
+      margin-top: 10px; padding: 14px 50px; font-size: 17px; font-weight: bold;
+      border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #e94560, #c0392b);
+      color: white; cursor: pointer; transition: 0.2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .startBtn:hover { transform: scale(1.04); }
+
+    /* ── lobby ── */
+    .lobbyText { font-size: 15px; margin-bottom: 12px; }
+    .lobbyWaiting { opacity: 0.6; font-size: 14px; margin-top: 12px; }
+    .lobbyError { color: #ff6b6b; font-size: 15px; }
+    .lobbyLinkWrap { display: flex; gap: 8px; margin-top: 8px; }
+    .lobbyLinkInput {
+      flex: 1; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.25); color: white; font-size: 13px;
+    }
+    .lobbyCopyBtn {
+      padding: 10px 18px; border: none; border-radius: 8px;
+      background: rgba(255,255,255,0.18); color: white;
+      cursor: pointer; font-weight: bold; font-size: 13px;
+    }
+    .lobbyCopyBtn:hover { background: rgba(255,255,255,0.3); }
+    .newGameBtn {
+      margin-top: 20px; padding: 10px 24px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,0.12); color: white; font-size: 14px; cursor: pointer;
+    }
+    .newGameBtn:hover { background: rgba(255,255,255,0.22); }
+
+    /* ── hangman svg ── */
+    .hm-wrap { margin: 10px auto; text-align: center; }
+    .hm-wrap svg { display: block; margin: 0 auto; }
+
+    /* ── word display ── */
+    .word-display {
+      display: flex; justify-content: center; gap: 10px;
+      margin: 18px 0; flex-wrap: wrap;
+    }
+    .letter-box {
+      width: 44px; height: 52px;
+      border-bottom: 3px solid rgba(255,255,255,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: bold; text-transform: uppercase;
+      color: white; transition: 0.3s;
+    }
+    .letter-box.revealed { border-color: #2ecc71; }
+    .letter-box.fail-reveal { border-color: #e74c3c; color: #e74c3c; }
+
+    /* ── keyboard ── */
+    .keyboard { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 14px 0; }
+    .kb-row { display: flex; gap: 5px; justify-content: center; }
+    .kb-key {
+      width: 34px; height: 42px; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px; background: rgba(255,255,255,0.08);
+      color: white; font-size: 14px; font-weight: bold;
+      cursor: pointer; transition: 0.15s; padding: 0;
+    }
+    .kb-key:hover:not(:disabled):not(.correct):not(.wrong) { background: rgba(255,255,255,0.2); }
+    .kb-key.correct { background: rgba(46,204,113,0.3); border-color: #2ecc71; color: #2ecc71; }
+    .kb-key.wrong { background: rgba(231,76,60,0.15); border-color: rgba(231,76,60,0.3); color: rgba(231,76,60,0.5); }
+    .kb-key:disabled { cursor: default; }
+
+    /* ── word guess input ── */
+    .wg-wrap { display: flex; justify-content: center; gap: 8px; margin: 10px 0 4px; }
+    .wg-input {
+      width: 200px; padding: 10px 14px; border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2);
+      color: white; font-size: 18px; font-weight: bold;
+      text-transform: uppercase; letter-spacing: 4px; text-align: center; outline: none;
+    }
+    .wg-input:focus { border-color: #e94560; }
+    .wg-btn {
+      padding: 10px 18px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #e94560, #c0392b);
+      color: white; font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.15s;
+    }
+    .wg-btn:hover { transform: scale(1.05); }
+    .wg-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+    .guess-error { color: #ff8a80; font-size: 13px; min-height: 20px; text-align: center; }
+
+    /* ── wrong guesses ── */
+    .wrong-guesses { font-size: 13px; opacity: 0.5; margin: 4px 0; text-align: center; min-height: 20px; }
+    .wrong-guesses .wg-words { letter-spacing: 2px; text-transform: uppercase; }
+
+    /* ── round indicator ── */
+    .round-indicator { font-size: 14px; opacity: 0.7; margin-bottom: 4px; text-align: center; }
+
+    /* ── panels (competitive) ── */
+    .panels-wrap { display: flex; gap: 20px; width: 100%; max-width: 860px; align-items: flex-start; }
+    .panel { flex: 1; min-width: 0; }
+    .panel-header {
+      font-size: 14px; font-weight: bold; margin-bottom: 10px;
+      padding: 8px 12px; border-radius: 8px; text-align: center;
+    }
+    .panel-you .panel-header { background: rgba(46,204,113,0.15); color: #7dcea0; }
+    .panel-opp .panel-header { background: rgba(233,69,96,0.15); color: #f1948a; }
+    .opp-info { text-align: center; font-size: 14px; }
+    .opp-info p { margin: 6px 0; opacity: 0.7; }
+    .opp-info .opp-score { font-size: 24px; font-weight: bold; opacity: 1; color: #f39c12; }
+    .opp-status-msg { font-size: 13px; opacity: 0.6; text-align: center; margin-top: 10px; }
+
+    /* ── score display ── */
+    .score-display { text-align: center; margin-top: 8px; font-size: 14px; }
+    .score-display .score-val { font-size: 24px; font-weight: bold; color: #f39c12; }
+
+    /* ── coop scores ── */
+    .coop-scores {
+      display: flex; justify-content: center; gap: 24px;
+      margin: 8px 0 4px; font-size: 14px;
+    }
+    .coop-scores span { padding: 4px 14px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+    .coop-scores .score-num { font-weight: bold; color: #f39c12; }
+
+    /* ── coop status ── */
+    .coop-status { text-align: center; font-size: 14px; margin: 8px 0; min-height: 22px; }
+    .coop-status.waiting { color: #f39c12; }
+
+    /* ── turn log ── */
+    .turn-log { margin: 12px auto; max-width: 500px; width: 100%; }
+    .turn-entry {
+      font-size: 13px; padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex; gap: 8px;
+    }
+    .turn-entry .turn-num { opacity: 0.4; min-width: 20px; }
+    .turn-entry .turn-detail { flex: 1; }
+    .turn-correct { color: #2ecc71; }
+    .turn-wrong { color: #e74c3c; }
+
+    /* ── word submit (competitive) ── */
+    .word-submit-area { text-align: center; max-width: 400px; margin: 0 auto; }
+    .word-submit-area p { margin-bottom: 12px; font-size: 15px; }
+    .submitted-words { margin: 12px 0; text-align: left; }
+    .submitted-word {
+      padding: 6px 12px; font-size: 14px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: bold;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .submitted-word .sw-num { opacity: 0.4; margin-right: 8px; }
+
+    /* ── round end overlay ── */
+    .round-end-card {
+      background: rgba(0,0,0,0.3); border-radius: 14px;
+      padding: 20px 24px; text-align: center; margin: 16px auto; max-width: 400px;
+    }
+    .round-end-card h3 { margin: 0 0 6px; font-size: 18px; }
+    .round-end-card p { margin: 4px 0; font-size: 14px; opacity: 0.8; }
+    .round-end-card .re-score { font-size: 20px; font-weight: bold; color: #f39c12; margin: 8px 0; }
+    .round-end-card .re-word { letter-spacing: 3px; text-transform: uppercase; font-weight: bold; font-size: 16px; }
+    .round-end-card.success h3 { color: #2ecc71; }
+    .round-end-card.fail h3 { color: #e74c3c; }
+
+    /* ── results ── */
+    .results-card {
+      background: rgba(0,0,0,0.25); border-radius: 16px;
+      padding: 24px; margin-top: 20px; text-align: center;
+      max-width: 500px; width: 100%;
+    }
+    .results-card h2 { margin: 0 0 4px; font-size: 22px; }
+    .results-card .subtitle { opacity: 0.6; font-size: 14px; margin-bottom: 16px; }
+    .results-scores { display: flex; justify-content: center; gap: 32px; margin-bottom: 16px; }
+    .results-player { text-align: center; }
+    .results-player .name { font-size: 13px; opacity: 0.6; margin-bottom: 4px; }
+    .results-player .score { font-size: 32px; font-weight: bold; }
+    .results-player .score-label { font-size: 11px; opacity: 0.5; }
+    .results-player.winner .score { color: #2ecc71; }
+    .results-player.loser .score { color: #e74c3c; }
+    .results-verdict { font-size: 16px; margin: 12px 0; font-weight: bold; }
+
+    .actionBtn {
+      padding: 10px 24px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,0.12); color: white;
+      font-size: 14px; cursor: pointer; margin: 6px;
+    }
+    .actionBtn:hover { background: rgba(255,255,255,0.22); }
+    .actionBtn.primary {
+      background: linear-gradient(135deg, #e94560, #c0392b);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    /* ── rules ── */
+    .rulesLink { margin-top: 20px; font-size: 13px; opacity: 0.5; cursor: pointer; text-decoration: underline; }
+    .rulesLink:hover { opacity: 0.8; }
+    #rulesOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 20px;
+    }
+    .rulesCard {
+      background: #1b1b3a; border-radius: 16px; padding: 28px 24px;
+      max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto;
+      text-align: left; line-height: 1.6;
+    }
+    .rulesCard h2 { margin: 0 0 16px; text-align: center; }
+    .rulesCard h3 { margin: 14px 0 6px; font-size: 15px; color: #e94560; }
+    .rulesCard p, .rulesCard li { font-size: 14px; opacity: 0.9; }
+    .rulesCard ul { padding-left: 20px; margin: 4px 0 10px; }
+    .rulesCard li { margin-bottom: 4px; }
+    .rulesCloseBtn {
+      display: block; margin: 18px auto 0; padding: 8px 24px;
+      border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+      background: rgba(255,255,255,0.2); color: white; font-weight: bold;
+    }
+    .rulesCloseBtn:hover { background: rgba(255,255,255,0.35); }
+
+    @media (max-width: 600px) {
+      .panels-wrap { flex-direction: column; }
+      .kb-key { width: 28px; height: 38px; font-size: 12px; }
+      .letter-box { width: 36px; height: 44px; font-size: 22px; }
+      .word-display { gap: 6px; }
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="words.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div id="setupScreen">
+    <h1>Hangman</h1>
+    <p class="setup-sub">Guess the word before the hangman is complete</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div id="playerModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setPlayerMode('solo')">1 Player</button>
+        <button class="modeBtn" onclick="setPlayerMode('online')">2 Players Online</button>
+      </div>
+    </div>
+
+    <div id="subModeSection" class="setupSection hidden">
+      <div class="setupLabel">Mode</div>
+      <div id="subModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setSubMode('competitive')">Competitive</button>
+        <button class="modeBtn" onclick="setSubMode('coop')">Co-op</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Word Length</div>
+      <div id="lengthToggle" class="lenToggle">
+        <button class="lenBtn" onclick="setWordLength(4)">4</button>
+        <button class="lenBtn selected" onclick="setWordLength(5)">5</button>
+        <button class="lenBtn" onclick="setWordLength(6)">6</button>
+        <button class="lenBtn" onclick="setWordLength(7)">7</button>
+        <button class="lenBtn" onclick="setWordLength(0)">?</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Rounds</div>
+      <div class="slider-wrap">
+        <input type="range" id="roundsSlider" min="1" max="5" value="1" oninput="updateRoundsDisplay()">
+        <span class="size-display" id="roundsDisplay">1</span>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ LOBBY ═══════ -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Hangman</h1>
+    <div id="lobbyContent"></div>
+    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
+  </div>
+
+  <!-- ═══════ SOLO ═══════ -->
+  <div id="soloScreen" class="hidden">
+    <h1>Hangman</h1>
+    <p class="round-indicator" id="soloRoundLabel"></p>
+    <div id="soloScoreArea" class="score-display hidden">Score: <span class="score-val" id="soloScoreVal">0</span></div>
+    <div class="hm-wrap" id="soloHmWrap"></div>
+    <div class="word-display" id="soloWordDisplay"></div>
+    <div id="soloKeyboard"></div>
+    <div class="wg-wrap" id="soloWgWrap">
+      <input class="wg-input" id="soloWgInput" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Guess word">
+      <button class="wg-btn" id="soloWgBtn" onclick="soloGuessWord()">Guess</button>
+    </div>
+    <div class="guess-error" id="soloError"></div>
+    <div class="wrong-guesses" id="soloWrongGuesses"></div>
+    <div id="soloRoundEnd" class="hidden"></div>
+    <div id="soloResult" class="hidden"></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:12px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ COMPETITIVE ═══════ -->
+  <div id="compScreen" class="hidden">
+    <h1>Hangman</h1>
+
+    <div id="compSubmitPhase" class="word-submit-area">
+      <p id="compSubmitLabel"></p>
+      <div class="wg-wrap">
+        <input class="wg-input" id="compSubmitInput" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="wg-btn" id="compSubmitBtn" onclick="submitCompWord()">Add</button>
+      </div>
+      <div class="guess-error" id="compSubmitError"></div>
+      <div class="submitted-words" id="compSubmittedList"></div>
+      <p id="compSubmitStatus" class="lobbyWaiting hidden"></p>
+    </div>
+
+    <div id="compGamePhase" class="hidden">
+      <div class="panels-wrap">
+        <div class="panel panel-you">
+          <div class="panel-header">You</div>
+          <p class="round-indicator" id="compMyRoundLabel"></p>
+          <div class="hm-wrap" id="compMyHmWrap"></div>
+          <div class="word-display" id="compMyWordDisplay"></div>
+          <div id="compMyKeyboard"></div>
+          <div class="wg-wrap" id="compMyWgWrap">
+            <input class="wg-input" id="compMyWgInput" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Guess word">
+            <button class="wg-btn" id="compMyWgBtn" onclick="compGuessWord()">Guess</button>
+          </div>
+          <div class="guess-error" id="compMyError"></div>
+          <div class="wrong-guesses" id="compMyWrongGuesses"></div>
+          <div class="score-display">Score: <span class="score-val" id="compMyScoreVal">0</span></div>
+        </div>
+        <div class="panel panel-opp">
+          <div class="panel-header">Opponent</div>
+          <p class="round-indicator" id="compOppRoundLabel"></p>
+          <div class="hm-wrap" id="compOppHmWrap"></div>
+          <div class="opp-info" id="compOppInfo">
+            <p id="compOppRevealedLabel"></p>
+            <p class="opp-score" id="compOppScoreVal">0</p>
+          </div>
+          <p class="opp-status-msg" id="compOppStatusMsg">Waiting for opponent...</p>
+        </div>
+      </div>
+
+      <div id="compRoundEnd" class="hidden"></div>
+      <div id="compWaiting" class="hidden" style="text-align:center;margin-top:16px;">
+        <p>All rounds complete!</p>
+        <p style="font-size:13px;opacity:0.6;">Waiting for opponent to finish...</p>
+      </div>
+    </div>
+
+    <div id="compResult" class="hidden"></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:12px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ COOP ═══════ -->
+  <div id="coopScreen" class="hidden">
+    <h1>Hangman</h1>
+    <p class="round-indicator" id="coopRoundLabel"></p>
+    <div class="coop-scores">
+      <span>You: <span class="score-num" id="coopMyScoreVal">0</span></span>
+      <span>Partner: <span class="score-num" id="coopPartnerScoreVal">0</span></span>
+    </div>
+    <div class="hm-wrap" id="coopHmWrap"></div>
+    <div class="word-display" id="coopWordDisplay"></div>
+    <div id="coopKeyboard"></div>
+    <div class="wg-wrap" id="coopWgWrap">
+      <input class="wg-input" id="coopWgInput" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Guess word">
+      <button class="wg-btn" id="coopWgBtn" onclick="coopGuessWord()">Guess</button>
+    </div>
+    <div class="guess-error" id="coopError"></div>
+    <div class="coop-status" id="coopStatus"></div>
+    <div class="turn-log" id="coopTurnLog"></div>
+    <div id="coopRoundEnd" class="hidden"></div>
+    <div id="coopResult" class="hidden"></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:12px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ RULES ═══════ -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard">
+      <h2>How to Play</h2>
+
+      <h3>Objective</h3>
+      <p>Guess the hidden word one letter at a time (or guess the full word) before the hangman drawing is complete. You have 6 wrong guesses before it's game over.</p>
+
+      <h3>Scoring (1 Player &amp; Co-op)</h3>
+      <ul>
+        <li>Correct letter: <strong>+1 point</strong> per occurrence in the word.</li>
+        <li>Completing a word: <strong>+5 bonus</strong>.</li>
+        <li>Failing (hangman complete): <strong>−3 penalty</strong>.</li>
+        <li>In multi-round games, the goal is to finish with a <strong>positive score</strong>.</li>
+      </ul>
+
+      <h3>1 Player</h3>
+      <p>A random common word is chosen. Click letters on the keyboard or type the full word to guess. Wrong letters and wrong word guesses each add a body part.</p>
+
+      <h3>2 Players — Competitive</h3>
+      <ul>
+        <li>Both players submit N words for the other to guess.</li>
+        <li>Words are shuffled and each player guesses through them.</li>
+        <li>Points per word: <strong>(6 − wrong guesses) × 10</strong> if solved, <strong>0</strong> if the hangman is completed.</li>
+        <li>You can see the opponent's hangman progress and score in real time.</li>
+      </ul>
+
+      <h3>2 Players — Co-op</h3>
+      <ul>
+        <li>A common random word is chosen for each round.</li>
+        <li>Each turn, both players simultaneously guess a letter or word.</li>
+        <li>If both guess the <em>same</em> wrong letter/word, only <strong>1 body part</strong> is added instead of 2.</li>
+      </ul>
+
+      <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════ CONSTANTS ═══════════════════ */
+
+    const MAX_WRONG = 6;
+    const COMP_SCORE_PER_LIFE = 10;
+    const SOLVE_BONUS = 5;
+    const FAIL_PENALTY = 3;
+    const KB_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+
+    /* ═══════════════════ STATE ═══════════════════ */
+
+    let playerMode = 'solo';
+    let subMode = 'competitive';
+    let wordLength = 5;
+    let randomLength = false;
+    let numRounds = 1;
+
+    let peer = null, conn = null, isHost = false;
+    let joinTimer = null, lastRoomId = '';
+
+    // Solo
+    let soloWord = '';
+    let soloRevealed = new Set();
+    let soloWrong = new Set();
+    let soloWrongWords = [];
+    let soloWrongCount = 0;
+    let soloOver = false;
+    let soloScore = 0;
+    let soloRoundIdx = 0;
+    let soloAllDone = false;
+
+    // Competitive
+    let compMyWordsForOpp = [];
+    let compOppWordsForMe = [];
+    let compMyWordsSubmitted = false;
+    let compOppWordsReceived = false;
+    let compRoundIdx = 0;
+    let compCurrentWord = '';
+    let compRevealed = new Set();
+    let compWrong = new Set();
+    let compWrongWords = [];
+    let compWrongCount = 0;
+    let compMyScore = 0;
+    let compRoundOver = false;
+    let compAllDone = false;
+    let compOppRound = 0;
+    let compOppWrong = 0;
+    let compOppRevealed = 0;
+    let compOppTotal = 0;
+    let compOppScore = 0;
+    let compOppAllDone = false;
+
+    // Coop
+    let coopWords = [];
+    let coopRoundIdx = 0;
+    let coopCurrentWord = '';
+    let coopRevealed = new Set();
+    let coopWrong = new Set();
+    let coopWrongCount = 0;
+    let coopMyScore = 0;
+    let coopPartnerScore = 0;
+    let coopMyGuess = null;
+    let coopPartnerGuess = null;
+    let coopRoundOver = false;
+    let coopAllDone = false;
+    let coopTurnHistory = [];
+    let coopInputLocked = false;
+
+    /* ═══════════════════ UTILITY ═══════════════════ */
+
+    function pickRandomLength() {
+      return 4 + Math.floor(Math.random() * 4);
+    }
+
+    function effectiveLength() {
+      return randomLength ? pickRandomLength() : wordLength;
+    }
+
+    function pickWord(len) {
+      const arr = Array.from(VALID_WORDS[len]);
+      return arr[Math.floor(Math.random() * arr.length)].toUpperCase();
+    }
+
+    function isValidWord(word) {
+      const w = word.toLowerCase();
+      return VALID_WORDS[w.length] && VALID_WORDS[w.length].has(w);
+    }
+
+    function shuffleArray(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function hangmanSVG(size) {
+      return `<svg viewBox="0 0 200 240" width="${size}" style="display:block;margin:0 auto">
+        <line x1="20" y1="220" x2="100" y2="220" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="60" y1="220" x2="60" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="57" y1="20" x2="140" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="140" y1="20" x2="140" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="140" cy="68" r="18" fill="none" stroke="#e74c3c" stroke-width="3" data-part="0" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="86" x2="140" y2="145" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="1" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="102" x2="115" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="2" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="102" x2="165" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="3" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="145" x2="115" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="4" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="145" x2="165" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="5" style="opacity:0;transition:opacity 0.3s"/>
+      </svg>`;
+    }
+
+    function updateHangman(container, wrongCount) {
+      container.querySelectorAll('[data-part]').forEach(el => {
+        el.style.opacity = parseInt(el.dataset.part) < wrongCount ? '1' : '0';
+      });
+    }
+
+    function renderWordDisplay(container, word, revealedSet, showAll) {
+      container.innerHTML = '';
+      for (let i = 0; i < word.length; i++) {
+        const ch = word[i];
+        const isRevealed = revealedSet.has(ch);
+        const box = document.createElement('span');
+        if (showAll && !isRevealed) {
+          box.className = 'letter-box fail-reveal';
+          box.textContent = ch;
+        } else {
+          box.className = 'letter-box' + (isRevealed ? ' revealed' : '');
+          box.textContent = isRevealed ? ch : '';
+        }
+        container.appendChild(box);
+      }
+    }
+
+    function buildKeyboard(container, onLetter) {
+      container.innerHTML = '';
+      const kb = document.createElement('div');
+      kb.className = 'keyboard';
+      KB_ROWS.forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'kb-row';
+        for (const ch of row) {
+          const btn = document.createElement('button');
+          btn.className = 'kb-key';
+          btn.textContent = ch;
+          btn.dataset.letter = ch;
+          btn.onclick = () => onLetter(ch);
+          rowDiv.appendChild(btn);
+        }
+        kb.appendChild(rowDiv);
+      });
+      container.appendChild(kb);
+    }
+
+    function updateKeyboard(container, correct, wrong, disable) {
+      container.querySelectorAll('.kb-key').forEach(btn => {
+        const l = btn.dataset.letter;
+        btn.classList.toggle('correct', correct.has(l));
+        btn.classList.toggle('wrong', wrong.has(l));
+        btn.disabled = disable || correct.has(l) || wrong.has(l);
+      });
+    }
+
+    function countInWord(word, letter) {
+      return word.split('').filter(c => c === letter).length;
+    }
+
+    function wordFullyRevealed(word, revealedSet) {
+      return word.split('').every(c => revealedSet.has(c));
+    }
+
+    function renderWrongGuesses(container, wrongLetters, wrongWords) {
+      const parts = [];
+      const letters = Array.from(wrongLetters);
+      if (letters.length) parts.push(letters.join(', '));
+      if (wrongWords.length) parts.push('<span class="wg-words">' + wrongWords.join(', ') + '</span>');
+      container.innerHTML = parts.length ? 'Wrong: ' + parts.join(' · ') : '';
+    }
+
+    /* ═══════════════════ SETUP UI ═══════════════════ */
+
+    function updateRoundsDisplay() {
+      document.getElementById('roundsDisplay').textContent = document.getElementById('roundsSlider').value;
+    }
+
+    function setPlayerMode(mode) {
+      playerMode = mode;
+      document.querySelectorAll('#playerModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'solo') || (i === 1 && mode === 'online'));
+      });
+      document.getElementById('subModeSection').classList.toggle('hidden', mode !== 'online');
+    }
+
+    function setSubMode(mode) {
+      subMode = mode;
+      document.querySelectorAll('#subModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'competitive') || (i === 1 && mode === 'coop'));
+      });
+    }
+
+    function setWordLength(len) {
+      if (len === 0) {
+        randomLength = true;
+        wordLength = 5;
+      } else {
+        randomLength = false;
+        wordLength = len;
+      }
+      document.querySelectorAll('#lengthToggle .lenBtn').forEach((b, i) => {
+        const vals = [4, 5, 6, 7, 0];
+        b.classList.toggle('selected', vals[i] === len);
+      });
+    }
+
+    function launchGame() {
+      numRounds = parseInt(document.getElementById('roundsSlider').value);
+      if (playerMode === 'solo') {
+        startSoloGame();
+      } else {
+        createRoom();
+      }
+    }
+
+    /* ═══════════════════ SOLO ═══════════════════ */
+
+    function startSoloGame() {
+      soloRoundIdx = 0;
+      soloScore = 0;
+      soloAllDone = false;
+
+      showScreen('soloScreen');
+      document.getElementById('soloHmWrap').innerHTML = hangmanSVG(180);
+      buildKeyboard(document.getElementById('soloKeyboard'), soloGuessLetter);
+      document.getElementById('soloResult').classList.add('hidden');
+      document.getElementById('soloRoundEnd').classList.add('hidden');
+
+      const showScore = numRounds > 1;
+      document.getElementById('soloScoreArea').classList.toggle('hidden', !showScore);
+      document.getElementById('soloScoreVal').textContent = '0';
+
+      initSoloRound();
+    }
+
+    function initSoloRound() {
+      const len = effectiveLength();
+      soloWord = pickWord(len);
+      soloRevealed = new Set();
+      soloWrong = new Set();
+      soloWrongWords = [];
+      soloWrongCount = 0;
+      soloOver = false;
+
+      const label = numRounds > 1
+        ? 'Round ' + (soloRoundIdx + 1) + ' of ' + numRounds + ' · ' + len + '-letter word'
+        : len + '-letter word';
+      document.getElementById('soloRoundLabel').textContent = label;
+
+      const inp = document.getElementById('soloWgInput');
+      inp.maxLength = len;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('soloWgBtn').disabled = false;
+      document.getElementById('soloWgWrap').classList.remove('hidden');
+      document.getElementById('soloError').textContent = '';
+      document.getElementById('soloWrongGuesses').innerHTML = '';
+      document.getElementById('soloRoundEnd').classList.add('hidden');
+
+      renderSoloUI();
+      inp.focus();
+    }
+
+    function soloGuessLetter(letter) {
+      if (soloOver || soloRevealed.has(letter) || soloWrong.has(letter)) return;
+
+      if (soloWord.includes(letter)) {
+        soloRevealed.add(letter);
+        soloScore += countInWord(soloWord, letter);
+      } else {
+        soloWrong.add(letter);
+        soloWrongCount++;
+      }
+      document.getElementById('soloError').textContent = '';
+      checkSoloEnd();
+      renderSoloUI();
+    }
+
+    function soloGuessWord() {
+      const inp = document.getElementById('soloWgInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('soloError');
+      if (soloOver) return;
+
+      if (word.length !== soloWord.length) { err.textContent = 'Enter a ' + soloWord.length + '-letter word'; return; }
+      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
+      if (!isValidWord(word)) { err.textContent = 'Not a valid word'; inp.focus(); return; }
+      err.textContent = '';
+
+      if (word === soloWord) {
+        const unrevealed = soloWord.split('').filter(c => !soloRevealed.has(c));
+        const uniqueNew = new Set(unrevealed);
+        for (const c of uniqueNew) {
+          soloScore += countInWord(soloWord, c);
+          soloRevealed.add(c);
+        }
+      } else {
+        soloWrongWords.push(word);
+        soloWrongCount++;
+      }
+      inp.value = '';
+      checkSoloEnd();
+      renderSoloUI();
+      if (!soloOver) inp.focus();
+    }
+
+    function checkSoloEnd() {
+      const solved = wordFullyRevealed(soloWord, soloRevealed);
+      const failed = soloWrongCount >= MAX_WRONG;
+      if (!solved && !failed) return;
+
+      soloOver = true;
+      document.getElementById('soloWgInput').disabled = true;
+      document.getElementById('soloWgBtn').disabled = true;
+      document.getElementById('soloWgWrap').classList.add('hidden');
+
+      if (solved) soloScore += SOLVE_BONUS;
+      else soloScore -= FAIL_PENALTY;
+      document.getElementById('soloScoreVal').textContent = soloScore;
+
+      if (numRounds <= 1) {
+        const res = document.getElementById('soloResult');
+        res.classList.remove('hidden');
+        const scoreHtml = '<p style="font-size:18px;margin-top:8px">Score: <strong>' + soloScore + '</strong></p>';
+        if (solved) {
+          res.innerHTML = '<div class="results-card"><h2 style="color:#2ecc71">You got it!</h2>' +
+            '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p>' +
+            '<p style="font-size:16px">' + soloWrongCount + ' wrong guess' + (soloWrongCount !== 1 ? 'es' : '') + '</p>' +
+            scoreHtml + '</div>';
+        } else {
+          res.innerHTML = '<div class="results-card"><h2 style="color:#e74c3c">Game Over</h2>' +
+            '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p>' +
+            scoreHtml + '</div>';
+        }
+      } else {
+        showSoloRoundEnd(solved);
+      }
+    }
+
+    function showSoloRoundEnd(solved) {
+      const isLast = soloRoundIdx >= numRounds - 1;
+      const endDiv = document.getElementById('soloRoundEnd');
+      const scoreChange = solved ? '+' + SOLVE_BONUS : '−' + FAIL_PENALTY;
+
+      let html = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
+        '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
+        '<p class="re-word">' + soloWord + '</p>' +
+        '<p>' + scoreChange + ' · Total: ' + soloScore + '</p>';
+
+      if (!isLast) {
+        html += '<button class="actionBtn primary" onclick="soloNextRound()">Next Round →</button>';
+      }
+      html += '</div>';
+      endDiv.innerHTML = html;
+      endDiv.classList.remove('hidden');
+
+      if (isLast) {
+        soloAllDone = true;
+        setTimeout(showSoloFinalResult, 1500);
+      }
+    }
+
+    function soloNextRound() {
+      soloRoundIdx++;
+      document.getElementById('soloHmWrap').innerHTML = hangmanSVG(180);
+      buildKeyboard(document.getElementById('soloKeyboard'), soloGuessLetter);
+      initSoloRound();
+    }
+
+    function showSoloFinalResult() {
+      document.getElementById('soloRoundEnd').classList.add('hidden');
+      const won = soloScore > 0;
+      const tied = soloScore === 0;
+      const verdict = won ? 'You survived!' : (tied ? 'Barely made it...' : 'You lost!');
+      const color = won ? '#2ecc71' : (tied ? '#f39c12' : '#e74c3c');
+
+      const res = document.getElementById('soloResult');
+      res.innerHTML = '<div class="results-card">' +
+        '<h2 style="color:' + color + '">' + verdict + '</h2>' +
+        '<p class="subtitle">' + numRounds + ' rounds complete</p>' +
+        '<div style="font-size:36px;font-weight:bold;color:' + color + ';margin:12px 0">' + soloScore + '</div>' +
+        '<div style="font-size:12px;opacity:0.5">points</div>' +
+        '<p style="font-size:14px;opacity:0.7;margin-top:12px">' + (won ? 'Positive score — you win!' : (tied ? 'Zero — a draw.' : 'Negative score — better luck next time.')) + '</p>' +
+        '</div>';
+      res.classList.remove('hidden');
+    }
+
+    function renderSoloUI() {
+      updateHangman(document.getElementById('soloHmWrap'), soloWrongCount);
+      renderWordDisplay(document.getElementById('soloWordDisplay'), soloWord, soloRevealed, soloOver && soloWrongCount >= MAX_WRONG);
+      updateKeyboard(document.getElementById('soloKeyboard'), soloRevealed, soloWrong, soloOver);
+      renderWrongGuesses(document.getElementById('soloWrongGuesses'), soloWrong, soloWrongWords);
+      if (numRounds > 1) document.getElementById('soloScoreVal').textContent = soloScore;
+    }
+
+    /* ═══════════════════ TURN credentials ═══════════════════ */
+
+    async function fetchIceServers() {
+      try {
+        const resp = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+        if (!resp.ok) throw new Error('TURN credential fetch failed');
+        return { iceServers: await resp.json() };
+      } catch (e) {
+        console.warn('TURN credential fetch failed, using fallback:', e);
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
+    /* ═══════════════════ ONLINE (PeerJS) ═══════════════════ */
+
+    function generateRoomId() {
+      const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'hm-';
+      for (let i = 0; i < 8; i++) id += ch[Math.floor(Math.random() * ch.length)];
+      return id;
+    }
+
+    async function createRoom() {
+      const roomId = generateRoomId();
+      showScreen('lobbyScreen');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
+
+      const iceConfig = await fetchIceServers();
+      peer = new Peer(roomId, { config: iceConfig });
+      isHost = true;
+
+      peer.on('open', id => {
+        const link = window.location.origin + window.location.pathname + '#room=' + id;
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyText">Share this link with your opponent:</p>' +
+          '<div class="lobbyLinkWrap">' +
+            '<input class="lobbyLinkInput" id="roomLink" value="' + link + '" readonly>' +
+            '<button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<p class="lobbyWaiting">Waiting for opponent to join...</p>';
+      });
+
+      peer.on('connection', connection => {
+        conn = connection;
+        conn.on('open', () => {
+          if (subMode === 'coop') {
+            coopWords = [];
+            for (let i = 0; i < numRounds; i++) coopWords.push(pickWord(effectiveLength()));
+            conn.send({ type: 'setup', mode: 'coop', wordLength, randomLength, rounds: numRounds, words: coopWords });
+            startCoopGame();
+          } else {
+            conn.send({ type: 'setup', mode: 'competitive', wordLength, randomLength, rounds: numRounds });
+            startCompSubmit();
+          }
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => handleDisconnect());
+      });
+
+      peer.on('error', err => {
+        document.getElementById('lobbyContent').innerHTML = '<p class="lobbyError">Error: ' + err.message + '</p>';
+      });
+    }
+
+    async function joinRoom(roomId) {
+      lastRoomId = roomId;
+      if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+
+      showScreen('lobbyScreen');
+      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
+
+      const iceConfig = await fetchIceServers();
+      peer = new Peer({ config: iceConfig });
+      isHost = false;
+
+      joinTimer = setTimeout(() => {
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Connection timed out.</p>' +
+          '<p style="font-size:13px;opacity:0.7;margin-bottom:14px;">The host may have closed their tab.</p>' +
+          '<button class="lobbyCopyBtn" style="margin-top:4px" onclick="retryJoin()">Try Again</button>';
+      }, 15000);
+
+      peer.on('open', () => {
+        conn = peer.connect(roomId, { reliable: true });
+        conn.on('open', () => {
+          if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+          document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
+        });
+        conn.on('data', handleOnlineData);
+        conn.on('close', () => handleDisconnect());
+      });
+
+      peer.on('error', () => {
+        if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+        document.getElementById('lobbyContent').innerHTML =
+          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>' +
+          '<button class="lobbyCopyBtn" style="margin-top:12px" onclick="retryJoin()">Try Again</button>';
+      });
+    }
+
+    function retryJoin() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      joinRoom(lastRoomId);
+    }
+
+    function copyLink() {
+      const inp = document.getElementById('roomLink');
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1500);
+      });
+    }
+
+    function handleDisconnect() {
+      if (!compAllDone && !coopAllDone) alert('Opponent disconnected.');
+    }
+
+    /* ═══════════════════ ONLINE DATA HANDLER ═══════════════════ */
+
+    function handleOnlineData(data) {
+      switch (data.type) {
+        case 'setup':
+          wordLength = data.wordLength;
+          randomLength = data.randomLength || false;
+          numRounds = data.rounds;
+          if (data.mode === 'coop') {
+            coopWords = data.words;
+            startCoopGame();
+          } else {
+            subMode = 'competitive';
+            startCompSubmit();
+          }
+          break;
+        case 'submitWords':
+          compOppWordsForMe = data.words.map(w => w.toUpperCase());
+          compOppWordsReceived = true;
+          checkCompReady();
+          break;
+        case 'compUpdate':
+          compOppRound = data.round;
+          compOppWrong = data.wrong;
+          compOppRevealed = data.revealed;
+          compOppTotal = data.total;
+          compOppScore = data.score;
+          renderCompOpp();
+          break;
+        case 'compDone':
+          compOppScore = data.score;
+          compOppAllDone = true;
+          renderCompOpp();
+          if (compAllDone) showCompFinalResult();
+          break;
+        case 'coopGuess':
+          if (data.round === coopRoundIdx && !coopRoundOver) {
+            coopPartnerGuess = data.guess;
+            tryProcessCoopTurn();
+          }
+          break;
+      }
+    }
+
+    /* ═══════════════════ COMPETITIVE — WORD SUBMISSION ═══════════════════ */
+
+    function startCompSubmit() {
+      compMyWordsForOpp = [];
+      compOppWordsForMe = [];
+      compMyWordsSubmitted = false;
+      compOppWordsReceived = false;
+
+      showScreen('compScreen');
+      document.getElementById('compSubmitPhase').classList.remove('hidden');
+      document.getElementById('compGamePhase').classList.add('hidden');
+      document.getElementById('compResult').classList.add('hidden');
+
+      const inp = document.getElementById('compSubmitInput');
+      inp.maxLength = randomLength ? 7 : wordLength;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('compSubmitBtn').disabled = false;
+      document.getElementById('compSubmitError').textContent = '';
+      document.getElementById('compSubmittedList').innerHTML = '';
+      document.getElementById('compSubmitStatus').classList.add('hidden');
+      updateCompSubmitLabel();
+      inp.focus();
+    }
+
+    function updateCompSubmitLabel() {
+      const remaining = numRounds - compMyWordsForOpp.length;
+      if (remaining > 0) {
+        const lenHint = randomLength ? '4–7 letters' : wordLength + ' letters';
+        document.getElementById('compSubmitLabel').textContent =
+          'Enter word ' + (compMyWordsForOpp.length + 1) + ' of ' + numRounds +
+          ' for your opponent (' + lenHint + '):';
+      }
+    }
+
+    function submitCompWord() {
+      const inp = document.getElementById('compSubmitInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('compSubmitError');
+
+      if (randomLength) {
+        if (word.length < 4 || word.length > 7) { err.textContent = 'Must be 4–7 letters'; return; }
+      } else {
+        if (word.length !== wordLength) { err.textContent = 'Must be ' + wordLength + ' letters'; return; }
+      }
+      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
+      if (!isValidWord(word)) { err.textContent = 'Not a valid word'; inp.focus(); return; }
+      if (compMyWordsForOpp.includes(word)) { err.textContent = 'Already submitted'; inp.focus(); return; }
+      err.textContent = '';
+
+      compMyWordsForOpp.push(word);
+      inp.value = '';
+
+      const list = document.getElementById('compSubmittedList');
+      const div = document.createElement('div');
+      div.className = 'submitted-word';
+      div.innerHTML = '<span class="sw-num">' + compMyWordsForOpp.length + '.</span> ' + word;
+      list.appendChild(div);
+
+      if (compMyWordsForOpp.length >= numRounds) {
+        inp.disabled = true;
+        document.getElementById('compSubmitBtn').disabled = true;
+        compMyWordsSubmitted = true;
+        conn.send({ type: 'submitWords', words: compMyWordsForOpp });
+        document.getElementById('compSubmitLabel').textContent = 'All words submitted!';
+        document.getElementById('compSubmitStatus').textContent = 'Waiting for opponent to submit their words...';
+        document.getElementById('compSubmitStatus').classList.remove('hidden');
+        checkCompReady();
+      } else {
+        updateCompSubmitLabel();
+        inp.focus();
+      }
+    }
+
+    function checkCompReady() {
+      if (compMyWordsSubmitted && compOppWordsReceived) {
+        shuffleArray(compOppWordsForMe);
+        setTimeout(startCompGame, 500);
+      }
+    }
+
+    /* ═══════════════════ COMPETITIVE — GAME ═══════════════════ */
+
+    function startCompGame() {
+      compRoundIdx = 0;
+      compMyScore = 0;
+      compAllDone = false;
+      compOppAllDone = false;
+      compOppRound = 0;
+      compOppWrong = 0;
+      compOppRevealed = 0;
+      compOppScore = 0;
+
+      document.getElementById('compSubmitPhase').classList.add('hidden');
+      document.getElementById('compGamePhase').classList.remove('hidden');
+      document.getElementById('compResult').classList.add('hidden');
+      document.getElementById('compWaiting').classList.add('hidden');
+      document.getElementById('compRoundEnd').classList.add('hidden');
+
+      document.getElementById('compMyHmWrap').innerHTML = hangmanSVG(160);
+      document.getElementById('compOppHmWrap').innerHTML = hangmanSVG(120);
+      buildKeyboard(document.getElementById('compMyKeyboard'), compGuessLetter);
+
+      initCompRound();
+    }
+
+    function initCompRound() {
+      compCurrentWord = compOppWordsForMe[compRoundIdx];
+      compRevealed = new Set();
+      compWrong = new Set();
+      compWrongWords = [];
+      compWrongCount = 0;
+      compRoundOver = false;
+
+      const curLen = compCurrentWord.length;
+      document.getElementById('compMyRoundLabel').textContent = 'Word ' + (compRoundIdx + 1) + ' of ' + numRounds + ' · ' + curLen + ' letters';
+      const inp = document.getElementById('compMyWgInput');
+      inp.maxLength = curLen;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('compMyWgBtn').disabled = false;
+      document.getElementById('compMyError').textContent = '';
+      document.getElementById('compMyWrongGuesses').innerHTML = '';
+      document.getElementById('compMyWgWrap').classList.remove('hidden');
+      document.getElementById('compRoundEnd').classList.add('hidden');
+
+      renderCompMyUI();
+      renderCompOpp();
+      inp.focus();
+    }
+
+    function compGuessLetter(letter) {
+      if (compRoundOver || compRevealed.has(letter) || compWrong.has(letter)) return;
+
+      if (compCurrentWord.includes(letter)) {
+        compRevealed.add(letter);
+      } else {
+        compWrong.add(letter);
+        compWrongCount++;
+      }
+      document.getElementById('compMyError').textContent = '';
+      sendCompUpdate();
+      checkCompRoundEnd();
+      renderCompMyUI();
+    }
+
+    function compGuessWord() {
+      const inp = document.getElementById('compMyWgInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('compMyError');
+      if (compRoundOver) return;
+
+      const curLen = compCurrentWord.length;
+      if (word.length !== curLen) { err.textContent = 'Enter a ' + curLen + '-letter word'; return; }
+      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
+      if (!isValidWord(word)) { err.textContent = 'Not a valid word'; inp.focus(); return; }
+      err.textContent = '';
+
+      if (word === compCurrentWord) {
+        for (const c of compCurrentWord) compRevealed.add(c);
+      } else {
+        compWrongWords.push(word);
+        compWrongCount++;
+      }
+      inp.value = '';
+      sendCompUpdate();
+      checkCompRoundEnd();
+      renderCompMyUI();
+      if (!compRoundOver) inp.focus();
+    }
+
+    function sendCompUpdate() {
+      if (!conn) return;
+      conn.send({
+        type: 'compUpdate',
+        round: compRoundIdx + 1,
+        wrong: compWrongCount,
+        revealed: compCurrentWord.split('').filter(c => compRevealed.has(c)).length,
+        total: compCurrentWord.length,
+        score: compMyScore
+      });
+    }
+
+    function checkCompRoundEnd() {
+      const solved = wordFullyRevealed(compCurrentWord, compRevealed);
+      const failed = compWrongCount >= MAX_WRONG;
+      if (!solved && !failed) return;
+      compRoundOver = true;
+
+      document.getElementById('compMyWgInput').disabled = true;
+      document.getElementById('compMyWgBtn').disabled = true;
+      document.getElementById('compMyWgWrap').classList.add('hidden');
+
+      let roundScore = solved ? (MAX_WRONG - compWrongCount) * COMP_SCORE_PER_LIFE : 0;
+      compMyScore += roundScore;
+      document.getElementById('compMyScoreVal').textContent = compMyScore;
+      sendCompUpdate();
+
+      const endDiv = document.getElementById('compRoundEnd');
+      if (compRoundIdx < numRounds - 1) {
+        endDiv.innerHTML = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
+          '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
+          '<p class="re-word">' + compCurrentWord + '</p>' +
+          '<p class="re-score">+' + roundScore + ' points</p>' +
+          '<button class="actionBtn primary" onclick="compNextRound()">Next Word →</button></div>';
+      } else {
+        compAllDone = true;
+        conn.send({ type: 'compDone', score: compMyScore });
+        if (compOppAllDone) { showCompFinalResult(); return; }
+        endDiv.innerHTML = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
+          '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
+          '<p class="re-word">' + compCurrentWord + '</p>' +
+          '<p class="re-score">+' + roundScore + ' points</p></div>';
+        document.getElementById('compWaiting').classList.remove('hidden');
+      }
+      endDiv.classList.remove('hidden');
+    }
+
+    function compNextRound() {
+      compRoundIdx++;
+      document.getElementById('compMyHmWrap').innerHTML = hangmanSVG(160);
+      buildKeyboard(document.getElementById('compMyKeyboard'), compGuessLetter);
+      initCompRound();
+    }
+
+    function renderCompMyUI() {
+      updateHangman(document.getElementById('compMyHmWrap'), compWrongCount);
+      renderWordDisplay(document.getElementById('compMyWordDisplay'), compCurrentWord, compRevealed, compRoundOver && compWrongCount >= MAX_WRONG);
+      updateKeyboard(document.getElementById('compMyKeyboard'), compRevealed, compWrong, compRoundOver);
+      renderWrongGuesses(document.getElementById('compMyWrongGuesses'), compWrong, compWrongWords);
+      document.getElementById('compMyScoreVal').textContent = compMyScore;
+    }
+
+    function renderCompOpp() {
+      updateHangman(document.getElementById('compOppHmWrap'), compOppWrong);
+      document.getElementById('compOppRoundLabel').textContent = 'Word ' + (compOppRound || 1) + ' of ' + numRounds;
+      document.getElementById('compOppRevealedLabel').textContent = 'Revealed: ' + compOppRevealed + '/' + (compOppTotal || wordLength) + ' · Wrong: ' + compOppWrong + '/' + MAX_WRONG;
+      document.getElementById('compOppScoreVal').textContent = compOppScore;
+      document.getElementById('compOppStatusMsg').textContent = compOppAllDone ? 'Finished! Score: ' + compOppScore : '';
+    }
+
+    function showCompFinalResult() {
+      document.getElementById('compGamePhase').classList.add('hidden');
+      document.getElementById('compRoundEnd').classList.add('hidden');
+      document.getElementById('compWaiting').classList.add('hidden');
+
+      let verdict, myClass = '', oppClass = '';
+      if (compMyScore > compOppScore) { verdict = 'You win!'; myClass = ' winner'; }
+      else if (compOppScore > compMyScore) { verdict = 'Opponent wins!'; oppClass = ' winner'; }
+      else { verdict = "It's a tie!"; }
+
+      document.getElementById('compResult').innerHTML =
+        '<div class="results-card">' +
+          '<h2>Game Over</h2>' +
+          '<div class="results-scores">' +
+            '<div class="results-player' + myClass + '"><div class="name">You</div><div class="score">' + compMyScore + '</div><div class="score-label">points</div></div>' +
+            '<div class="results-player' + oppClass + '"><div class="name">Opponent</div><div class="score">' + compOppScore + '</div><div class="score-label">points</div></div>' +
+          '</div>' +
+          '<div class="results-verdict">' + verdict + '</div>' +
+        '</div>';
+      document.getElementById('compResult').classList.remove('hidden');
+    }
+
+    /* ═══════════════════ COOP ═══════════════════ */
+
+    function startCoopGame() {
+      coopRoundIdx = 0;
+      coopMyScore = 0;
+      coopPartnerScore = 0;
+      coopAllDone = false;
+
+      showScreen('coopScreen');
+      document.getElementById('coopResult').classList.add('hidden');
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+
+      document.getElementById('coopHmWrap').innerHTML = hangmanSVG(180);
+      buildKeyboard(document.getElementById('coopKeyboard'), coopGuessLetter);
+
+      initCoopRound();
+    }
+
+    function initCoopRound() {
+      coopCurrentWord = coopWords[coopRoundIdx];
+      coopRevealed = new Set();
+      coopWrong = new Set();
+      coopWrongCount = 0;
+      coopMyGuess = null;
+      coopPartnerGuess = null;
+      coopRoundOver = false;
+      coopInputLocked = false;
+      coopTurnHistory = [];
+
+      const curLen = coopCurrentWord.length;
+      document.getElementById('coopRoundLabel').textContent = 'Round ' + (coopRoundIdx + 1) + ' of ' + numRounds + ' · ' + curLen + '-letter word';
+      document.getElementById('coopMyScoreVal').textContent = coopMyScore;
+      document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
+      const inp = document.getElementById('coopWgInput');
+      inp.maxLength = curLen;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('coopWgBtn').disabled = false;
+      document.getElementById('coopWgWrap').classList.remove('hidden');
+      document.getElementById('coopError').textContent = '';
+      document.getElementById('coopStatus').textContent = 'Pick a letter or guess the word';
+      document.getElementById('coopStatus').className = 'coop-status';
+      document.getElementById('coopTurnLog').innerHTML = '';
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+
+      document.getElementById('coopHmWrap').innerHTML = hangmanSVG(180);
+      buildKeyboard(document.getElementById('coopKeyboard'), coopGuessLetter);
+
+      renderCoopUI();
+      inp.focus();
+    }
+
+    function coopGuessLetter(letter) {
+      if (coopInputLocked || coopRoundOver) return;
+      if (coopRevealed.has(letter) || coopWrong.has(letter)) return;
+
+      coopMyGuess = letter;
+      coopInputLocked = true;
+      lockCoopInput();
+      conn.send({ type: 'coopGuess', round: coopRoundIdx, guess: letter });
+      document.getElementById('coopStatus').textContent = 'You guessed ' + letter + ' — waiting for partner...';
+      document.getElementById('coopStatus').className = 'coop-status waiting';
+      tryProcessCoopTurn();
+    }
+
+    function coopGuessWord() {
+      const inp = document.getElementById('coopWgInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('coopError');
+      if (coopInputLocked || coopRoundOver) return;
+
+      const curLen = coopCurrentWord.length;
+      if (word.length !== curLen) { err.textContent = 'Enter a ' + curLen + '-letter word'; return; }
+      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
+      if (!isValidWord(word)) { err.textContent = 'Not a valid word'; inp.focus(); return; }
+      err.textContent = '';
+
+      coopMyGuess = word;
+      coopInputLocked = true;
+      lockCoopInput();
+      conn.send({ type: 'coopGuess', round: coopRoundIdx, guess: word });
+      document.getElementById('coopStatus').textContent = 'You guessed "' + word + '" — waiting for partner...';
+      document.getElementById('coopStatus').className = 'coop-status waiting';
+      inp.value = '';
+      tryProcessCoopTurn();
+    }
+
+    function lockCoopInput() {
+      updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, true);
+      document.getElementById('coopWgInput').disabled = true;
+      document.getElementById('coopWgBtn').disabled = true;
+    }
+
+    function unlockCoopInput() {
+      coopInputLocked = false;
+      updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, false);
+      document.getElementById('coopWgInput').disabled = false;
+      document.getElementById('coopWgBtn').disabled = false;
+    }
+
+    function tryProcessCoopTurn() {
+      if (coopMyGuess === null || coopPartnerGuess === null) return;
+
+      const g1 = coopMyGuess;
+      const g2 = coopPartnerGuess;
+      coopMyGuess = null;
+      coopPartnerGuess = null;
+
+      const result = processCoopTurn(g1, g2);
+      coopWrongCount += result.newParts;
+      coopMyScore += result.myPoints;
+      coopPartnerScore += result.partnerPoints;
+      coopTurnHistory.unshift({ g1, g2, ...result });
+
+      if (result.wordSolved) {
+        coopMyScore += SOLVE_BONUS;
+        coopPartnerScore += SOLVE_BONUS;
+        coopRoundOver = true;
+      } else if (coopWrongCount >= MAX_WRONG) {
+        coopMyScore -= FAIL_PENALTY;
+        coopPartnerScore -= FAIL_PENALTY;
+        coopRoundOver = true;
+      }
+
+      renderCoopUI();
+      renderCoopTurnLog();
+
+      if (coopRoundOver) {
+        showCoopRoundEnd(result.wordSolved || wordFullyRevealed(coopCurrentWord, coopRevealed));
+      } else {
+        unlockCoopInput();
+        document.getElementById('coopStatus').textContent = 'Pick a letter or guess the word';
+        document.getElementById('coopStatus').className = 'coop-status';
+        document.getElementById('coopWgInput').focus();
+      }
+    }
+
+    function processCoopTurn(myGuess, partnerGuess) {
+      let myPoints = 0, partnerPoints = 0;
+      let wordSolved = false;
+      const turnDetails = [];
+      const pendingCorrect = new Set();
+      const pendingWrong = [];
+
+      const guesses = [
+        { who: 'You', guess: myGuess, isMine: true },
+        { who: 'Partner', guess: partnerGuess, isMine: false }
+      ];
+
+      for (const g of guesses) {
+        if (g.guess.length > 1) {
+          if (g.guess === coopCurrentWord) {
+            wordSolved = true;
+            const unrevealed = coopCurrentWord.split('').filter(c => !coopRevealed.has(c) && !pendingCorrect.has(c)).length;
+            if (g.isMine) myPoints += unrevealed; else partnerPoints += unrevealed;
+            for (const c of coopCurrentWord) pendingCorrect.add(c);
+            turnDetails.push({ who: g.who, guess: g.guess, correct: true, points: unrevealed, type: 'word' });
+          } else {
+            pendingWrong.push(g.guess);
+            turnDetails.push({ who: g.who, guess: g.guess, correct: false, points: 0, type: 'word' });
+          }
+          continue;
+        }
+
+        const letter = g.guess;
+        if (coopRevealed.has(letter) || coopWrong.has(letter)) {
+          turnDetails.push({ who: g.who, guess: letter, correct: coopRevealed.has(letter), points: 0, type: 'letter', already: true });
+          continue;
+        }
+
+        if (coopCurrentWord.includes(letter)) {
+          const count = countInWord(coopCurrentWord, letter);
+          if (g.isMine) myPoints += count; else partnerPoints += count;
+          pendingCorrect.add(letter);
+          turnDetails.push({ who: g.who, guess: letter, correct: true, points: count, type: 'letter' });
+        } else {
+          pendingWrong.push(letter);
+          turnDetails.push({ who: g.who, guess: letter, correct: false, points: 0, type: 'letter' });
+        }
+      }
+
+      if (wordSolved) {
+        for (const c of pendingCorrect) coopRevealed.add(c);
+        return { myPoints, partnerPoints, newParts: 0, wordSolved: true, details: turnDetails };
+      }
+
+      for (const l of pendingCorrect) coopRevealed.add(l);
+      for (const w of pendingWrong) { if (w.length === 1) coopWrong.add(w); }
+
+      const uniqueWrong = new Set(pendingWrong);
+      const newParts = uniqueWrong.size;
+
+      if (wordFullyRevealed(coopCurrentWord, coopRevealed)) wordSolved = true;
+
+      return { myPoints, partnerPoints, newParts, wordSolved, details: turnDetails };
+    }
+
+    function renderCoopTurnLog() {
+      const container = document.getElementById('coopTurnLog');
+      container.innerHTML = '';
+      const turnNum = coopTurnHistory.length;
+      coopTurnHistory.forEach((t, idx) => {
+        const div = document.createElement('div');
+        div.className = 'turn-entry';
+        let html = '<span class="turn-num">' + (turnNum - idx) + '</span><span class="turn-detail">';
+        t.details.forEach((d, i) => {
+          if (i > 0) html += ' · ';
+          const guessStr = d.guess.length > 1 ? '"' + d.guess + '"' : d.guess;
+          if (d.correct) {
+            html += d.who + ': <span class="turn-correct">' + guessStr + ' ✓' + (d.points ? '(+' + d.points + ')' : '') + '</span>';
+          } else {
+            html += d.who + ': <span class="turn-wrong">' + guessStr + ' ✗</span>';
+          }
+        });
+        if (t.newParts > 0 && t.details.filter(d => !d.correct && !d.already).length === 2 && t.g1 === t.g2) {
+          html += ' <span style="opacity:0.5">(same guess! 1 part)</span>';
+        }
+        html += '</span>';
+        div.innerHTML = html;
+        container.appendChild(div);
+      });
+    }
+
+    function showCoopRoundEnd(solved) {
+      lockCoopInput();
+      document.getElementById('coopWgWrap').classList.add('hidden');
+
+      const isLast = coopRoundIdx >= numRounds - 1;
+      const endDiv = document.getElementById('coopRoundEnd');
+
+      let html = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
+        '<h3>' + (solved ? 'Word Complete!' : 'Hangman!') + '</h3>' +
+        '<p class="re-word">' + coopCurrentWord + '</p>' +
+        '<p>' + (solved ? '+' + SOLVE_BONUS + ' bonus each' : '−' + FAIL_PENALTY + ' each') + '</p>';
+      if (!isLast) html += '<button class="actionBtn primary" onclick="coopNextRound()">Next Round →</button>';
+      html += '</div>';
+      endDiv.innerHTML = html;
+      endDiv.classList.remove('hidden');
+
+      document.getElementById('coopStatus').textContent = solved ? 'Round complete!' : 'Round failed';
+      document.getElementById('coopStatus').className = 'coop-status';
+      document.getElementById('coopMyScoreVal').textContent = coopMyScore;
+      document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
+      renderCoopUI();
+
+      if (isLast) {
+        coopAllDone = true;
+        setTimeout(showCoopFinalResult, 2000);
+      }
+    }
+
+    function coopNextRound() {
+      coopRoundIdx++;
+      initCoopRound();
+    }
+
+    function renderCoopUI() {
+      updateHangman(document.getElementById('coopHmWrap'), coopWrongCount);
+      renderWordDisplay(document.getElementById('coopWordDisplay'), coopCurrentWord, coopRevealed, coopRoundOver && coopWrongCount >= MAX_WRONG);
+      if (!coopInputLocked) updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, false);
+      document.getElementById('coopMyScoreVal').textContent = coopMyScore;
+      document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
+    }
+
+    function showCoopFinalResult() {
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+      document.getElementById('coopWgWrap').classList.add('hidden');
+
+      let verdict;
+      if (coopMyScore > coopPartnerScore) verdict = 'You scored higher!';
+      else if (coopPartnerScore > coopMyScore) verdict = 'Partner scored higher!';
+      else verdict = 'Tied scores!';
+
+      document.getElementById('coopResult').innerHTML =
+        '<div class="results-card">' +
+          '<h2>Game Over</h2>' +
+          '<p class="subtitle">' + numRounds + ' round' + (numRounds > 1 ? 's' : '') + ' complete</p>' +
+          '<div class="results-scores">' +
+            '<div class="results-player' + (coopMyScore >= coopPartnerScore ? ' winner' : '') + '"><div class="name">You</div><div class="score">' + coopMyScore + '</div><div class="score-label">points</div></div>' +
+            '<div class="results-player' + (coopPartnerScore >= coopMyScore ? ' winner' : '') + '"><div class="name">Partner</div><div class="score">' + coopPartnerScore + '</div><div class="score-label">points</div></div>' +
+          '</div>' +
+          '<div class="results-verdict">' + verdict + '</div>' +
+        '</div>';
+      document.getElementById('coopResult').classList.remove('hidden');
+      document.getElementById('coopStatus').textContent = '';
+    }
+
+    /* ═══════════════════ NAVIGATION ═══════════════════ */
+
+    function showScreen(id) {
+      ['setupScreen', 'lobbyScreen', 'soloScreen', 'compScreen', 'coopScreen'].forEach(s => {
+        document.getElementById(s).classList.toggle('hidden', s !== id);
+      });
+    }
+
+    function backToSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null;
+      compAllDone = false;
+      compOppAllDone = false;
+      coopAllDone = false;
+      soloAllDone = false;
+      window.location.hash = '';
+      showScreen('setupScreen');
+    }
+
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn'))
+        document.getElementById('rulesOverlay').classList.add('hidden');
+    }
+
+    /* ═══════════════════ KEYBOARD ═══════════════════ */
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        if (!document.getElementById('soloScreen').classList.contains('hidden') && !soloOver) {
+          const inp = document.getElementById('soloWgInput');
+          if (inp.value.trim()) soloGuessWord();
+        } else if (!document.getElementById('compScreen').classList.contains('hidden')) {
+          if (!document.getElementById('compSubmitPhase').classList.contains('hidden') && !compMyWordsSubmitted) {
+            submitCompWord();
+          } else if (!document.getElementById('compGamePhase').classList.contains('hidden') && !compRoundOver) {
+            const inp = document.getElementById('compMyWgInput');
+            if (inp.value.trim()) compGuessWord();
+          }
+        } else if (!document.getElementById('coopScreen').classList.contains('hidden') && !coopInputLocked && !coopRoundOver) {
+          const inp = document.getElementById('coopWgInput');
+          if (inp.value.trim()) coopGuessWord();
+        }
+      }
+
+      if (e.key === 'Escape') hideRules(e);
+
+      if (e.key.length === 1 && /^[a-zA-Z]$/.test(e.key)) {
+        const letter = e.key.toUpperCase();
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+        if (!document.getElementById('soloScreen').classList.contains('hidden') && !soloOver) {
+          soloGuessLetter(letter);
+        } else if (!document.getElementById('compScreen').classList.contains('hidden') &&
+                   !document.getElementById('compGamePhase').classList.contains('hidden') && !compRoundOver) {
+          compGuessLetter(letter);
+        } else if (!document.getElementById('coopScreen').classList.contains('hidden') && !coopInputLocked && !coopRoundOver) {
+          coopGuessLetter(letter);
+        }
+      }
+    });
+
+    /* ═══════════════════ INIT ═══════════════════ */
+
+    (function checkForRoomLink() {
+      const m = window.location.hash.match(/room=(.+)/);
+      if (m) joinRoom(m[1]);
+    })();
+  </script>
+</body>
+
+</html>
