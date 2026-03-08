@@ -125,8 +125,40 @@
     }
 
     .scoreboard {
-      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
       margin-top: 10px;
+      font-size: 20px;
+    }
+    .sb-symbol {
+      font-size: 22px;
+      font-weight: bold;
+      width: 36px;
+      text-align: center;
+    }
+    .sb-player {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.5;
+      padding: 0 6px;
+    }
+    .sb-scores {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 4px 14px;
+      font-weight: bold;
+      font-size: 22px;
+      font-variant-numeric: tabular-nums;
+    }
+    .sb-dash {
+      opacity: 0.35;
+      font-weight: normal;
     }
 
     #resultsSection {
@@ -892,11 +924,16 @@
         const p1s = getP1SymbolForRound(currentRound);
         const p2s = p1s === 'O' ? 'X' : 'O';
         document.getElementById("scoreInfo").innerHTML =
-          'P1 <span class="' + p1s + '">' + p1s + '</span> ' + ds[p1s] +
-          ' &nbsp;—&nbsp; P2 <span class="' + p2s + '">' + p2s + '</span> ' + ds[p2s];
+          '<span class="sb-symbol ' + p1s + '">' + p1s + '</span>' +
+          '<span class="sb-player">P1</span>' +
+          '<span class="sb-scores">' + ds[p1s] + '<span class="sb-dash">—</span>' + ds[p2s] + '</span>' +
+          '<span class="sb-player">P2</span>' +
+          '<span class="sb-symbol ' + p2s + '">' + p2s + '</span>';
       } else {
         document.getElementById("scoreInfo").innerHTML =
-          '<span class="O">O</span> ' + ds.O + ' &nbsp;—&nbsp; <span class="X">X</span> ' + ds.X;
+          '<span class="sb-symbol O">O</span>' +
+          '<span class="sb-scores">' + ds.O + '<span class="sb-dash">—</span>' + ds.X + '</span>' +
+          '<span class="sb-symbol X">X</span>';
       }
 
       /* turn indicator */
@@ -934,11 +971,13 @@
       if (!onlineMode && playerCount === 2 && matchFormat > 1) {
         const p1s = getP1SymbolForRound(currentRound);
         const p2s = p1s === 'O' ? 'X' : 'O';
-        h += '</p><p class="finalScore">P1 <span class="' + p1s + '">' + p1s + '</span> ' + s[p1s] +
-          ' &nbsp;—&nbsp; P2 <span class="' + p2s + '">' + p2s + '</span> ' + s[p2s] + '</p>';
+        h += '</p><p class="finalScore">' +
+          '<span class="' + p1s + '">' + p1s + '</span> P1 ' + s[p1s] +
+          ' — ' + s[p2s] + ' P2 <span class="' + p2s + '">' + p2s + '</span></p>';
       } else {
-        h += '</p><p class="finalScore"><span class="O">O</span> ' + s.O +
-          ' &nbsp;—&nbsp; <span class="X">X</span> ' + s.X + '</p>';
+        h += '</p><p class="finalScore">' +
+          '<span class="O">O</span> ' + s.O +
+          ' — ' + s.X + ' <span class="X">X</span></p>';
       }
       sec.innerHTML = h;
     }

@@ -279,6 +279,7 @@
     }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="words_all.js"></script>
   <script src="words.js"></script>
 </head>
 
@@ -323,6 +324,15 @@
         <input type="range" id="roundsSlider" min="1" max="5" value="1" oninput="updateRoundsDisplay()">
         <span class="size-display" id="roundsDisplay">1</span>
       </div>
+    </div>
+
+    <div id="customWordsSection" class="setupSection hidden">
+      <div class="setupLabel">Your Custom Words</div>
+      <div class="slider-wrap">
+        <input type="range" id="customWordsSlider" min="0" max="5" value="1" oninput="updateCustomWordsDisplay()">
+        <span class="size-display" id="customWordsDisplay">1</span>
+      </div>
+      <div style="font-size:12px;opacity:0.45;margin-top:4px;">Rest of the rounds use random common words</div>
     </div>
 
     <button class="startBtn" onclick="launchGame()">Start Game</button>
@@ -426,10 +436,6 @@
     <div class="hm-wrap" id="coopHmWrap"></div>
     <div class="word-display" id="coopWordDisplay"></div>
     <div id="coopKeyboard"></div>
-    <div class="wg-wrap" id="coopWgWrap">
-      <input class="wg-input" id="coopWgInput" maxlength="7" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Guess word">
-      <button class="wg-btn" id="coopWgBtn" onclick="coopGuessWord()">Guess</button>
-    </div>
     <div class="guess-error" id="coopError"></div>
     <div class="coop-status" id="coopStatus"></div>
     <div class="turn-log" id="coopTurnLog"></div>
@@ -447,32 +453,35 @@
       <h2>How to Play</h2>
 
       <h3>Objective</h3>
-      <p>Guess the hidden word one letter at a time (or guess the full word) before the hangman drawing is complete. You have 6 wrong guesses before it's game over.</p>
+      <p>Guess the hidden word one letter at a time (or guess the full word in solo/competitive) before the hangman is complete. You have 6 wrong guesses.</p>
 
-      <h3>Scoring (1 Player &amp; Co-op)</h3>
+      <h3>1 Player — Single Round</h3>
+      <p>Guess the word before the hangman is drawn. No scoring — just win or lose.</p>
+
+      <h3>1 Player — Multi-Round Scoring</h3>
       <ul>
-        <li>Correct letter: <strong>+1 point</strong> per occurrence in the word.</li>
-        <li>Completing a word: <strong>+5 bonus</strong>.</li>
-        <li>Failing (hangman complete): <strong>−3 penalty</strong>.</li>
-        <li>In multi-round games, the goal is to finish with a <strong>positive score</strong>.</li>
+        <li>Correct letter: <strong>+1</strong></li>
+        <li>Correct word guess: <strong>+N + (N−1)</strong> where N = unrevealed letters (e.g. 3 left → 5 pts)</li>
+        <li>Word complete: <strong>+lives remaining</strong> (6 − wrong guesses)</li>
+        <li>Hangman complete: <strong>−(N + A)</strong> (N = word length, A = unguessed letters)</li>
+        <li>Goal: finish with a <strong>positive score</strong>.</li>
       </ul>
-
-      <h3>1 Player</h3>
-      <p>A random common word is chosen. Click letters on the keyboard or type the full word to guess. Wrong letters and wrong word guesses each add a body part.</p>
 
       <h3>2 Players — Competitive</h3>
       <ul>
-        <li>Both players submit N words for the other to guess.</li>
-        <li>Words are shuffled and each player guesses through them.</li>
-        <li>Points per word: <strong>(6 − wrong guesses) × 10</strong> if solved, <strong>0</strong> if the hangman is completed.</li>
-        <li>You can see the opponent's hangman progress and score in real time.</li>
+        <li>Choose how many custom words to submit; remaining rounds use random words.</li>
+        <li>Points per word: <strong>(6 − wrong guesses) × 10</strong> if solved, <strong>0</strong> if hangman. Guessing the word directly also earns <strong>+N + (N−1)</strong> bonus (N = unrevealed letters).</li>
+        <li>You can see the opponent's progress in real time.</li>
       </ul>
 
       <h3>2 Players — Co-op</h3>
       <ul>
-        <li>A common random word is chosen for each round.</li>
-        <li>Each turn, both players simultaneously guess a letter or word.</li>
-        <li>If both guess the <em>same</em> wrong letter/word, only <strong>1 body part</strong> is added instead of 2.</li>
+        <li>Letters only — no word guessing, to keep it fair.</li>
+        <li>Each turn, both players simultaneously guess a letter.</li>
+        <li>Correct letter: <strong>+1</strong> for the guesser.</li>
+        <li>Same wrong letter = only <strong>1 body part</strong> added.</li>
+        <li>Word complete: <strong>+lives remaining</strong> each.</li>
+        <li>Hangman: <strong>−(N + A)</strong> each (N = word length, A = unguessed).</li>
       </ul>
 
       <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
@@ -484,8 +493,6 @@
 
     const MAX_WRONG = 6;
     const COMP_SCORE_PER_LIFE = 10;
-    const SOLVE_BONUS = 5;
-    const FAIL_PENALTY = 3;
     const KB_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 
     /* ═══════════════════ STATE ═══════════════════ */
@@ -495,6 +502,7 @@
     let wordLength = 5;
     let randomLength = false;
     let numRounds = 1;
+    let compCustomWords = 1;
 
     let peer = null, conn = null, isHost = false;
     let joinTimer = null, lastRoomId = '';
@@ -564,7 +572,7 @@
 
     function isValidWord(word) {
       const w = word.toLowerCase();
-      return VALID_WORDS[w.length] && VALID_WORDS[w.length].has(w);
+      return ALL_WORDS[w.length] && ALL_WORDS[w.length].has(w);
     }
 
     function shuffleArray(arr) {
@@ -641,8 +649,8 @@
       });
     }
 
-    function countInWord(word, letter) {
-      return word.split('').filter(c => c === letter).length;
+    function wordGuessBonus(unrevealedCount) {
+      return unrevealedCount > 0 ? unrevealedCount + (unrevealedCount - 1) : 0;
     }
 
     function wordFullyRevealed(word, revealedSet) {
@@ -653,14 +661,34 @@
       const parts = [];
       const letters = Array.from(wrongLetters);
       if (letters.length) parts.push(letters.join(', '));
-      if (wrongWords.length) parts.push('<span class="wg-words">' + wrongWords.join(', ') + '</span>');
+      if (wrongWords && wrongWords.length) parts.push('<span class="wg-words">' + wrongWords.join(', ') + '</span>');
       container.innerHTML = parts.length ? 'Wrong: ' + parts.join(' · ') : '';
     }
 
     /* ═══════════════════ SETUP UI ═══════════════════ */
 
     function updateRoundsDisplay() {
-      document.getElementById('roundsDisplay').textContent = document.getElementById('roundsSlider').value;
+      const rounds = parseInt(document.getElementById('roundsSlider').value);
+      document.getElementById('roundsDisplay').textContent = rounds;
+      syncCustomWordsSlider();
+    }
+
+    function updateCustomWordsDisplay() {
+      document.getElementById('customWordsDisplay').textContent = document.getElementById('customWordsSlider').value;
+    }
+
+    function syncCustomWordsSlider() {
+      const rounds = parseInt(document.getElementById('roundsSlider').value);
+      const slider = document.getElementById('customWordsSlider');
+      slider.max = rounds;
+      if (parseInt(slider.value) > rounds) slider.value = rounds;
+      document.getElementById('customWordsDisplay').textContent = slider.value;
+      updateCustomWordsSectionVisibility();
+    }
+
+    function updateCustomWordsSectionVisibility() {
+      const show = playerMode === 'online' && subMode === 'competitive';
+      document.getElementById('customWordsSection').classList.toggle('hidden', !show);
     }
 
     function setPlayerMode(mode) {
@@ -669,6 +697,7 @@
         b.classList.toggle('selected', (i === 0 && mode === 'solo') || (i === 1 && mode === 'online'));
       });
       document.getElementById('subModeSection').classList.toggle('hidden', mode !== 'online');
+      updateCustomWordsSectionVisibility();
     }
 
     function setSubMode(mode) {
@@ -676,6 +705,7 @@
       document.querySelectorAll('#subModeToggle .modeBtn').forEach((b, i) => {
         b.classList.toggle('selected', (i === 0 && mode === 'competitive') || (i === 1 && mode === 'coop'));
       });
+      updateCustomWordsSectionVisibility();
     }
 
     function setWordLength(len) {
@@ -694,6 +724,7 @@
 
     function launchGame() {
       numRounds = parseInt(document.getElementById('roundsSlider').value);
+      compCustomWords = parseInt(document.getElementById('customWordsSlider').value);
       if (playerMode === 'solo') {
         startSoloGame();
       } else {
@@ -714,8 +745,7 @@
       document.getElementById('soloResult').classList.add('hidden');
       document.getElementById('soloRoundEnd').classList.add('hidden');
 
-      const showScore = numRounds > 1;
-      document.getElementById('soloScoreArea').classList.toggle('hidden', !showScore);
+      document.getElementById('soloScoreArea').classList.toggle('hidden', numRounds <= 1);
       document.getElementById('soloScoreVal').textContent = '0';
 
       initSoloRound();
@@ -754,7 +784,7 @@
 
       if (soloWord.includes(letter)) {
         soloRevealed.add(letter);
-        soloScore += countInWord(soloWord, letter);
+        if (numRounds > 1) soloScore += 1;
       } else {
         soloWrong.add(letter);
         soloWrongCount++;
@@ -776,12 +806,9 @@
       err.textContent = '';
 
       if (word === soloWord) {
-        const unrevealed = soloWord.split('').filter(c => !soloRevealed.has(c));
-        const uniqueNew = new Set(unrevealed);
-        for (const c of uniqueNew) {
-          soloScore += countInWord(soloWord, c);
-          soloRevealed.add(c);
-        }
+        const unrevealedUnique = new Set(soloWord.split('').filter(c => !soloRevealed.has(c)));
+        if (numRounds > 1) soloScore += wordGuessBonus(unrevealedUnique.size);
+        for (const c of soloWord) soloRevealed.add(c);
       } else {
         soloWrongWords.push(word);
         soloWrongCount++;
@@ -802,38 +829,44 @@
       document.getElementById('soloWgBtn').disabled = true;
       document.getElementById('soloWgWrap').classList.add('hidden');
 
-      if (solved) soloScore += SOLVE_BONUS;
-      else soloScore -= FAIL_PENALTY;
-      document.getElementById('soloScoreVal').textContent = soloScore;
-
       if (numRounds <= 1) {
         const res = document.getElementById('soloResult');
         res.classList.remove('hidden');
-        const scoreHtml = '<p style="font-size:18px;margin-top:8px">Score: <strong>' + soloScore + '</strong></p>';
         if (solved) {
           res.innerHTML = '<div class="results-card"><h2 style="color:#2ecc71">You got it!</h2>' +
             '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p>' +
-            '<p style="font-size:16px">' + soloWrongCount + ' wrong guess' + (soloWrongCount !== 1 ? 'es' : '') + '</p>' +
-            scoreHtml + '</div>';
+            '<p style="font-size:16px">' + soloWrongCount + ' wrong guess' + (soloWrongCount !== 1 ? 'es' : '') + '</p></div>';
         } else {
           res.innerHTML = '<div class="results-card"><h2 style="color:#e74c3c">Game Over</h2>' +
-            '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p>' +
-            scoreHtml + '</div>';
+            '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p></div>';
         }
       } else {
-        showSoloRoundEnd(solved);
+        const livesLeft = MAX_WRONG - soloWrongCount;
+        if (solved) {
+          soloScore += livesLeft;
+        } else {
+          const unguessed = new Set(soloWord.split('').filter(c => !soloRevealed.has(c))).size;
+          soloScore -= (soloWord.length + unguessed);
+        }
+        showSoloRoundEnd(solved, livesLeft);
       }
     }
 
-    function showSoloRoundEnd(solved) {
+    function showSoloRoundEnd(solved, livesLeft) {
       const isLast = soloRoundIdx >= numRounds - 1;
       const endDiv = document.getElementById('soloRoundEnd');
-      const scoreChange = solved ? '+' + SOLVE_BONUS : '−' + FAIL_PENALTY;
+      let changeText;
+      if (solved) {
+        changeText = '+' + livesLeft + ' completion bonus';
+      } else {
+        const unguessed = new Set(soloWord.split('').filter(c => !soloRevealed.has(c))).size;
+        changeText = '−' + (soloWord.length + unguessed) + ' penalty';
+      }
 
       let html = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
         '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
         '<p class="re-word">' + soloWord + '</p>' +
-        '<p>' + scoreChange + ' · Total: ' + soloScore + '</p>';
+        '<p>' + changeText + ' · Total: ' + soloScore + '</p>';
 
       if (!isLast) {
         html += '<button class="actionBtn primary" onclick="soloNextRound()">Next Round →</button>';
@@ -940,7 +973,7 @@
             conn.send({ type: 'setup', mode: 'coop', wordLength, randomLength, rounds: numRounds, words: coopWords });
             startCoopGame();
           } else {
-            conn.send({ type: 'setup', mode: 'competitive', wordLength, randomLength, rounds: numRounds });
+            conn.send({ type: 'setup', mode: 'competitive', wordLength, randomLength, rounds: numRounds, customWords: compCustomWords });
             startCompSubmit();
           }
         });
@@ -1022,6 +1055,7 @@
             startCoopGame();
           } else {
             subMode = 'competitive';
+            compCustomWords = data.customWords || numRounds;
             startCompSubmit();
           }
           break;
@@ -1066,6 +1100,20 @@
       document.getElementById('compGamePhase').classList.add('hidden');
       document.getElementById('compResult').classList.add('hidden');
 
+      if (compCustomWords === 0) {
+        compMyWordsSubmitted = true;
+        conn.send({ type: 'submitWords', words: [] });
+        document.getElementById('compSubmitLabel').textContent = 'All rounds use random words';
+        document.getElementById('compSubmitInput').disabled = true;
+        document.getElementById('compSubmitBtn').disabled = true;
+        document.getElementById('compSubmitStatus').textContent = 'Waiting for opponent...';
+        document.getElementById('compSubmitStatus').classList.remove('hidden');
+        document.getElementById('compSubmittedList').innerHTML = '';
+        document.getElementById('compSubmitError').textContent = '';
+        checkCompReady();
+        return;
+      }
+
       const inp = document.getElementById('compSubmitInput');
       inp.maxLength = randomLength ? 7 : wordLength;
       inp.value = '';
@@ -1079,12 +1127,14 @@
     }
 
     function updateCompSubmitLabel() {
-      const remaining = numRounds - compMyWordsForOpp.length;
+      if (compCustomWords === 0) return;
+      const remaining = compCustomWords - compMyWordsForOpp.length;
       if (remaining > 0) {
         const lenHint = randomLength ? '4–7 letters' : wordLength + ' letters';
+        const autoNote = numRounds > compCustomWords ? ' · ' + (numRounds - compCustomWords) + ' random' : '';
         document.getElementById('compSubmitLabel').textContent =
-          'Enter word ' + (compMyWordsForOpp.length + 1) + ' of ' + numRounds +
-          ' for your opponent (' + lenHint + '):';
+          'Enter word ' + (compMyWordsForOpp.length + 1) + ' of ' + compCustomWords +
+          ' for your opponent (' + lenHint + ')' + autoNote;
       }
     }
 
@@ -1112,12 +1162,14 @@
       div.innerHTML = '<span class="sw-num">' + compMyWordsForOpp.length + '.</span> ' + word;
       list.appendChild(div);
 
-      if (compMyWordsForOpp.length >= numRounds) {
+      if (compMyWordsForOpp.length >= compCustomWords) {
         inp.disabled = true;
         document.getElementById('compSubmitBtn').disabled = true;
         compMyWordsSubmitted = true;
         conn.send({ type: 'submitWords', words: compMyWordsForOpp });
-        document.getElementById('compSubmitLabel').textContent = 'All words submitted!';
+        const autoCount = numRounds - compCustomWords;
+        document.getElementById('compSubmitLabel').textContent = 'All words submitted!' +
+          (autoCount > 0 ? ' (' + autoCount + ' random word' + (autoCount > 1 ? 's' : '') + ' will be added)' : '');
         document.getElementById('compSubmitStatus').textContent = 'Waiting for opponent to submit their words...';
         document.getElementById('compSubmitStatus').classList.remove('hidden');
         checkCompReady();
@@ -1129,6 +1181,10 @@
 
     function checkCompReady() {
       if (compMyWordsSubmitted && compOppWordsReceived) {
+        const autoCount = numRounds - compCustomWords;
+        for (let i = 0; i < autoCount; i++) {
+          compOppWordsForMe.push(pickWord(effectiveLength()));
+        }
         shuffleArray(compOppWordsForMe);
         setTimeout(startCompGame, 500);
       }
@@ -1212,6 +1268,8 @@
       err.textContent = '';
 
       if (word === compCurrentWord) {
+        const unrevealedUnique = new Set(compCurrentWord.split('').filter(c => !compRevealed.has(c)));
+        compMyScore += wordGuessBonus(unrevealedUnique.size);
         for (const c of compCurrentWord) compRevealed.add(c);
       } else {
         compWrongWords.push(word);
@@ -1349,14 +1407,8 @@
       document.getElementById('coopRoundLabel').textContent = 'Round ' + (coopRoundIdx + 1) + ' of ' + numRounds + ' · ' + curLen + '-letter word';
       document.getElementById('coopMyScoreVal').textContent = coopMyScore;
       document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
-      const inp = document.getElementById('coopWgInput');
-      inp.maxLength = curLen;
-      inp.value = '';
-      inp.disabled = false;
-      document.getElementById('coopWgBtn').disabled = false;
-      document.getElementById('coopWgWrap').classList.remove('hidden');
       document.getElementById('coopError').textContent = '';
-      document.getElementById('coopStatus').textContent = 'Pick a letter or guess the word';
+      document.getElementById('coopStatus').textContent = 'Pick a letter';
       document.getElementById('coopStatus').className = 'coop-status';
       document.getElementById('coopTurnLog').innerHTML = '';
       document.getElementById('coopRoundEnd').classList.add('hidden');
@@ -1365,7 +1417,6 @@
       buildKeyboard(document.getElementById('coopKeyboard'), coopGuessLetter);
 
       renderCoopUI();
-      inp.focus();
     }
 
     function coopGuessLetter(letter) {
@@ -1381,39 +1432,13 @@
       tryProcessCoopTurn();
     }
 
-    function coopGuessWord() {
-      const inp = document.getElementById('coopWgInput');
-      const word = inp.value.trim().toUpperCase();
-      const err = document.getElementById('coopError');
-      if (coopInputLocked || coopRoundOver) return;
-
-      const curLen = coopCurrentWord.length;
-      if (word.length !== curLen) { err.textContent = 'Enter a ' + curLen + '-letter word'; return; }
-      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
-      if (!isValidWord(word)) { err.textContent = 'Not a valid word'; inp.focus(); return; }
-      err.textContent = '';
-
-      coopMyGuess = word;
-      coopInputLocked = true;
-      lockCoopInput();
-      conn.send({ type: 'coopGuess', round: coopRoundIdx, guess: word });
-      document.getElementById('coopStatus').textContent = 'You guessed "' + word + '" — waiting for partner...';
-      document.getElementById('coopStatus').className = 'coop-status waiting';
-      inp.value = '';
-      tryProcessCoopTurn();
-    }
-
     function lockCoopInput() {
       updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, true);
-      document.getElementById('coopWgInput').disabled = true;
-      document.getElementById('coopWgBtn').disabled = true;
     }
 
     function unlockCoopInput() {
       coopInputLocked = false;
       updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, false);
-      document.getElementById('coopWgInput').disabled = false;
-      document.getElementById('coopWgBtn').disabled = false;
     }
 
     function tryProcessCoopTurn() {
@@ -1430,13 +1455,18 @@
       coopPartnerScore += result.partnerPoints;
       coopTurnHistory.unshift({ g1, g2, ...result });
 
-      if (result.wordSolved) {
-        coopMyScore += SOLVE_BONUS;
-        coopPartnerScore += SOLVE_BONUS;
+      const wordSolved = result.wordSolved || wordFullyRevealed(coopCurrentWord, coopRevealed);
+
+      if (wordSolved) {
+        const livesLeft = MAX_WRONG - coopWrongCount;
+        coopMyScore += livesLeft;
+        coopPartnerScore += livesLeft;
         coopRoundOver = true;
       } else if (coopWrongCount >= MAX_WRONG) {
-        coopMyScore -= FAIL_PENALTY;
-        coopPartnerScore -= FAIL_PENALTY;
+        const unguessed = new Set(coopCurrentWord.split('').filter(c => !coopRevealed.has(c))).size;
+        const penalty = coopCurrentWord.length + unguessed;
+        coopMyScore -= penalty;
+        coopPartnerScore -= penalty;
         coopRoundOver = true;
       }
 
@@ -1444,18 +1474,16 @@
       renderCoopTurnLog();
 
       if (coopRoundOver) {
-        showCoopRoundEnd(result.wordSolved || wordFullyRevealed(coopCurrentWord, coopRevealed));
+        showCoopRoundEnd(wordSolved);
       } else {
         unlockCoopInput();
-        document.getElementById('coopStatus').textContent = 'Pick a letter or guess the word';
+        document.getElementById('coopStatus').textContent = 'Pick a letter';
         document.getElementById('coopStatus').className = 'coop-status';
-        document.getElementById('coopWgInput').focus();
       }
     }
 
     function processCoopTurn(myGuess, partnerGuess) {
       let myPoints = 0, partnerPoints = 0;
-      let wordSolved = false;
       const turnDetails = [];
       const pendingCorrect = new Set();
       const pendingWrong = [];
@@ -1466,49 +1494,34 @@
       ];
 
       for (const g of guesses) {
-        if (g.guess.length > 1) {
-          if (g.guess === coopCurrentWord) {
-            wordSolved = true;
-            const unrevealed = coopCurrentWord.split('').filter(c => !coopRevealed.has(c) && !pendingCorrect.has(c)).length;
-            if (g.isMine) myPoints += unrevealed; else partnerPoints += unrevealed;
-            for (const c of coopCurrentWord) pendingCorrect.add(c);
-            turnDetails.push({ who: g.who, guess: g.guess, correct: true, points: unrevealed, type: 'word' });
-          } else {
-            pendingWrong.push(g.guess);
-            turnDetails.push({ who: g.who, guess: g.guess, correct: false, points: 0, type: 'word' });
-          }
+        const letter = g.guess;
+
+        if (coopRevealed.has(letter)) {
+          turnDetails.push({ who: g.who, guess: letter, correct: true, points: 0, type: 'letter', already: true });
           continue;
         }
-
-        const letter = g.guess;
-        if (coopRevealed.has(letter) || coopWrong.has(letter)) {
-          turnDetails.push({ who: g.who, guess: letter, correct: coopRevealed.has(letter), points: 0, type: 'letter', already: true });
+        if (coopWrong.has(letter)) {
+          turnDetails.push({ who: g.who, guess: letter, correct: false, points: 0, type: 'letter', already: true });
           continue;
         }
 
         if (coopCurrentWord.includes(letter)) {
-          const count = countInWord(coopCurrentWord, letter);
-          if (g.isMine) myPoints += count; else partnerPoints += count;
+          if (g.isMine) myPoints += 1; else partnerPoints += 1;
           pendingCorrect.add(letter);
-          turnDetails.push({ who: g.who, guess: letter, correct: true, points: count, type: 'letter' });
+          turnDetails.push({ who: g.who, guess: letter, correct: true, points: 1, type: 'letter' });
         } else {
           pendingWrong.push(letter);
           turnDetails.push({ who: g.who, guess: letter, correct: false, points: 0, type: 'letter' });
         }
       }
 
-      if (wordSolved) {
-        for (const c of pendingCorrect) coopRevealed.add(c);
-        return { myPoints, partnerPoints, newParts: 0, wordSolved: true, details: turnDetails };
-      }
-
       for (const l of pendingCorrect) coopRevealed.add(l);
-      for (const w of pendingWrong) { if (w.length === 1) coopWrong.add(w); }
+      for (const w of pendingWrong) coopWrong.add(w);
 
       const uniqueWrong = new Set(pendingWrong);
       const newParts = uniqueWrong.size;
 
-      if (wordFullyRevealed(coopCurrentWord, coopRevealed)) wordSolved = true;
+      const wordSolved = wordFullyRevealed(coopCurrentWord, coopRevealed);
 
       return { myPoints, partnerPoints, newParts, wordSolved, details: turnDetails };
     }
@@ -1523,11 +1536,10 @@
         let html = '<span class="turn-num">' + (turnNum - idx) + '</span><span class="turn-detail">';
         t.details.forEach((d, i) => {
           if (i > 0) html += ' · ';
-          const guessStr = d.guess.length > 1 ? '"' + d.guess + '"' : d.guess;
           if (d.correct) {
-            html += d.who + ': <span class="turn-correct">' + guessStr + ' ✓' + (d.points ? '(+' + d.points + ')' : '') + '</span>';
+            html += d.who + ': <span class="turn-correct">' + d.guess + ' ✓' + (d.points ? '(+' + d.points + ')' : '') + '</span>';
           } else {
-            html += d.who + ': <span class="turn-wrong">' + guessStr + ' ✗</span>';
+            html += d.who + ': <span class="turn-wrong">' + d.guess + ' ✗</span>';
           }
         });
         if (t.newParts > 0 && t.details.filter(d => !d.correct && !d.already).length === 2 && t.g1 === t.g2) {
@@ -1541,15 +1553,18 @@
 
     function showCoopRoundEnd(solved) {
       lockCoopInput();
-      document.getElementById('coopWgWrap').classList.add('hidden');
 
       const isLast = coopRoundIdx >= numRounds - 1;
       const endDiv = document.getElementById('coopRoundEnd');
+      const livesLeft = MAX_WRONG - coopWrongCount;
 
       let html = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
         '<h3>' + (solved ? 'Word Complete!' : 'Hangman!') + '</h3>' +
         '<p class="re-word">' + coopCurrentWord + '</p>' +
-        '<p>' + (solved ? '+' + SOLVE_BONUS + ' bonus each' : '−' + FAIL_PENALTY + ' each') + '</p>';
+        '<p>' + (solved ? '+' + livesLeft + ' each (lives left)' : (function() {
+          const ug = new Set(coopCurrentWord.split('').filter(c => !coopRevealed.has(c))).size;
+          return '−' + (coopCurrentWord.length + ug) + ' each (penalty)';
+        })()) + '</p>';
       if (!isLast) html += '<button class="actionBtn primary" onclick="coopNextRound()">Next Round →</button>';
       html += '</div>';
       endDiv.innerHTML = html;
@@ -1582,7 +1597,6 @@
 
     function showCoopFinalResult() {
       document.getElementById('coopRoundEnd').classList.add('hidden');
-      document.getElementById('coopWgWrap').classList.add('hidden');
 
       let verdict;
       if (coopMyScore > coopPartnerScore) verdict = 'You scored higher!';
@@ -1642,9 +1656,6 @@
             const inp = document.getElementById('compMyWgInput');
             if (inp.value.trim()) compGuessWord();
           }
-        } else if (!document.getElementById('coopScreen').classList.contains('hidden') && !coopInputLocked && !coopRoundOver) {
-          const inp = document.getElementById('coopWgInput');
-          if (inp.value.trim()) coopGuessWord();
         }
       }
 

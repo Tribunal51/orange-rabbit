@@ -497,6 +497,7 @@
     }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="words_all.js"></script>
   <script src="words.js"></script>
 </head>
 
@@ -667,7 +668,7 @@
 
     function isValidWord(word) {
       const w = word.toLowerCase();
-      return VALID_WORDS[w.length] && VALID_WORDS[w.length].has(w);
+      return ALL_WORDS[w.length] && ALL_WORDS[w.length].has(w);
     }
 
     /* ═══════════════════ state ═══════════════════ */
