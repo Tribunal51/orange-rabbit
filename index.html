@@ -93,6 +93,28 @@
       background: linear-gradient(135deg, #1a0a2e, #2d1b4e);
     }
 
+    .game-icon.battleship {
+      background: linear-gradient(135deg, #0a1628, #132f4c);
+    }
+
+    .bs-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 2px;
+      width: 50px;
+      height: 50px;
+    }
+
+    .bs-cell {
+      border-radius: 2px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .bs-cell.ship { background: #475569; }
+    .bs-cell.hit { background: #dc2626; }
+    .bs-cell.miss { background: rgba(255,255,255,0.15); }
+    .bs-cell.water { background: rgba(14,165,233,0.15); }
+
     .bc-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -337,6 +359,41 @@
       <div class="game-title">Bulls and Cows</div>
       <div class="game-desc">Guess the secret word — get bulls for correct positions, cows for wrong ones.</div>
       <span class="game-badge badge-players">1–2 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="bs.html">
+      <div class="game-icon battleship">
+        <div class="bs-grid">
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell miss"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell ship"></div>
+          <div class="bs-cell ship"></div>
+          <div class="bs-cell ship"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell hit"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell miss"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell hit"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell ship"></div>
+          <div class="bs-cell ship"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+          <div class="bs-cell water"></div>
+        </div>
+      </div>
+      <div class="game-title">Battleship</div>
+      <div class="game-desc">Place your fleet and sink the enemy ships on a customizable grid.</div>
+      <span class="game-badge badge-players">2 Players · Online</span>
     </a>
 
     <a class="game-card" href="hm.html">
