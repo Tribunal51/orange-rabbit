@@ -353,7 +353,17 @@
       <div class="modeToggle" id="gameModeToggle">
         <button class="modeBtn selected" onclick="setGameMode('standard')">Standard (1)</button>
         <button class="modeBtn" onclick="setGameMode('salvo')">Salvo (N)</button>
+        <button class="modeBtn" onclick="setGameMode('rambo')">Rambo</button>
       </div>
+    </div>
+
+    <div id="ramboOptions" class="setupSection hidden">
+      <div class="setupLabel">Rambo Shots per Turn</div>
+      <div class="modeToggle" id="ramboShotToggle">
+        <button class="modeBtn" onclick="setRamboShots(3)">3 Shots</button>
+        <button class="modeBtn selected" onclick="setRamboShots(5)">5 Shots</button>
+      </div>
+      <p style="font-size:12px;opacity:0.5;margin-top:6px;">Shoot above average and your next turn is a cooldown with fewer shots.</p>
     </div>
 
     <div class="setupSection">
@@ -459,6 +469,7 @@
       <ul>
         <li><strong>Standard:</strong> Fire 1 shot per turn.</li>
         <li><strong>Salvo:</strong> Fire N shots per turn, where N = your number of surviving ships.</li>
+        <li><strong>Rambo:</strong> Choose between 3-shot or 5-shot games. Each turn you pick how many shots to fire (1 up to your current max). Shooting above the average triggers a cooldown — your next turn's max is reduced. For 5-shot games the average is 3; for 3-shot games the average is 2. Example (5-shot): fire 5 → next turn max 1; fire 4 → max 2; fire 3 → max 3.</li>
       </ul>
 
       <h3>Turn Styles</h3>
@@ -482,6 +493,8 @@
     let customShipSizes = [5, 4, 3, 3, 2, 2];
     let fleetMode = 'standard';
     let gameMode = 'standard';
+    let ramboMaxShots = 5;
+    let ramboCurrentMax = 5;
     let gameStyle = 'turnBased';
     let hostGoesFirst = true;
 
@@ -589,9 +602,16 @@
       return oppShips.filter(s => !oppSunkIds.has(s.id)).length;
     }
 
-    function requiredShots() {
+    function maxShotsThisTurn() {
       if (gameMode === 'standard') return 1;
-      return mySurvivingCount();
+      if (gameMode === 'salvo') return mySurvivingCount();
+      if (gameMode === 'rambo') return ramboCurrentMax;
+      return 1;
+    }
+
+    function minShotsThisTurn() {
+      if (gameMode === 'rambo') return 1;
+      return maxShotsThisTurn();
     }
 
     function allOppSunk() { return oppShips.length > 0 && oppSunkIds.size === oppShips.length; }
@@ -619,7 +639,19 @@
     function setGameMode(mode) {
       gameMode = mode;
       document.querySelectorAll('#gameModeToggle .modeBtn').forEach((b, i) => {
-        b.classList.toggle('selected', (i === 0 && mode === 'standard') || (i === 1 && mode === 'salvo'));
+        b.classList.toggle('selected',
+          (i === 0 && mode === 'standard') ||
+          (i === 1 && mode === 'salvo') ||
+          (i === 2 && mode === 'rambo'));
+      });
+      document.getElementById('ramboOptions').classList.toggle('hidden', mode !== 'rambo');
+    }
+
+    function setRamboShots(n) {
+      ramboMaxShots = n;
+      ramboCurrentMax = n;
+      document.querySelectorAll('#ramboShotToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && n === 3) || (i === 1 && n === 5));
       });
     }
 
@@ -793,7 +825,7 @@
         conn.on('open', () => {
           conn.send({
             type: 'setup',
-            gridSize, shipSizes, gameMode, gameStyle, hostGoesFirst
+            gridSize, shipSizes, gameMode, gameStyle, hostGoesFirst, ramboMaxShots
           });
           startPlacement();
         });
@@ -872,6 +904,8 @@
           gameMode = data.gameMode;
           gameStyle = data.gameStyle;
           hostGoesFirst = data.hostGoesFirst;
+          if (data.ramboMaxShots) ramboMaxShots = data.ramboMaxShots;
+          ramboCurrentMax = ramboMaxShots;
           startPlacement();
           break;
 
@@ -923,9 +957,9 @@
 
       showScreen('placementScreen');
 
+      const modeLabel = gameMode === 'salvo' ? 'Salvo' : gameMode === 'rambo' ? 'Rambo (' + ramboMaxShots + ')' : 'Standard';
       const info = gridSize + '×' + gridSize + ' · ' + shipSizes.length + ' ships · ' +
-        (gameMode === 'salvo' ? 'Salvo' : 'Standard') + ' · ' +
-        (gameStyle === 'realTime' ? 'Real-time' : 'Turn-based');
+        modeLabel + ' · ' + (gameStyle === 'realTime' ? 'Real-time' : 'Turn-based');
       document.getElementById('placementSub').textContent = info;
 
       document.getElementById('readyBtn').disabled = true;
@@ -1196,6 +1230,7 @@
       gamePhase = 'playing';
       turnNumber = 1;
       logEntries = [];
+      ramboCurrentMax = ramboMaxShots;
 
       if (gameStyle === 'turnBased') {
         if (isHost) {
@@ -1288,7 +1323,7 @@
       if (!canFire()) return;
       if (myShots[r][c] !== '') return;
 
-      const maxShots = requiredShots();
+      const maxShots = maxShotsThisTurn();
       const existingIdx = selectedCells.findIndex(s => s.r === r && s.c === c);
 
       if (existingIdx >= 0) {
@@ -1316,17 +1351,19 @@
         return;
       }
 
+      const ramboNote = gameMode === 'rambo' ? ' (max ' + ramboCurrentMax + ' shot' + (ramboCurrentMax !== 1 ? 's' : '') + ')' : '';
+
       if (gameStyle === 'realTime') {
         if (myLocked) {
           el.textContent = 'Locked in — waiting for opponent...';
           el.className = 'game-status waiting';
         } else {
-          el.textContent = 'Turn ' + turnNumber + ' — Select your target' + (gameMode === 'salvo' ? 's' : '') + ' and lock in';
+          el.textContent = 'Turn ' + turnNumber + ' — Select your target' + (gameMode !== 'standard' ? 's' : '') + ' and lock in' + ramboNote;
           el.className = 'game-status your-turn';
         }
       } else {
         if (myTurn) {
-          el.textContent = 'Turn ' + turnNumber + ' — Your turn';
+          el.textContent = 'Turn ' + turnNumber + ' — Your turn' + ramboNote;
           el.className = 'game-status your-turn';
         } else {
           el.textContent = 'Turn ' + turnNumber + ' — Opponent\'s turn...';
@@ -1338,7 +1375,8 @@
     function updateGameControls() {
       const info = document.getElementById('shotInfo');
       const btn = document.getElementById('fireBtn');
-      const maxShots = requiredShots();
+      const maxShots = maxShotsThisTurn();
+      const minShots = minShotsThisTurn();
 
       if (gamePhase !== 'playing' || !canFire()) {
         info.textContent = '';
@@ -1346,13 +1384,15 @@
         return;
       }
 
-      if (gameMode === 'salvo') {
+      if (gameMode === 'rambo') {
+        info.textContent = selectedCells.length + ' / ' + maxShots + ' shots selected (choose ' + minShots + '–' + maxShots + ')';
+      } else if (gameMode === 'salvo') {
         info.textContent = selectedCells.length + ' / ' + maxShots + ' shots selected';
       } else {
         info.textContent = selectedCells.length === 1 ? 'Target: ' + cellName(selectedCells[0].r, selectedCells[0].c) : 'Select a target';
       }
 
-      const ready = selectedCells.length === maxShots;
+      const ready = selectedCells.length >= minShots && selectedCells.length <= maxShots;
       btn.classList.toggle('hidden', !ready);
       btn.disabled = !ready;
       btn.textContent = gameStyle === 'realTime' ? 'Lock In' : 'Fire!';
@@ -1398,10 +1438,16 @@
 
     function handleFire() {
       if (!canFire()) return;
-      if (selectedCells.length !== requiredShots()) return;
+      const max = maxShotsThisTurn();
+      const min = minShotsThisTurn();
+      if (selectedCells.length < min || selectedCells.length > max) return;
 
       const shots = selectedCells.slice();
       selectedCells = [];
+
+      if (gameMode === 'rambo') {
+        ramboCurrentMax = Math.max(1, (ramboMaxShots + 1) - shots.length);
+      }
 
       if (gameStyle === 'realTime') {
         myLocked = true;

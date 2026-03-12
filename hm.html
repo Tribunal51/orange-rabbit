@@ -454,7 +454,7 @@
       <h2>How to Play</h2>
 
       <h3>Objective</h3>
-      <p>Guess the hidden word one letter at a time (or guess the full word in solo/competitive) before the hangman is complete. You have 6 wrong guesses.</p>
+      <p>Guess the hidden word one letter at a time (or guess the full word in solo/competitive) before the hangman is complete. You have 10 wrong guesses.</p>
 
       <h3>1 Player — Single Round</h3>
       <p>Guess the word before the hangman is drawn. No scoring — just win or lose.</p>
@@ -463,16 +463,19 @@
       <ul>
         <li>Correct letter: <strong>+1</strong></li>
         <li>Correct word guess: <strong>+N + (N−1)</strong> where N = unrevealed letters (e.g. 3 left → 5 pts)</li>
-        <li>Word complete: <strong>+lives remaining</strong> (6 − wrong guesses)</li>
+        <li>Word complete: <strong>+lives remaining</strong> (10 − wrong guesses)</li>
         <li>Hangman complete: <strong>−(N + A)</strong> (N = word length, A = unguessed letters)</li>
         <li>Goal: finish with a <strong>positive score</strong>.</li>
       </ul>
 
       <h3>2 Players — Competitive</h3>
       <ul>
+        <li>Same scoring as Co-op, but you play independently — you can't see your opponent's guesses, only their score.</li>
         <li>Choose how many custom words to submit; remaining rounds use random words.</li>
-        <li>Points per word: <strong>(6 − wrong guesses) × 10</strong> if solved, <strong>0</strong> if hangman. Guessing the word directly also earns <strong>+N + (N−1)</strong> bonus (N = unrevealed letters).</li>
-        <li>You can see the opponent's progress in real time.</li>
+        <li>Correct letter: <strong>+1</strong></li>
+        <li>Correct word guess: <strong>+N + (N−1)</strong> where N = unrevealed letters.</li>
+        <li>Word complete: <strong>+lives remaining</strong> (10 − wrong guesses).</li>
+        <li>Hangman: <strong>−(N + A)</strong> (N = word length, A = unguessed).</li>
       </ul>
 
       <h3>2 Players — Co-op</h3>
@@ -480,7 +483,7 @@
         <li>Letters only — no word guessing, to keep it fair.</li>
         <li>Each turn, both players simultaneously guess a letter.</li>
         <li>Correct letter: <strong>+1</strong> for the guesser.</li>
-        <li>Same wrong letter = only <strong>1 body part</strong> added.</li>
+        <li>Same wrong letter = only <strong>1 part</strong> added.</li>
         <li>Word complete: <strong>+lives remaining</strong> each.</li>
         <li>Hangman: <strong>−(N + A)</strong> each (N = word length, A = unguessed).</li>
       </ul>
@@ -492,8 +495,7 @@
   <script>
     /* ═══════════════════ CONSTANTS ═══════════════════ */
 
-    const MAX_WRONG = 6;
-    const COMP_SCORE_PER_LIFE = 10;
+    const MAX_WRONG = 10;
     const KB_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 
     /* ═══════════════════ STATE ═══════════════════ */
@@ -585,16 +587,16 @@
 
     function hangmanSVG(size) {
       return `<svg viewBox="0 0 200 240" width="${size}" style="display:block;margin:0 auto">
-        <line x1="20" y1="220" x2="100" y2="220" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
-        <line x1="60" y1="220" x2="60" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
-        <line x1="57" y1="20" x2="140" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
-        <line x1="140" y1="20" x2="140" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="140" cy="68" r="18" fill="none" stroke="#e74c3c" stroke-width="3" data-part="0" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="86" x2="140" y2="145" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="1" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="102" x2="115" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="2" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="102" x2="165" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="3" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="145" x2="115" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="4" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="145" x2="165" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="5" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="20" y1="220" x2="100" y2="220" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="0" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="60" y1="220" x2="60" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="1" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="57" y1="20" x2="140" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="2" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="20" x2="140" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="3" style="opacity:0;transition:opacity 0.3s"/>
+        <circle cx="140" cy="68" r="18" fill="none" stroke="#e74c3c" stroke-width="3" data-part="4" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="86" x2="140" y2="145" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="5" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="102" x2="115" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="6" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="102" x2="165" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="7" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="145" x2="115" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="8" style="opacity:0;transition:opacity 0.3s"/>
+        <line x1="140" y1="145" x2="165" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="9" style="opacity:0;transition:opacity 0.3s"/>
       </svg>`;
     }
 
@@ -1246,6 +1248,7 @@
 
       if (compCurrentWord.includes(letter)) {
         compRevealed.add(letter);
+        compMyScore += 1;
       } else {
         compWrong.add(letter);
         compWrongCount++;
@@ -1305,8 +1308,17 @@
       document.getElementById('compMyWgBtn').disabled = true;
       document.getElementById('compMyWgWrap').classList.add('hidden');
 
-      let roundScore = solved ? (MAX_WRONG - compWrongCount) * COMP_SCORE_PER_LIFE : 0;
-      compMyScore += roundScore;
+      let changeText;
+      if (solved) {
+        const livesLeft = MAX_WRONG - compWrongCount;
+        compMyScore += livesLeft;
+        changeText = '+' + livesLeft + ' completion bonus';
+      } else {
+        const unguessed = new Set(compCurrentWord.split('').filter(c => !compRevealed.has(c))).size;
+        const penalty = compCurrentWord.length + unguessed;
+        compMyScore -= penalty;
+        changeText = '−' + penalty + ' penalty';
+      }
       document.getElementById('compMyScoreVal').textContent = compMyScore;
       sendCompUpdate();
 
@@ -1315,7 +1327,7 @@
         endDiv.innerHTML = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
           '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
           '<p class="re-word">' + compCurrentWord + '</p>' +
-          '<p class="re-score">+' + roundScore + ' points</p>' +
+          '<p>' + changeText + ' · Total: ' + compMyScore + '</p>' +
           '<button class="actionBtn primary" onclick="compNextRound()">Next Word →</button></div>';
       } else {
         compAllDone = true;
@@ -1324,7 +1336,7 @@
         endDiv.innerHTML = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
           '<h3>' + (solved ? 'You got it!' : 'Hangman!') + '</h3>' +
           '<p class="re-word">' + compCurrentWord + '</p>' +
-          '<p class="re-score">+' + roundScore + ' points</p></div>';
+          '<p>' + changeText + ' · Total: ' + compMyScore + '</p></div>';
         document.getElementById('compWaiting').classList.remove('hidden');
       }
       endDiv.classList.remove('hidden');

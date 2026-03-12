@@ -518,6 +518,72 @@
     .rulesCloseBtn:hover {
       background: rgba(255, 255, 255, 0.35);
     }
+
+    /* ── dice variant ── */
+
+    #diceArea {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 14px;
+      min-height: 70px;
+    }
+
+    .dice {
+      width: 56px;
+      height: 56px;
+      background: white;
+      border-radius: 10px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      padding: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .dice.rolling {
+      animation: diceRoll 0.5s ease-out;
+    }
+
+    @keyframes diceRoll {
+      0% { transform: rotate(0deg) scale(0.8); }
+      25% { transform: rotate(90deg) scale(1.1); }
+      50% { transform: rotate(180deg) scale(0.9); }
+      75% { transform: rotate(270deg) scale(1.05); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+
+    .dice-dot {
+      width: 10px;
+      height: 10px;
+      background: #1a0533;
+      border-radius: 50%;
+      align-self: center;
+      justify-self: center;
+    }
+
+    .rollBtn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #a044ff, #6a3093);
+      color: white;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .rollBtn:hover {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+    }
+
+    .moves-remaining {
+      font-size: 15px;
+      color: #d0a0ff;
+    }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
@@ -535,6 +601,14 @@
       <div id="playerModeToggle" class="modeToggle">
         <button class="modeBtn selected" onclick="setPlayerMode('local')">2 Players Local</button>
         <button class="modeBtn" onclick="setPlayerMode('online')">2 Players Online</button>
+      </div>
+    </div>
+
+    <div id="variantSection" class="setupSection">
+      <div class="setupLabel">Game Variant</div>
+      <div id="variantToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGameVariant('classic')">Classic</button>
+        <button class="modeBtn" onclick="setGameVariant('dice')">Dice and Boxes</button>
       </div>
     </div>
 
@@ -582,8 +656,9 @@
 
   <!-- ═══════ GAME ═══════ -->
   <div id="gameScreen" class="hidden">
-    <h1>Dots and Boxes</h1>
+    <h1 id="gameTitle">Dots and Boxes</h1>
     <div id="turnIndicator"></div>
+    <div id="diceArea" class="hidden"></div>
     <div class="scoreboard" id="scoreboard"></div>
     <div id="boardContainer">
       <div id="board"></div>
@@ -602,19 +677,22 @@
       <h2>How to Play</h2>
 
       <h3>Setup</h3>
-      <p>A grid of boxes is created (from 3×3 up to 9×9). Two players take turns.</p>
+      <p>A grid of boxes is created (from 3×3 up to 9×9). Two players take turns. Choose between <strong>Classic</strong> or <strong>Dice and Boxes</strong> mode.</p>
 
-      <h3>Taking Turns</h3>
+      <h3>Classic Mode</h3>
       <ul>
         <li>On your turn, click any available line between two adjacent dots to draw it.</li>
-        <li>Lines can be horizontal or vertical.</li>
+        <li>If your line completes the 4th side of a box, you <strong>claim</strong> that box and <strong>take another turn</strong>.</li>
+        <li>If no box is completed, the turn passes to the other player.</li>
       </ul>
 
-      <h3>Claiming Boxes</h3>
+      <h3>Dice and Boxes Mode</h3>
       <ul>
-        <li>If your line completes the 4th side of a box, you <strong>claim</strong> that box — it gets marked with your initial.</li>
-        <li>You can claim multiple boxes with a single line if it completes more than one.</li>
-        <li>After claiming a box, you <strong>must take another turn</strong> immediately.</li>
+        <li>At the start of your turn, <strong>roll a dice</strong> (1–6).</li>
+        <li>You can draw that many lines in a row.</li>
+        <li>Completing a box does <strong>not</strong> grant an extra line — only the dice roll determines how many lines you play.</li>
+        <li>If you roll <strong>more than the number of available lines</strong>, your turn is <strong>forfeit</strong> and passes to the other player.</li>
+        <li>After all your moves are used, the turn passes to the other player who then rolls.</li>
       </ul>
 
       <h3>Winning</h3>
@@ -641,6 +719,13 @@
     let hLines = [];
     let vLines = [];
     let boxes = [];
+
+    /* ── dice variant ── */
+    let gameVariant = 'classic';
+    let diceValue = 0;
+    let movesRemaining = 0;
+    let needsRoll = false;
+    let diceForfeit = false;
 
     /* ── player mode ── */
     let playerMode = 'local';
@@ -673,6 +758,13 @@
       hostTurnOrder = order;
       document.querySelectorAll('#turnOrderToggle .modeBtn').forEach((b, i) => {
         b.classList.toggle('selected', (i === 0 && order === 1) || (i === 1 && order === 2));
+      });
+    }
+
+    function setGameVariant(variant) {
+      gameVariant = variant;
+      document.querySelectorAll('#variantToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && variant === 'classic') || (i === 1 && variant === 'dice'));
       });
     }
 
@@ -716,6 +808,16 @@
       totalBoxes = (n - 1) * (n - 1);
       gameOver = false;
 
+      if (gameVariant === 'dice') {
+        needsRoll = true;
+        diceValue = 0;
+        movesRemaining = 0;
+        diceForfeit = false;
+      } else {
+        needsRoll = false;
+        diceForfeit = false;
+      }
+
       hLines = [];
       for (let r = 0; r < n; r++) {
         hLines[r] = [];
@@ -734,10 +836,13 @@
         for (let c = 0; c < n - 1; c++) boxes[r][c] = 0;
       }
 
+      document.getElementById('gameTitle').textContent =
+        gameVariant === 'dice' ? 'Dice and Boxes' : 'Dots and Boxes';
       document.getElementById('gameOverBanner').classList.add('hidden');
       renderBoard();
       renderScoreboard();
       renderTurn();
+      renderDiceArea();
     }
 
     /* ═══════════════════ rendering ═══════════════════ */
@@ -765,6 +870,7 @@
       board.innerHTML = '';
 
       const isMyTurn = !onlineMode || currentPlayer === myPlayerNum;
+      const canPlay = isMyTurn && !(gameVariant === 'dice' && (needsRoll || diceForfeit));
 
       for (let gr = 0; gr < gridRows; gr++) {
         for (let gc = 0; gc < gridCols; gc++) {
@@ -783,7 +889,7 @@
             const bar = document.createElement('div');
             const v = hLines[r][c];
             bar.className = 'hline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver && isMyTurn) {
+            if (v === 0 && !gameOver && canPlay) {
               cell.onclick = () => drawLine('h', r, c);
             } else {
               cell.style.cursor = 'default';
@@ -798,7 +904,7 @@
             const bar = document.createElement('div');
             const v = vLines[r][c];
             bar.className = 'vline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver && isMyTurn) {
+            if (v === 0 && !gameOver && canPlay) {
               cell.onclick = () => drawLine('v', r, c);
             } else {
               cell.style.cursor = 'default';
@@ -867,9 +973,20 @@
       return count;
     }
 
+    function countAvailableLines() {
+      let count = 0;
+      for (let r = 0; r < hLines.length; r++)
+        for (let c = 0; c < hLines[r].length; c++)
+          if (hLines[r][c] === 0) count++;
+      for (let r = 0; r < vLines.length; r++)
+        for (let c = 0; c < vLines[r].length; c++)
+          if (vLines[r][c] === 0) count++;
+      return count;
+    }
+
     function drawLine(type, r, c, isRemote) {
       if (gameOver) return;
-
+      if (gameVariant === 'dice' && needsRoll && !isRemote) return;
       if (onlineMode && !isRemote && currentPlayer !== myPlayerNum) return;
 
       if (type === 'h') {
@@ -923,17 +1040,28 @@
         renderBoard();
         renderScoreboard();
         renderTurn();
+        renderDiceArea();
         showGameOver();
         return;
       }
 
-      if (claimed === 0) {
-        currentPlayer = currentPlayer === 1 ? 2 : 1;
+      if (gameVariant === 'dice') {
+        movesRemaining--;
+        if (movesRemaining <= 0) {
+          currentPlayer = currentPlayer === 1 ? 2 : 1;
+          needsRoll = true;
+          movesRemaining = 0;
+        }
+      } else {
+        if (claimed === 0) {
+          currentPlayer = currentPlayer === 1 ? 2 : 1;
+        }
       }
 
       renderBoard();
       renderScoreboard();
       renderTurn();
+      renderDiceArea();
     }
 
     function showGameOver() {
@@ -951,6 +1079,113 @@
         detail = scores[1] + ' – ' + scores[2];
       }
       banner.innerHTML = '<h2>' + verdict + '</h2><p>' + detail + '</p>';
+    }
+
+    /* ═══════════════════ dice variant ═══════════════════ */
+
+    function renderDiceFace(value) {
+      const layouts = {
+        1: [0,0,0, 0,1,0, 0,0,0],
+        2: [0,0,1, 0,0,0, 1,0,0],
+        3: [0,0,1, 0,1,0, 1,0,0],
+        4: [1,0,1, 0,0,0, 1,0,1],
+        5: [1,0,1, 0,1,0, 1,0,1],
+        6: [1,0,1, 1,0,1, 1,0,1]
+      };
+      const pips = layouts[value] || layouts[1];
+      let html = '';
+      for (let i = 0; i < 9; i++) {
+        html += pips[i] ? '<div class="dice-dot"></div>' : '<div></div>';
+      }
+      return html;
+    }
+
+    function renderDiceArea() {
+      const area = document.getElementById('diceArea');
+      if (gameVariant !== 'dice' || gameOver) {
+        area.classList.add('hidden');
+        return;
+      }
+      area.classList.remove('hidden');
+      const isMyTurn = !onlineMode || currentPlayer === myPlayerNum;
+
+      if (diceForfeit) {
+        const available = countAvailableLines();
+        const who = onlineMode ? (isMyTurn ? 'You' : 'Opponent') : (currentPlayer === 1 ? p1.name : p2.name);
+        area.innerHTML =
+          '<div class="dice" id="diceEl">' + renderDiceFace(diceValue) + '</div>' +
+          '<span class="moves-remaining" style="color:#ff6ec7">Rolled ' + diceValue +
+          ' but only ' + available + ' line' + (available !== 1 ? 's' : '') +
+          ' left — turn forfeit!</span>';
+      } else if (needsRoll) {
+        if (isMyTurn) {
+          area.innerHTML =
+            '<div class="dice" id="diceEl">' + renderDiceFace(diceValue || 1) + '</div>' +
+            '<button class="rollBtn" onclick="rollDice()">Roll Dice</button>';
+        } else {
+          area.innerHTML =
+            '<div class="dice" id="diceEl">' + renderDiceFace(diceValue || 1) + '</div>' +
+            '<span class="moves-remaining" style="opacity:0.6">Waiting for opponent to roll…</span>';
+        }
+      } else {
+        area.innerHTML =
+          '<div class="dice" id="diceEl">' + renderDiceFace(diceValue) + '</div>' +
+          '<span class="moves-remaining">' + movesRemaining + ' move' + (movesRemaining !== 1 ? 's' : '') + ' remaining</span>';
+      }
+    }
+
+    function rollDice() {
+      if (!needsRoll || gameOver) return;
+      if (onlineMode && currentPlayer !== myPlayerNum) return;
+
+      const el = document.getElementById('diceEl');
+      el.classList.add('rolling');
+
+      let rolls = 0;
+      const interval = setInterval(() => {
+        el.innerHTML = renderDiceFace(Math.floor(Math.random() * 6) + 1);
+        rolls++;
+        if (rolls >= 8) {
+          clearInterval(interval);
+          diceValue = Math.floor(Math.random() * 6) + 1;
+          el.innerHTML = renderDiceFace(diceValue);
+          el.classList.remove('rolling');
+
+          if (onlineMode && conn) {
+            conn.send({ type: 'diceRoll', value: diceValue });
+          }
+
+          applyDiceRoll(diceValue);
+        }
+      }, 60);
+    }
+
+    function applyDiceRoll(value) {
+      const available = countAvailableLines();
+      if (value > available) {
+        diceForfeit = true;
+        needsRoll = false;
+        movesRemaining = 0;
+        renderDiceArea();
+        renderBoard();
+        renderTurn();
+        setTimeout(() => {
+          diceForfeit = false;
+          currentPlayer = currentPlayer === 1 ? 2 : 1;
+          needsRoll = true;
+          renderDiceArea();
+          renderBoard();
+          renderScoreboard();
+          renderTurn();
+        }, 1800);
+      } else {
+        movesRemaining = value;
+        needsRoll = false;
+        diceForfeit = false;
+        renderDiceArea();
+        renderBoard();
+        renderTurn();
+      }
     }
 
     /* ═══════════════════ online ═══════════════════ */
@@ -1017,7 +1252,8 @@
           conn.send({
             type: 'setup',
             guestPlayerNum: guestNum,
-            gridSize: gridSize
+            gridSize: gridSize,
+            variant: gameVariant
           });
 
           onlineMode = true;
@@ -1089,6 +1325,7 @@
       if (data.type === 'setup') {
         myPlayerNum = data.guestPlayerNum;
         gridSize = data.gridSize;
+        gameVariant = data.variant || 'classic';
         onlineMode = true;
 
         p1.name = myPlayerNum === 1 ? 'You' : 'Opponent';
@@ -1101,6 +1338,9 @@
         initBoard();
       } else if (data.type === 'move') {
         drawLine(data.lineType, data.r, data.c, true);
+      } else if (data.type === 'diceRoll') {
+        diceValue = data.value;
+        applyDiceRoll(data.value);
       } else if (data.type === 'rematch') {
         doRematch(data.gridSize);
       }
@@ -1125,7 +1365,7 @@
       }
 
       if (onlineMode && conn) {
-        conn.send({ type: 'rematch', gridSize: gridSize });
+        conn.send({ type: 'rematch', gridSize: gridSize, variant: gameVariant });
       }
       doRematch(gridSize);
     }

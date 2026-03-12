@@ -492,9 +492,44 @@
 
     .rulesCloseBtn:hover { background: rgba(255,255,255,0.35); }
 
+    /* ── coop scores ── */
+    .coop-scores {
+      display: flex; justify-content: center; gap: 24px;
+      margin: 8px 0 12px; font-size: 14px;
+    }
+    .coop-scores span { padding: 4px 14px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+    .coop-scores .score-num { font-weight: bold; color: #81c784; }
+
+    /* ── coop status ── */
+    .coop-status { text-align: center; font-size: 14px; margin: 8px 0; min-height: 22px; }
+    .coop-status.waiting { color: #ffb74d; }
+
+    /* ── coop turn table ── */
+    .coop-turn-table { width: 100%; border-collapse: collapse; }
+    .coop-turn-table th { font-size: 11px; text-transform: uppercase; opacity: 0.5; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .coop-turn-table td { padding: 6px 4px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: center; }
+    .coop-turn-table .guess-word { font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+    .coop-turn-table .divider { width: 1px; background: rgba(255,255,255,0.1); padding: 0; }
+
+    /* ── round end card ── */
+    .round-end-card {
+      background: rgba(0,0,0,0.3); border-radius: 14px;
+      padding: 20px 24px; text-align: center; margin: 16px auto; max-width: 400px;
+    }
+    .round-end-card h3 { margin: 0 0 6px; font-size: 18px; }
+    .round-end-card p { margin: 4px 0; font-size: 14px; opacity: 0.8; }
+    .round-end-card.success h3 { color: #81c784; }
+
+    .actionBtn.primary {
+      background: linear-gradient(135deg, #52b788, #40916c);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
     @media (max-width: 600px) {
       .panels-wrap { flex-direction: column; }
       .game-area { width: 100%; }
+      .coop-turn-table { font-size: 12px; }
+      .coop-turn-table .guess-word { letter-spacing: 1px; }
     }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -518,11 +553,27 @@
       </div>
     </div>
 
+    <div id="subModeSection" class="setupSection hidden">
+      <div class="setupLabel">Mode</div>
+      <div id="subModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setSubMode('competitive')">Competitive</button>
+        <button class="modeBtn" onclick="setSubMode('coop')">Co-op</button>
+      </div>
+    </div>
+
     <div class="setupSection">
       <div class="setupLabel">Word Length</div>
       <div class="slider-wrap">
         <input type="range" id="lengthSlider" min="4" max="7" value="5" oninput="updateLengthDisplay()">
         <span class="size-display" id="lengthDisplay">5</span>
+      </div>
+    </div>
+
+    <div id="coopRoundsSection" class="setupSection hidden">
+      <div class="setupLabel">Rounds</div>
+      <div class="slider-wrap">
+        <input type="range" id="coopRoundsSlider" min="1" max="5" value="1" oninput="updateCoopRoundsDisplay()">
+        <span class="size-display" id="coopRoundsDisplay">1</span>
       </div>
     </div>
 
@@ -616,6 +667,50 @@
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
 
+  <!-- ═══════ COOP ═══════ -->
+  <div id="coopScreen" class="hidden">
+    <h1>Bulls and Cows</h1>
+    <p class="round-indicator" id="coopRoundLabel"></p>
+    <div class="coop-scores hidden" id="coopScoresArea">
+      <span>You: <span class="score-num" id="coopMyScoreVal">0</span></span>
+      <span>Partner: <span class="score-num" id="coopPartnerScoreVal">0</span></span>
+    </div>
+    <div class="game-area">
+      <div class="word-slots" id="coopSlots"></div>
+      <div class="guess-input-wrap" id="coopInputWrap">
+        <input class="guess-input" id="coopInput" maxlength="5" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="guess-btn" id="coopGuessBtn" onclick="submitCoopGuess()">Guess</button>
+      </div>
+      <div class="guess-error" id="coopError"></div>
+      <div class="coop-status" id="coopStatus">Submit your guess</div>
+    </div>
+    <div class="history-section" style="max-width:700px;width:100%;margin:12px auto;">
+      <table class="history-table coop-turn-table" id="coopTurnTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th colspan="3">You</th>
+            <th class="divider"></th>
+            <th colspan="3">Partner</th>
+          </tr>
+          <tr>
+            <th></th>
+            <th>Word</th><th>B</th><th>C</th>
+            <th class="divider"></th>
+            <th>Word</th><th>B</th><th>C</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="coopRoundEnd" class="hidden"></div>
+    <div id="coopResult" class="hidden"></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:16px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
   <!-- ═══════ RULES ═══════ -->
   <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
     <div class="rulesCard">
@@ -634,10 +729,19 @@
       <h3>1 Player</h3>
       <p>The game picks a random word. Keep guessing until you find it.</p>
 
-      <h3>2 Players Online</h3>
+      <h3>2 Players — Competitive</h3>
       <ul>
         <li><strong>1 Round:</strong> Both players guess the same randomly chosen word. Fewer guesses wins.</li>
         <li><strong>2 Rounds:</strong> Round 1 is a common word. In Round 2, each player sets a word for the other to guess. Total guesses across both rounds determines the winner.</li>
+      </ul>
+
+      <h3>2 Players — Co-op</h3>
+      <ul>
+        <li>Both players guess the same secret word each turn simultaneously.</li>
+        <li>After both submit, you see each other's guess and the bulls/cows for each.</li>
+        <li>The round ends when at least one player guesses correctly.</li>
+        <li><strong>1 Round:</strong> Whoever solves it first wins.</li>
+        <li><strong>Multi-round:</strong> +1 point per round you solve. Most points wins.</li>
       </ul>
 
       <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
@@ -676,6 +780,7 @@
 
     let wordLength = 5;
     let playerMode = 'solo';
+    let subMode = 'competitive';
     let totalRounds = 1;
 
     let targetWord = '';
@@ -699,6 +804,20 @@
     let r2OppSolved = false;
     let waitingForWords = false;
 
+    // Coop
+    let coopRounds = 1;
+    let coopWords = [];
+    let coopRoundIdx = 0;
+    let coopCurrentWord = '';
+    let coopMyGuess = null;
+    let coopPartnerGuess = null;
+    let coopMyScore = 0;
+    let coopPartnerScore = 0;
+    let coopRoundOver = false;
+    let coopAllDone = false;
+    let coopInputLocked = false;
+    let coopTurnHistory = [];
+
     /* ═══════════════════ setup UI ═══════════════════ */
 
     function updateLengthDisplay() {
@@ -711,7 +830,27 @@
       document.querySelectorAll('#playerModeToggle .modeBtn').forEach((b, i) => {
         b.classList.toggle('selected', (i === 0 && mode === 'solo') || (i === 1 && mode === 'online'));
       });
-      document.getElementById('roundsSection').classList.toggle('hidden', mode !== 'online');
+      document.getElementById('subModeSection').classList.toggle('hidden', mode !== 'online');
+      updateOnlineSections();
+    }
+
+    function setSubMode(mode) {
+      subMode = mode;
+      document.querySelectorAll('#subModeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'competitive') || (i === 1 && mode === 'coop'));
+      });
+      updateOnlineSections();
+    }
+
+    function updateOnlineSections() {
+      const isOnline = playerMode === 'online';
+      const isCoop = subMode === 'coop';
+      document.getElementById('roundsSection').classList.toggle('hidden', !isOnline || isCoop);
+      document.getElementById('coopRoundsSection').classList.toggle('hidden', !isOnline || !isCoop);
+    }
+
+    function updateCoopRoundsDisplay() {
+      document.getElementById('coopRoundsDisplay').textContent = document.getElementById('coopRoundsSlider').value;
     }
 
     function setRounds(n) {
@@ -728,6 +867,9 @@
       if (playerMode === 'solo') {
         startSoloGame();
       } else {
+        if (subMode === 'coop') {
+          coopRounds = parseInt(document.getElementById('coopRoundsSlider').value);
+        }
         createRoom();
       }
     }
@@ -883,18 +1025,33 @@
       peer.on('connection', connection => {
         conn = connection;
         conn.on('open', () => {
-          targetWord = pickWord(wordLength);
-          conn.send({
-            type: 'setup',
-            wordLength: wordLength,
-            totalRounds: totalRounds,
-            targetWord: targetWord
-          });
-          onlineMode = true;
-          startOnlineRound();
+          if (subMode === 'coop') {
+            coopWords = [];
+            for (let i = 0; i < coopRounds; i++) coopWords.push(pickWord(wordLength));
+            conn.send({
+              type: 'setup',
+              mode: 'coop',
+              wordLength: wordLength,
+              rounds: coopRounds,
+              words: coopWords
+            });
+            onlineMode = true;
+            startCoopGame();
+          } else {
+            targetWord = pickWord(wordLength);
+            conn.send({
+              type: 'setup',
+              mode: 'competitive',
+              wordLength: wordLength,
+              totalRounds: totalRounds,
+              targetWord: targetWord
+            });
+            onlineMode = true;
+            startOnlineRound();
+          }
         });
         conn.on('data', handleOnlineData);
-        conn.on('close', () => { if (!solved || !oppSolved) alert('Opponent disconnected.'); });
+        conn.on('close', () => { if (!solved && !oppSolved && !coopAllDone) alert('Opponent disconnected.'); });
       });
 
       peer.on('error', err => {
@@ -931,7 +1088,7 @@
           document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
         });
         conn.on('data', handleOnlineData);
-        conn.on('close', () => { if (!solved || !oppSolved) alert('Host disconnected.'); });
+        conn.on('close', () => { if (!solved && !oppSolved && !coopAllDone) alert('Host disconnected.'); });
       });
 
       peer.on('error', () => {
@@ -1110,10 +1267,24 @@
     function handleOnlineData(data) {
       if (data.type === 'setup') {
         wordLength = data.wordLength;
-        totalRounds = data.totalRounds;
-        targetWord = data.targetWord;
-        onlineMode = true;
-        startOnlineRound();
+        if (data.mode === 'coop') {
+          subMode = 'coop';
+          coopRounds = data.rounds;
+          coopWords = data.words;
+          onlineMode = true;
+          startCoopGame();
+        } else {
+          subMode = 'competitive';
+          totalRounds = data.totalRounds;
+          targetWord = data.targetWord;
+          onlineMode = true;
+          startOnlineRound();
+        }
+      } else if (data.type === 'coopGuess') {
+        if (data.round === coopRoundIdx && !coopRoundOver) {
+          coopPartnerGuess = data.word;
+          tryProcessCoopTurn();
+        }
       } else if (data.type === 'guess') {
         oppGuesses.push({ word: data.word, bulls: data.bulls, cows: data.cows, solved: data.solved });
         if (data.solved) {
@@ -1295,6 +1466,216 @@
       document.getElementById('onlineResult').classList.remove('hidden');
     }
 
+    /* ═══════════════════ COOP ═══════════════════ */
+
+    function startCoopGame() {
+      coopRoundIdx = 0;
+      coopMyScore = 0;
+      coopPartnerScore = 0;
+      coopAllDone = false;
+
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('onlineScreen').classList.add('hidden');
+      document.getElementById('coopScreen').classList.remove('hidden');
+      document.getElementById('coopResult').classList.add('hidden');
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+      document.getElementById('coopScoresArea').classList.toggle('hidden', coopRounds <= 1);
+
+      initCoopRound();
+    }
+
+    function initCoopRound() {
+      coopCurrentWord = coopWords[coopRoundIdx];
+      coopMyGuess = null;
+      coopPartnerGuess = null;
+      coopRoundOver = false;
+      coopInputLocked = false;
+      coopTurnHistory = [];
+
+      const label = coopRounds > 1
+        ? 'Round ' + (coopRoundIdx + 1) + ' of ' + coopRounds + ' · ' + wordLength + '-letter word'
+        : wordLength + '-letter word';
+      document.getElementById('coopRoundLabel').textContent = label;
+      document.getElementById('coopMyScoreVal').textContent = coopMyScore;
+      document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
+
+      const inp = document.getElementById('coopInput');
+      inp.maxLength = wordLength;
+      inp.value = '';
+      inp.disabled = false;
+      document.getElementById('coopGuessBtn').disabled = false;
+      document.getElementById('coopInputWrap').classList.remove('hidden');
+      document.getElementById('coopError').textContent = '';
+      document.getElementById('coopStatus').textContent = 'Submit your guess';
+      document.getElementById('coopStatus').className = 'coop-status';
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+
+      renderCoopSlots('');
+      document.getElementById('coopTurnTable').querySelector('tbody').innerHTML = '';
+      inp.focus();
+    }
+
+    function renderCoopSlots(word) {
+      const container = document.getElementById('coopSlots');
+      container.innerHTML = '';
+      for (let i = 0; i < wordLength; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'word-slot' + (word[i] ? ' filled' : '') + (i === word.length && !coopRoundOver ? ' active' : '');
+        slot.textContent = word[i] || '';
+        container.appendChild(slot);
+      }
+    }
+
+    function submitCoopGuess() {
+      if (coopInputLocked || coopRoundOver) return;
+
+      const inp = document.getElementById('coopInput');
+      const word = inp.value.trim().toUpperCase();
+      const err = document.getElementById('coopError');
+
+      if (word.length !== wordLength) { err.textContent = 'Enter a ' + wordLength + '-letter word'; return; }
+      if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
+      if (!isValidWord(word)) { err.textContent = 'Not a valid English word'; inp.focus(); return; }
+      err.textContent = '';
+
+      coopMyGuess = word;
+      coopInputLocked = true;
+      inp.disabled = true;
+      document.getElementById('coopGuessBtn').disabled = true;
+
+      conn.send({ type: 'coopGuess', round: coopRoundIdx, word: word });
+      document.getElementById('coopStatus').textContent = 'Waiting for partner...';
+      document.getElementById('coopStatus').className = 'coop-status waiting';
+      tryProcessCoopTurn();
+    }
+
+    function tryProcessCoopTurn() {
+      if (coopMyGuess === null || coopPartnerGuess === null) return;
+
+      const myWord = coopMyGuess;
+      const partnerWord = coopPartnerGuess;
+      coopMyGuess = null;
+      coopPartnerGuess = null;
+
+      const myResult = scoreGuess(coopCurrentWord, myWord);
+      const partnerResult = scoreGuess(coopCurrentWord, partnerWord);
+
+      const mySolved = myResult.bulls === wordLength;
+      const partnerSolved = partnerResult.bulls === wordLength;
+
+      coopTurnHistory.push({
+        myWord, myBulls: myResult.bulls, myCows: myResult.cows, mySolved,
+        partnerWord, partnerBulls: partnerResult.bulls, partnerCows: partnerResult.cows, partnerSolved
+      });
+
+      renderCoopTurnLog();
+
+      if (mySolved || partnerSolved) {
+        coopRoundOver = true;
+        if (mySolved) coopMyScore += 1;
+        if (partnerSolved) coopPartnerScore += 1;
+        document.getElementById('coopMyScoreVal').textContent = coopMyScore;
+        document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
+
+        renderCoopSlots(coopCurrentWord);
+        showCoopRoundEnd(mySolved, partnerSolved);
+      } else {
+        coopInputLocked = false;
+        const inp = document.getElementById('coopInput');
+        inp.value = '';
+        inp.disabled = false;
+        document.getElementById('coopGuessBtn').disabled = false;
+        document.getElementById('coopStatus').textContent = 'Submit your guess';
+        document.getElementById('coopStatus').className = 'coop-status';
+        inp.focus();
+      }
+    }
+
+    function renderCoopTurnLog() {
+      const tbody = document.getElementById('coopTurnTable').querySelector('tbody');
+      tbody.innerHTML = '';
+      for (let i = coopTurnHistory.length - 1; i >= 0; i--) {
+        const t = coopTurnHistory[i];
+        const tr = document.createElement('tr');
+        if (t.mySolved || t.partnerSolved) tr.className = 'solved-row';
+        tr.innerHTML =
+          '<td class="attempt-num">' + (i + 1) + '</td>' +
+          '<td class="guess-word">' + t.myWord + '</td>' +
+          '<td class="bull-val">' + t.myBulls + '</td>' +
+          '<td class="cow-val">' + t.myCows + '</td>' +
+          '<td class="divider"></td>' +
+          '<td class="guess-word">' + t.partnerWord + '</td>' +
+          '<td class="bull-val">' + t.partnerBulls + '</td>' +
+          '<td class="cow-val">' + t.partnerCows + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function showCoopRoundEnd(mySolved, partnerSolved) {
+      const isLast = coopRoundIdx >= coopRounds - 1;
+      const endDiv = document.getElementById('coopRoundEnd');
+
+      let resultText;
+      if (mySolved && partnerSolved) resultText = 'Both solved it!';
+      else if (mySolved) resultText = 'You got it first!';
+      else resultText = 'Partner got it first!';
+
+      let html = '<div class="round-end-card success">' +
+        '<h3>' + resultText + '</h3>' +
+        '<p style="letter-spacing:3px;text-transform:uppercase;font-weight:bold;font-size:16px;">' + coopCurrentWord + '</p>' +
+        '<p>' + coopTurnHistory.length + ' turn' + (coopTurnHistory.length !== 1 ? 's' : '') + '</p>';
+
+      if (coopRounds > 1) {
+        html += '<p>You: ' + coopMyScore + ' · Partner: ' + coopPartnerScore + '</p>';
+      }
+
+      if (!isLast) {
+        html += '<button class="actionBtn primary" onclick="coopNextRound()">Next Round →</button>';
+      }
+      html += '</div>';
+
+      endDiv.innerHTML = html;
+      endDiv.classList.remove('hidden');
+      document.getElementById('coopInputWrap').classList.add('hidden');
+      document.getElementById('coopStatus').textContent = '';
+
+      if (isLast && coopRounds > 1) {
+        coopAllDone = true;
+        setTimeout(showCoopFinalResult, 2000);
+      } else if (isLast) {
+        coopAllDone = true;
+      }
+    }
+
+    function coopNextRound() {
+      coopRoundIdx++;
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+      document.getElementById('coopInputWrap').classList.remove('hidden');
+      initCoopRound();
+    }
+
+    function showCoopFinalResult() {
+      document.getElementById('coopRoundEnd').classList.add('hidden');
+
+      let verdict, myClass = '', oppClass = '';
+      if (coopMyScore > coopPartnerScore) { verdict = 'You win!'; myClass = ' winner'; }
+      else if (coopPartnerScore > coopMyScore) { verdict = 'Partner wins!'; oppClass = ' winner'; }
+      else { verdict = "It's a tie!"; }
+
+      document.getElementById('coopResult').innerHTML =
+        '<div class="results-card">' +
+          '<h2>Game Over</h2>' +
+          '<p class="subtitle">' + coopRounds + ' round' + (coopRounds > 1 ? 's' : '') + ' complete</p>' +
+          '<div class="results-scores">' +
+            '<div class="results-player' + myClass + '"><div class="name">You</div><div class="score">' + coopMyScore + '</div><div class="score-label">rounds won</div></div>' +
+            '<div class="results-player' + oppClass + '"><div class="name">Partner</div><div class="score">' + coopPartnerScore + '</div><div class="score-label">rounds won</div></div>' +
+          '</div>' +
+          '<div class="results-verdict">' + verdict + '</div>' +
+        '</div>';
+      document.getElementById('coopResult').classList.remove('hidden');
+    }
+
     /* ═══════════════════ navigation ═══════════════════ */
 
     function backToSetup() {
@@ -1303,10 +1684,12 @@
       onlineMode = false;
       solved = false;
       oppSolved = false;
+      coopAllDone = false;
       window.location.hash = '';
       document.getElementById('lobbyScreen').classList.add('hidden');
       document.getElementById('soloScreen').classList.add('hidden');
       document.getElementById('onlineScreen').classList.add('hidden');
+      document.getElementById('coopScreen').classList.add('hidden');
       document.getElementById('setupScreen').classList.remove('hidden');
     }
 
@@ -1322,6 +1705,8 @@
       if (e.key === 'Enter') {
         if (!document.getElementById('soloScreen').classList.contains('hidden') && !solved) {
           submitSoloGuess();
+        } else if (!document.getElementById('coopScreen').classList.contains('hidden') && !coopInputLocked && !coopRoundOver) {
+          submitCoopGuess();
         } else if (!document.getElementById('onlineScreen').classList.contains('hidden')) {
           if (!document.getElementById('setWordSection').classList.contains('hidden') && !r2MyWordSet) {
             submitSetWord();
