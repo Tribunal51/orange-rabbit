@@ -320,6 +320,15 @@
     </div>
 
     <div class="setupSection">
+      <div class="setupLabel">Difficulty</div>
+      <div id="difficultyToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setDifficulty('easy')">Easy</button>
+        <button class="modeBtn selected" onclick="setDifficulty('medium')">Medium</button>
+        <button class="modeBtn" onclick="setDifficulty('hard')">Hard</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
       <div class="setupLabel">Rounds</div>
       <div class="slider-wrap">
         <input type="range" id="roundsSlider" min="1" max="5" value="1" oninput="updateRoundsDisplay()">
@@ -454,7 +463,14 @@
       <h2>How to Play</h2>
 
       <h3>Objective</h3>
-      <p>Guess the hidden word one letter at a time (or guess the full word in solo/competitive) before the hangman is complete. You have 10 wrong guesses.</p>
+      <p>Guess the hidden word one letter at a time (or guess the full word in solo/competitive) before the hangman is complete.</p>
+
+      <h3>Difficulty</h3>
+      <ul>
+        <li><strong>Easy</strong> — 10 wrong guesses. Gallows and man drawn from scratch.</li>
+        <li><strong>Medium</strong> — 8 wrong guesses. Gallows drawn, then man (arms/legs paired).</li>
+        <li><strong>Hard</strong> — 6 wrong guesses. Gallows pre-built, each limb is a separate guess.</li>
+      </ul>
 
       <h3>1 Player — Single Round</h3>
       <p>Guess the word before the hangman is drawn. No scoring — just win or lose.</p>
@@ -463,7 +479,7 @@
       <ul>
         <li>Correct letter: <strong>+1</strong></li>
         <li>Correct word guess: <strong>+N + (N−1)</strong> where N = unrevealed letters (e.g. 3 left → 5 pts)</li>
-        <li>Word complete: <strong>+lives remaining</strong> (10 − wrong guesses)</li>
+        <li>Word complete: <strong>+lives remaining</strong></li>
         <li>Hangman complete: <strong>−(N + A)</strong> (N = word length, A = unguessed letters)</li>
         <li>Goal: finish with a <strong>positive score</strong>.</li>
       </ul>
@@ -474,7 +490,7 @@
         <li>Choose how many custom words to submit; remaining rounds use random words.</li>
         <li>Correct letter: <strong>+1</strong></li>
         <li>Correct word guess: <strong>+N + (N−1)</strong> where N = unrevealed letters.</li>
-        <li>Word complete: <strong>+lives remaining</strong> (10 − wrong guesses).</li>
+        <li>Word complete: <strong>+lives remaining</strong>.</li>
         <li>Hangman: <strong>−(N + A)</strong> (N = word length, A = unguessed).</li>
       </ul>
 
@@ -495,13 +511,15 @@
   <script>
     /* ═══════════════════ CONSTANTS ═══════════════════ */
 
-    const MAX_WRONG = 10;
     const KB_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+    const DIFFICULTY_MAX = { easy: 10, medium: 8, hard: 6 };
 
     /* ═══════════════════ STATE ═══════════════════ */
 
     let playerMode = 'solo';
     let subMode = 'competitive';
+    let difficulty = 'medium';
+    let maxWrong = 8;
     let wordLength = 5;
     let randomLength = false;
     let numRounds = 1;
@@ -586,18 +604,62 @@
     }
 
     function hangmanSVG(size) {
-      return `<svg viewBox="0 0 200 240" width="${size}" style="display:block;margin:0 auto">
-        <line x1="20" y1="220" x2="100" y2="220" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="0" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="60" y1="220" x2="60" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="1" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="57" y1="20" x2="140" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="2" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="20" x2="140" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="3" stroke-linecap="round" data-part="3" style="opacity:0;transition:opacity 0.3s"/>
-        <circle cx="140" cy="68" r="18" fill="none" stroke="#e74c3c" stroke-width="3" data-part="4" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="86" x2="140" y2="145" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="5" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="102" x2="115" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="6" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="102" x2="165" y2="130" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="7" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="145" x2="115" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="8" style="opacity:0;transition:opacity 0.3s"/>
-        <line x1="140" y1="145" x2="165" y2="185" stroke="#e74c3c" stroke-width="3" stroke-linecap="round" data-part="9" style="opacity:0;transition:opacity 0.3s"/>
-      </svg>`;
+      const h = 'opacity:0;transition:opacity 0.3s';
+      const gCol = 'rgba(255,255,255,0.3)';
+      const bCol = '#e74c3c';
+      const base  = `<line x1="20" y1="220" x2="100" y2="220" stroke="${gCol}" stroke-width="3" stroke-linecap="round"`;
+      const pole  = `<line x1="60" y1="220" x2="60" y2="20" stroke="${gCol}" stroke-width="3" stroke-linecap="round"`;
+      const beam  = `<line x1="57" y1="20" x2="140" y2="20" stroke="${gCol}" stroke-width="3" stroke-linecap="round"`;
+      const hook  = `<line x1="140" y1="20" x2="140" y2="50" stroke="${gCol}" stroke-width="3" stroke-linecap="round"`;
+      const head  = `<circle cx="140" cy="68" r="18" fill="none" stroke="${bCol}" stroke-width="3"`;
+      const body  = `<line x1="140" y1="86" x2="140" y2="145" stroke="${bCol}" stroke-width="3" stroke-linecap="round"`;
+      const lArm  = `<line x1="140" y1="102" x2="115" y2="130" stroke="${bCol}" stroke-width="3" stroke-linecap="round"`;
+      const rArm  = `<line x1="140" y1="102" x2="165" y2="130" stroke="${bCol}" stroke-width="3" stroke-linecap="round"`;
+      const lLeg  = `<line x1="140" y1="145" x2="115" y2="185" stroke="${bCol}" stroke-width="3" stroke-linecap="round"`;
+      const rLeg  = `<line x1="140" y1="145" x2="165" y2="185" stroke="${bCol}" stroke-width="3" stroke-linecap="round"`;
+
+      let parts;
+      if (difficulty === 'easy') {
+        parts = [
+          `${base} data-part="0" style="${h}"/>`,
+          `${pole} data-part="1" style="${h}"/>`,
+          `${beam} data-part="2" style="${h}"/>`,
+          `${hook} data-part="3" style="${h}"/>`,
+          `${head} data-part="4" style="${h}"/>`,
+          `${body} data-part="5" style="${h}"/>`,
+          `${lArm} data-part="6" style="${h}"/>`,
+          `${rArm} data-part="7" style="${h}"/>`,
+          `${lLeg} data-part="8" style="${h}"/>`,
+          `${rLeg} data-part="9" style="${h}"/>`,
+        ];
+      } else if (difficulty === 'medium') {
+        parts = [
+          `${base} data-part="0" style="${h}"/>`,
+          `${pole} data-part="1" style="${h}"/>`,
+          `${beam} data-part="2" style="${h}"/>`,
+          `${hook} data-part="3" style="${h}"/>`,
+          `${head} data-part="4" style="${h}"/>`,
+          `${body} data-part="5" style="${h}"/>`,
+          `${lArm} data-part="6" style="${h}"/>`,
+          `${rArm} data-part="6" style="${h}"/>`,
+          `${lLeg} data-part="7" style="${h}"/>`,
+          `${rLeg} data-part="7" style="${h}"/>`,
+        ];
+      } else {
+        parts = [
+          `${base}/>`,
+          `${pole}/>`,
+          `${beam}/>`,
+          `${hook}/>`,
+          `${head} data-part="0" style="${h}"/>`,
+          `${body} data-part="1" style="${h}"/>`,
+          `${lArm} data-part="2" style="${h}"/>`,
+          `${rArm} data-part="3" style="${h}"/>`,
+          `${lLeg} data-part="4" style="${h}"/>`,
+          `${rLeg} data-part="5" style="${h}"/>`,
+        ];
+      }
+      return `<svg viewBox="0 0 200 240" width="${size}" style="display:block;margin:0 auto">${parts.join('')}</svg>`;
     }
 
     function updateHangman(container, wrongCount) {
@@ -709,6 +771,15 @@
         b.classList.toggle('selected', (i === 0 && mode === 'competitive') || (i === 1 && mode === 'coop'));
       });
       updateCustomWordsSectionVisibility();
+    }
+
+    function setDifficulty(diff) {
+      difficulty = diff;
+      maxWrong = DIFFICULTY_MAX[diff];
+      document.querySelectorAll('#difficultyToggle .modeBtn').forEach((b, i) => {
+        const vals = ['easy', 'medium', 'hard'];
+        b.classList.toggle('selected', vals[i] === diff);
+      });
     }
 
     function setWordLength(len) {
@@ -824,7 +895,7 @@
 
     function checkSoloEnd() {
       const solved = wordFullyRevealed(soloWord, soloRevealed);
-      const failed = soloWrongCount >= MAX_WRONG;
+      const failed = soloWrongCount >= maxWrong;
       if (!solved && !failed) return;
 
       soloOver = true;
@@ -844,7 +915,7 @@
             '<p class="subtitle">The word was <strong>' + soloWord + '</strong></p></div>';
         }
       } else {
-        const livesLeft = MAX_WRONG - soloWrongCount;
+        const livesLeft = maxWrong - soloWrongCount;
         if (solved) {
           soloScore += livesLeft;
         } else {
@@ -911,7 +982,7 @@
 
     function renderSoloUI() {
       updateHangman(document.getElementById('soloHmWrap'), soloWrongCount);
-      renderWordDisplay(document.getElementById('soloWordDisplay'), soloWord, soloRevealed, soloOver && soloWrongCount >= MAX_WRONG);
+      renderWordDisplay(document.getElementById('soloWordDisplay'), soloWord, soloRevealed, soloOver && soloWrongCount >= maxWrong);
       updateKeyboard(document.getElementById('soloKeyboard'), soloRevealed, soloWrong, soloOver);
       renderWrongGuesses(document.getElementById('soloWrongGuesses'), soloWrong, soloWrongWords);
       if (numRounds > 1) document.getElementById('soloScoreVal').textContent = soloScore;
@@ -973,10 +1044,10 @@
           if (subMode === 'coop') {
             coopWords = [];
             for (let i = 0; i < numRounds; i++) coopWords.push(pickWord(effectiveLength()));
-            conn.send({ type: 'setup', mode: 'coop', wordLength, randomLength, rounds: numRounds, words: coopWords });
+            conn.send({ type: 'setup', mode: 'coop', wordLength, randomLength, rounds: numRounds, difficulty, words: coopWords });
             startCoopGame();
           } else {
-            conn.send({ type: 'setup', mode: 'competitive', wordLength, randomLength, rounds: numRounds, customWords: compCustomWords });
+            conn.send({ type: 'setup', mode: 'competitive', wordLength, randomLength, rounds: numRounds, difficulty, customWords: compCustomWords });
             startCompSubmit();
           }
         });
@@ -1053,6 +1124,8 @@
           wordLength = data.wordLength;
           randomLength = data.randomLength || false;
           numRounds = data.rounds;
+          difficulty = data.difficulty || 'medium';
+          maxWrong = DIFFICULTY_MAX[difficulty];
           if (data.mode === 'coop') {
             coopWords = data.words;
             startCoopGame();
@@ -1300,7 +1373,7 @@
 
     function checkCompRoundEnd() {
       const solved = wordFullyRevealed(compCurrentWord, compRevealed);
-      const failed = compWrongCount >= MAX_WRONG;
+      const failed = compWrongCount >= maxWrong;
       if (!solved && !failed) return;
       compRoundOver = true;
 
@@ -1310,7 +1383,7 @@
 
       let changeText;
       if (solved) {
-        const livesLeft = MAX_WRONG - compWrongCount;
+        const livesLeft = maxWrong - compWrongCount;
         compMyScore += livesLeft;
         changeText = '+' + livesLeft + ' completion bonus';
       } else {
@@ -1351,7 +1424,7 @@
 
     function renderCompMyUI() {
       updateHangman(document.getElementById('compMyHmWrap'), compWrongCount);
-      renderWordDisplay(document.getElementById('compMyWordDisplay'), compCurrentWord, compRevealed, compRoundOver && compWrongCount >= MAX_WRONG);
+      renderWordDisplay(document.getElementById('compMyWordDisplay'), compCurrentWord, compRevealed, compRoundOver && compWrongCount >= maxWrong);
       updateKeyboard(document.getElementById('compMyKeyboard'), compRevealed, compWrong, compRoundOver);
       renderWrongGuesses(document.getElementById('compMyWrongGuesses'), compWrong, compWrongWords);
       document.getElementById('compMyScoreVal').textContent = compMyScore;
@@ -1360,7 +1433,7 @@
     function renderCompOpp() {
       updateHangman(document.getElementById('compOppHmWrap'), compOppWrong);
       document.getElementById('compOppRoundLabel').textContent = 'Word ' + (compOppRound || 1) + ' of ' + numRounds;
-      document.getElementById('compOppRevealedLabel').textContent = 'Revealed: ' + compOppRevealed + '/' + (compOppTotal || wordLength) + ' · Wrong: ' + compOppWrong + '/' + MAX_WRONG;
+      document.getElementById('compOppRevealedLabel').textContent = 'Revealed: ' + compOppRevealed + '/' + (compOppTotal || wordLength) + ' · Wrong: ' + compOppWrong + '/' + maxWrong;
       document.getElementById('compOppScoreVal').textContent = compOppScore;
       document.getElementById('compOppStatusMsg').textContent = compOppAllDone ? 'Finished! Score: ' + compOppScore : '';
     }
@@ -1471,11 +1544,11 @@
       const wordSolved = result.wordSolved || wordFullyRevealed(coopCurrentWord, coopRevealed);
 
       if (wordSolved) {
-        const livesLeft = MAX_WRONG - coopWrongCount;
+        const livesLeft = maxWrong - coopWrongCount;
         coopMyScore += livesLeft;
         coopPartnerScore += livesLeft;
         coopRoundOver = true;
-      } else if (coopWrongCount >= MAX_WRONG) {
+      } else if (coopWrongCount >= maxWrong) {
         const unguessed = new Set(coopCurrentWord.split('').filter(c => !coopRevealed.has(c))).size;
         const penalty = coopCurrentWord.length + unguessed;
         coopMyScore -= penalty;
@@ -1569,7 +1642,7 @@
 
       const isLast = coopRoundIdx >= numRounds - 1;
       const endDiv = document.getElementById('coopRoundEnd');
-      const livesLeft = MAX_WRONG - coopWrongCount;
+      const livesLeft = maxWrong - coopWrongCount;
 
       let html = '<div class="round-end-card ' + (solved ? 'success' : 'fail') + '">' +
         '<h3>' + (solved ? 'Word Complete!' : 'Hangman!') + '</h3>' +
@@ -1602,7 +1675,7 @@
 
     function renderCoopUI() {
       updateHangman(document.getElementById('coopHmWrap'), coopWrongCount);
-      renderWordDisplay(document.getElementById('coopWordDisplay'), coopCurrentWord, coopRevealed, coopRoundOver && coopWrongCount >= MAX_WRONG);
+      renderWordDisplay(document.getElementById('coopWordDisplay'), coopCurrentWord, coopRevealed, coopRoundOver && coopWrongCount >= maxWrong);
       if (!coopInputLocked) updateKeyboard(document.getElementById('coopKeyboard'), coopRevealed, coopWrong, false);
       document.getElementById('coopMyScoreVal').textContent = coopMyScore;
       document.getElementById('coopPartnerScoreVal').textContent = coopPartnerScore;
