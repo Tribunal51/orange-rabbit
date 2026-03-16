@@ -97,6 +97,41 @@
       background: linear-gradient(135deg, #0a1628, #132f4c);
     }
 
+    .game-icon.bingo {
+      background: linear-gradient(135deg, #2d1b0a, #4a3520);
+    }
+
+    .bng-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 14px);
+      gap: 3px;
+    }
+
+    .bng-mini-cell {
+      width: 14px;
+      height: 14px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: bold;
+    }
+
+    .bng-mini-cell.marked {
+      background: rgba(245,158,11,0.4);
+      color: #fbbf24;
+    }
+
+    .bng-mini-label {
+      margin-top: 6px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #fbbf24;
+    }
+
     .bs-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -393,6 +428,28 @@
       </div>
       <div class="game-title">Battleship</div>
       <div class="game-desc">Place your fleet and sink the enemy ships on a customizable grid.</div>
+      <span class="game-badge badge-players">2 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="bng.html">
+      <div class="game-icon bingo">
+        <div class="game-icon-inner">
+          <div class="bng-mini-grid">
+            <div class="bng-mini-cell marked">✦</div>
+            <div class="bng-mini-cell">7</div>
+            <div class="bng-mini-cell">3</div>
+            <div class="bng-mini-cell">9</div>
+            <div class="bng-mini-cell marked">✦</div>
+            <div class="bng-mini-cell">5</div>
+            <div class="bng-mini-cell">2</div>
+            <div class="bng-mini-cell">8</div>
+            <div class="bng-mini-cell marked">✦</div>
+          </div>
+          <div class="bng-mini-label">BINGO</div>
+        </div>
+      </div>
+      <div class="game-title">Bingo</div>
+      <div class="game-desc">Fill your grid, call numbers, complete lines and shout BINGO to win!</div>
       <span class="game-badge badge-players">2 Players · Online</span>
     </a>
 
