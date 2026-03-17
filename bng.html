@@ -8,335 +8,144 @@
     content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
   <title>Bingo</title>
   <link rel="icon" type="image/png" href="favicon.png">
-
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #1a0f05, #2a1b0d);
-      color: white;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 30px 20px 60px;
-    }
-
-    .hidden { display: none !important; }
-
-    h1 { margin: 0 0 6px; font-size: 32px; }
-    .setup-sub { opacity: 0.55; font-size: 14px; margin-bottom: 30px; }
-
-    .homeLink {
-      position: fixed; top: 16px; left: 20px;
-      color: rgba(255,255,255,0.7); text-decoration: none;
-      font-size: 14px; z-index: 100;
-    }
-    .homeLink:hover { color: white; }
-
-    /* ── setup ── */
-    .setupSection { margin-bottom: 22px; width: 380px; max-width: 100%; }
-    .setupLabel { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 8px; }
-
-    .modeToggle { display: flex; gap: 6px; }
-    .modeBtn {
-      flex: 1; padding: 10px 0; border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 10px; background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer; transition: 0.2s;
-    }
-    .modeBtn.selected {
-      background: rgba(245,158,11,0.2); color: white;
-      font-weight: bold; border-color: rgba(245,158,11,0.5);
-    }
-
-    .slider-wrap { display: flex; align-items: center; gap: 14px; }
-    .slider-wrap input[type=range] { flex: 1; accent-color: #f59e0b; }
-    .size-display { min-width: 60px; text-align: center; font-weight: bold; font-size: 18px; color: #fbbf24; }
-
-    .startBtn {
-      margin-top: 10px; padding: 14px 50px; font-size: 17px; font-weight: bold;
-      border: none; border-radius: 14px;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: white; cursor: pointer; transition: 0.2s;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    }
-    .startBtn:hover { transform: scale(1.04); }
-    .startBtn:disabled { opacity: 0.4; cursor: default; transform: none; }
-    .setup-error { color: #f87171; font-size: 13px; margin-top: 8px; text-align: center; min-height: 20px; }
-
-    /* ── lobby ── */
-    .lobbyText { font-size: 15px; margin-bottom: 12px; }
-    .lobbyWaiting { opacity: 0.6; font-size: 14px; margin-top: 12px; }
-    .lobbyError { color: #f87171; font-size: 15px; }
-    .lobbyLinkWrap { display: flex; gap: 8px; margin-top: 8px; }
-    .lobbyLinkInput {
-      flex: 1; padding: 10px 12px; border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(0,0,0,0.25); color: white; font-size: 13px;
-    }
-    .lobbyCopyBtn {
-      padding: 10px 18px; border: none; border-radius: 8px;
-      background: rgba(255,255,255,0.18); color: white;
-      cursor: pointer; font-weight: bold; font-size: 13px;
-    }
-    .lobbyCopyBtn:hover { background: rgba(255,255,255,0.3); }
-    .newGameBtn {
-      margin-top: 20px; padding: 10px 24px; border: none; border-radius: 10px;
-      background: rgba(255,255,255,0.12); color: white; font-size: 14px; cursor: pointer;
-    }
-    .newGameBtn:hover { background: rgba(255,255,255,0.22); }
-
-    /* ── grid area ── */
-    .grid-wrap {
-      display: flex;
-      align-items: flex-start;
-      gap: 0;
-    }
-    .bingo-col {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      margin-right: 4px;
-    }
-    .bingo-letter {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      color: #fbbf24;
-      border-radius: 6px;
-      background: rgba(245,158,11,0.08);
-      border: 2px solid transparent;
-      cursor: default;
-      transition: all 0.3s;
-      user-select: none;
-    }
-    .bingo-letter.cancelled {
-      text-decoration: line-through;
-      opacity: 0.25;
-      color: #888;
-      background: rgba(255,255,255,0.02);
-    }
-    .bingo-letter.eligible {
-      cursor: pointer;
-      border-color: #f59e0b;
-      animation: letterPulse 1s infinite alternate;
-      background: rgba(245,158,11,0.2);
-    }
-    @keyframes letterPulse {
-      from { box-shadow: 0 0 4px rgba(245,158,11,0.3); }
-      to { box-shadow: 0 0 18px rgba(245,158,11,0.7); }
-    }
-
-    .grid-container {
-      display: inline-grid;
-      gap: 2px;
-      background: rgba(40,25,10,0.3);
-      border-radius: 4px;
-    }
-    .grid-cell {
-      background: rgba(60,40,20,0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 4px;
-      font-weight: bold;
-      cursor: default;
-      transition: all 0.2s;
-      position: relative;
-      user-select: none;
-    }
-    .grid-cell.crossed {
-      background: rgba(245,158,11,0.12);
-      color: rgba(255,255,255,0.3);
-    }
-    .grid-cell.crossed::after {
-      content: '×';
-      position: absolute;
-      color: rgba(245,158,11,0.45);
-      font-weight: bold;
-    }
-    .grid-cell.line-complete {
-      background: rgba(245,158,11,0.3);
-      box-shadow: inset 0 0 8px rgba(245,158,11,0.25);
-    }
-    .grid-cell.line-complete.crossed::after {
-      color: rgba(245,158,11,0.7);
-    }
-    .grid-cell.swap-selected {
-      outline: 2px solid #f59e0b;
-      outline-offset: -2px;
-      background: rgba(245,158,11,0.2);
-    }
-
-    /* ── fill screen ── */
-    .fill-controls {
-      display: flex; gap: 8px; margin: 14px 0;
-    }
-    .fill-controls button {
-      padding: 8px 16px; border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px; background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.7); font-size: 13px; cursor: pointer;
-    }
-    .fill-controls button:hover { background: rgba(255,255,255,0.15); color: white; }
-    .ready-btn {
-      padding: 12px 40px; font-size: 16px; font-weight: bold;
-      border: none; border-radius: 10px;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: white; cursor: pointer; transition: 0.2s;
-    }
-    .ready-btn:hover { transform: scale(1.04); }
-    .ready-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
-    .ready-status { font-size: 13px; opacity: 0.6; text-align: center; margin-top: 8px; min-height: 20px; }
-
-    /* ── game screen ── */
-    .game-status {
-      text-align: center; margin-bottom: 16px;
-      font-size: 16px; min-height: 28px;
-    }
-    .game-status.your-turn { color: #4ade80; }
-    .game-status.opp-turn { color: #f59e0b; opacity: 0.7; }
-    .game-status.waiting { color: #f59e0b; }
-
-    .pending-indicator {
-      text-align: center; font-size: 14px; margin: 8px 0;
-      color: #fbbf24; min-height: 22px;
-    }
-
-    .guess-area {
-      display: flex; gap: 8px; align-items: center;
-      margin: 10px 0; justify-content: center;
-    }
-    .guess-input {
-      width: 90px; padding: 10px 8px; border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(0,0,0,0.25); color: white; font-size: 16px;
-      text-align: center; font-weight: bold;
-    }
-    .guess-input:focus { outline: none; border-color: #f59e0b; }
-    .call-btn {
-      padding: 10px 24px; font-size: 16px; font-weight: bold;
-      border: none; border-radius: 10px;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: white; cursor: pointer; transition: 0.2s;
-    }
-    .call-btn:hover { transform: scale(1.05); }
-    .call-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
-
-    .bingo-btn {
-      display: block; margin: 14px auto 0;
-      padding: 14px 48px; font-size: 22px; font-weight: 900;
-      letter-spacing: 4px; border: none; border-radius: 14px;
-      background: linear-gradient(135deg, #dc2626, #b91c1c);
-      color: white; cursor: pointer; transition: 0.2s;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
-    .bingo-btn:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(220,38,38,0.4); }
-    .bingo-btn.ready {
-      background: linear-gradient(135deg, #16a34a, #15803d);
-      animation: bingoPulse 0.8s infinite alternate;
-    }
-    @keyframes bingoPulse {
-      from { box-shadow: 0 4px 20px rgba(22,163,74,0.3); }
-      to { box-shadow: 0 8px 32px rgba(22,163,74,0.6); }
-    }
-
-    .called-numbers {
-      margin-top: 16px; text-align: center;
-      max-width: 500px; width: 100%;
-    }
-    .called-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.4; margin-bottom: 6px; }
-    .called-list {
-      display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
-    }
-    .called-num {
-      width: 30px; height: 30px; border-radius: 50%;
-      background: rgba(245,158,11,0.15); color: #fbbf24;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: bold;
-    }
-    .called-num.latest {
-      background: rgba(245,158,11,0.35);
-      box-shadow: 0 0 8px rgba(245,158,11,0.3);
-    }
-
-    /* ── results ── */
-    .results-card {
-      background: rgba(0,0,0,0.25); border-radius: 16px;
-      padding: 24px; margin-top: 20px; text-align: center;
-      max-width: 750px; width: 100%;
-    }
-    .results-card h2 { margin: 0 0 8px; font-size: 24px; }
-    .results-verdict { font-size: 16px; opacity: 0.7; margin: 8px 0 16px; }
-    .results-grids { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
-    .results-grid-section { text-align: center; }
-    .results-grid-label { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.5; margin-bottom: 6px; }
-    .results-bingo-row {
-      display: flex; gap: 4px; justify-content: center; margin-top: 6px;
-    }
-    .results-bingo-letter {
-      width: 22px; height: 22px; border-radius: 4px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 900;
-      background: rgba(245,158,11,0.15); color: #fbbf24;
-    }
-    .results-bingo-letter.off {
-      opacity: 0.25; text-decoration: line-through; color: #888;
-      background: rgba(255,255,255,0.03);
-    }
-
-    .actionBtn {
-      padding: 10px 24px; border: none; border-radius: 10px;
-      background: rgba(255,255,255,0.12); color: white;
-      font-size: 14px; cursor: pointer; margin: 6px;
-    }
-    .actionBtn:hover { background: rgba(255,255,255,0.22); }
-    .actionBtn.primary {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    }
-
-    /* ── rules ── */
-    .rulesLink { margin-top: 20px; font-size: 13px; opacity: 0.5; cursor: pointer; text-decoration: underline; }
-    .rulesLink:hover { opacity: 0.8; }
-    #rulesOverlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 200; padding: 20px;
-    }
-    .rulesCard {
-      background: #1f1408; border-radius: 16px; padding: 28px 24px;
-      max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto;
-      text-align: left; line-height: 1.6;
-    }
-    .rulesCard h2 { margin: 0 0 16px; text-align: center; }
-    .rulesCard h3 { margin: 14px 0 6px; font-size: 15px; color: #fbbf24; }
-    .rulesCard p, .rulesCard li { font-size: 14px; opacity: 0.9; }
-    .rulesCard ul { padding-left: 20px; margin: 4px 0 10px; }
-    .rulesCard li { margin-bottom: 4px; }
-    .rulesCloseBtn {
-      display: block; margin: 18px auto 0; padding: 8px 24px;
-      border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
-      background: rgba(255,255,255,0.2); color: white; font-weight: bold;
-    }
-    .rulesCloseBtn:hover { background: rgba(255,255,255,0.35); }
-
-    /* ── toast ── */
-    .toast {
-      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(245,158,11,0.92); color: #fff;
-      padding: 10px 22px; border-radius: 10px;
-      font-weight: bold; z-index: 300; font-size: 14px;
-      pointer-events: none; transition: opacity 0.4s;
-    }
-    .toast.penalty {
-      background: rgba(220,38,38,0.92);
-    }
-
-    @media (max-width: 600px) {
-      .results-grids { flex-direction: column; align-items: center; }
-    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#1a0f05,#2a1b0d);color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:30px 20px 60px}
+    .hidden{display:none!important}
+    h1{margin:0 0 6px;font-size:32px}
+    .setup-sub{opacity:.55;font-size:14px;margin-bottom:30px}
+    .homeLink{position:fixed;top:16px;left:20px;color:rgba(255,255,255,.7);text-decoration:none;font-size:14px;z-index:100}
+    .homeLink:hover{color:#fff}
+    .setupSection{margin-bottom:22px;width:400px;max-width:100%}
+    .setupLabel{font-size:13px;text-transform:uppercase;letter-spacing:1px;opacity:.6;margin-bottom:8px}
+    .modeToggle{display:flex;gap:6px;flex-wrap:wrap}
+    .modeBtn{flex:1;padding:10px 0;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);font-size:14px;cursor:pointer;transition:.2s;min-width:0}
+    .modeBtn.selected{background:rgba(245,158,11,.2);color:#fff;font-weight:bold;border-color:rgba(245,158,11,.5)}
+    .slider-wrap{display:flex;align-items:center;gap:14px}
+    .slider-wrap input[type=range]{flex:1;accent-color:#f59e0b}
+    .size-display{min-width:80px;text-align:center;font-weight:bold;font-size:18px;color:#fbbf24}
+    .setup-hint{font-size:12px;opacity:.5;margin-top:6px}
+    .startBtn{margin-top:10px;padding:14px 50px;font-size:17px;font-weight:bold;border:none;border-radius:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;cursor:pointer;transition:.2s;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+    .startBtn:hover{transform:scale(1.04)}
+    .startBtn:disabled{opacity:.4;cursor:default;transform:none}
+    .setup-error{color:#f87171;font-size:13px;margin-top:8px;text-align:center;min-height:20px}
+    .lobbyText{font-size:15px;margin-bottom:12px}
+    .lobbyWaiting{opacity:.6;font-size:14px;margin-top:12px}
+    .lobbyError{color:#f87171;font-size:15px}
+    .lobbyLinkWrap{display:flex;gap:8px;margin-top:8px}
+    .lobbyLinkInput{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;font-size:13px}
+    .lobbyCopyBtn{padding:10px 18px;border:none;border-radius:8px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;font-weight:bold;font-size:13px}
+    .lobbyCopyBtn:hover{background:rgba(255,255,255,.3)}
+    .newGameBtn{margin-top:20px;padding:10px 24px;border:none;border-radius:10px;background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer}
+    .newGameBtn:hover{background:rgba(255,255,255,.22)}
+    .grid-wrap{display:flex;align-items:flex-start;gap:0}
+    .bingo-col{display:flex;flex-direction:column;gap:2px;margin-right:4px}
+    .bingo-letter{display:flex;align-items:center;justify-content:center;font-weight:900;color:#fbbf24;border-radius:6px;background:rgba(245,158,11,.08);border:2px solid transparent;cursor:default;transition:all .3s;user-select:none}
+    .bingo-letter.cancelled{text-decoration:line-through;opacity:.25;color:#888;background:rgba(255,255,255,.02)}
+    .bingo-letter.clickable{cursor:pointer;border-color:rgba(245,158,11,.4)}
+    .bingo-letter.clickable:hover{border-color:#f59e0b;background:rgba(245,158,11,.15)}
+    .bingo-letter.pulse{animation:letterPulse 1s infinite alternate;border-color:#f59e0b;background:rgba(245,158,11,.2);cursor:pointer}
+    @keyframes letterPulse{from{box-shadow:0 0 4px rgba(245,158,11,.3)}to{box-shadow:0 0 18px rgba(245,158,11,.7)}}
+    .grid-container{display:inline-grid;gap:2px;background:rgba(40,25,10,.3);border-radius:4px}
+    .grid-cell{background:rgba(60,40,20,.4);display:flex;align-items:center;justify-content:center;border-radius:4px;font-weight:bold;cursor:default;transition:all .2s;position:relative;user-select:none}
+    .grid-cell.crossed{background:rgba(245,158,11,.12);color:rgba(255,255,255,.3)}
+    .grid-cell.crossed::after{content:'×';position:absolute;color:rgba(245,158,11,.45);font-weight:bold}
+    .grid-cell.line-complete{background:rgba(245,158,11,.3);box-shadow:inset 0 0 8px rgba(245,158,11,.25)}
+    .grid-cell.line-complete.crossed::after{color:rgba(245,158,11,.7)}
+    .grid-cell.line-used{background:rgba(74,222,128,.12);box-shadow:inset 0 0 6px rgba(74,222,128,.15)}
+    .grid-cell.line-used.crossed::after{color:rgba(74,222,128,.5)}
+    .grid-cell.tappable{cursor:pointer}
+    .grid-cell.tappable:hover{outline:2px solid rgba(245,158,11,.5);outline-offset:-2px}
+    .grid-cell.tap-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.25)}
+    .grid-cell.selectable{cursor:pointer}
+    .grid-cell.selectable:hover{outline:2px solid rgba(56,189,248,.5);outline-offset:-2px}
+    .grid-cell.cell-selected{outline:2px solid #38bdf8;outline-offset:-2px;background:rgba(56,189,248,.2)}
+    .grid-cell.cell-selected.crossed::after{color:#38bdf8}
+    .grid-cell.empty{background:rgba(255,255,255,.04);cursor:pointer}
+    .grid-cell.empty:hover{background:rgba(245,158,11,.15)}
+    .grid-cell.filled-preview{cursor:default}
+    .fill-progress{text-align:center;font-size:14px;margin:8px 0;color:#fbbf24;min-height:22px}
+    .fill-next{font-weight:bold;color:#fbbf24}
+    .fill-controls{display:flex;gap:8px;margin:14px 0}
+    .fill-controls button{padding:8px 16px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);font-size:13px;cursor:pointer}
+    .fill-controls button:hover{background:rgba(255,255,255,.15);color:#fff}
+    .ready-btn{padding:12px 40px;font-size:16px;font-weight:bold;border:none;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;cursor:pointer;transition:.2s}
+    .ready-btn:hover{transform:scale(1.04)}
+    .ready-btn:disabled{opacity:.3;cursor:default;transform:none}
+    .ready-status{font-size:13px;opacity:.6;text-align:center;margin-top:8px;min-height:20px}
+    .game-status{text-align:center;margin-bottom:12px;font-size:16px;min-height:28px}
+    .game-status.your-turn{color:#4ade80}
+    .game-status.opp-turn{color:#f59e0b;opacity:.7}
+    .game-status.waiting{color:#f59e0b}
+    .selection-hint{text-align:center;font-size:13px;min-height:20px;margin:4px 0;color:#7dd3fc}
+    .standings-area{margin:8px 0;max-width:360px;width:100%}
+    .standing-item{display:flex;align-items:center;gap:8px;padding:4px 10px;font-size:13px;border-radius:6px;margin-bottom:2px}
+    .standing-item.current-turn{background:rgba(245,158,11,.12)}
+    .standing-item.me{font-weight:bold}
+    .standing-rank{min-width:22px;text-align:center;font-size:12px}
+    .standing-name{flex:1}
+    .standing-score{font-size:12px;color:#fbbf24;font-weight:bold;min-width:30px;text-align:right}
+    .standing-status{font-size:11px;opacity:.6}
+    .standing-item.finished{opacity:.5}
+    .standing-item.finished .standing-status{color:#4ade80;opacity:1}
+    .pending-indicator{text-align:center;font-size:14px;margin:8px 0;color:#fbbf24;min-height:22px}
+    .actions-area{margin:8px 0;max-width:500px;width:100%;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+    .action-btn{padding:6px 12px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.35);font-size:12px;cursor:default;transition:.2s;display:flex;align-items:center;gap:4px}
+    .action-btn .pts{font-weight:bold;color:rgba(245,158,11,.4)}
+    .action-btn.enabled{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.12);color:#fff;cursor:pointer;animation:actionPulse 1.2s infinite alternate}
+    .action-btn.enabled .pts{color:#fbbf24}
+    .action-btn.claimed-me{border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.1);color:#4ade80;cursor:default;animation:none}
+    .action-btn.claimed-me .pts{color:#4ade80}
+    .action-btn.claimed-other{opacity:.4;cursor:default;animation:none;text-decoration:line-through}
+    @keyframes actionPulse{from{box-shadow:0 0 2px rgba(245,158,11,.2)}to{box-shadow:0 0 10px rgba(245,158,11,.4)}}
+    .guess-area{display:flex;gap:8px;align-items:center;margin:10px 0;justify-content:center}
+    .guess-input{width:90px;padding:10px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;font-size:16px;text-align:center;font-weight:bold}
+    .guess-input:focus{outline:none;border-color:#f59e0b}
+    .call-btn{padding:10px 24px;font-size:16px;font-weight:bold;border:none;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;cursor:pointer;transition:.2s}
+    .call-btn:hover{transform:scale(1.05)}
+    .call-btn:disabled{opacity:.3;cursor:default;transform:none}
+    .bingo-btn{display:block;margin:14px auto 0;padding:14px 48px;font-size:22px;font-weight:900;letter-spacing:4px;border:none;border-radius:14px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;cursor:pointer;transition:.2s;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+    .bingo-btn:hover{transform:scale(1.06);box-shadow:0 6px 28px rgba(220,38,38,.4)}
+    .bingo-btn.ready{background:linear-gradient(135deg,#16a34a,#15803d);animation:bingoPulse .8s infinite alternate}
+    @keyframes bingoPulse{from{box-shadow:0 4px 20px rgba(22,163,74,.3)}to{box-shadow:0 8px 32px rgba(22,163,74,.6)}}
+    .called-numbers{margin-top:16px;text-align:center;max-width:500px;width:100%}
+    .called-label{font-size:12px;text-transform:uppercase;letter-spacing:1px;opacity:.4;margin-bottom:6px}
+    .called-list{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+    .called-num{width:30px;height:30px;border-radius:50%;background:rgba(245,158,11,.15);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold}
+    .called-num.latest{background:rgba(245,158,11,.35);box-shadow:0 0 8px rgba(245,158,11,.3)}
+    .random-call-display{text-align:center;margin:8px 0}
+    .random-call-number{font-size:48px;font-weight:900;color:#fbbf24;text-shadow:0 0 20px rgba(245,158,11,.4);min-height:60px;line-height:60px}
+    .round-info{text-align:center;font-size:13px;opacity:.6;margin-bottom:6px}
+    .results-card{background:rgba(0,0,0,.25);border-radius:16px;padding:24px;margin-top:20px;text-align:center;max-width:800px;width:100%}
+    .results-card h2{margin:0 0 8px;font-size:24px}
+    .results-verdict{font-size:16px;opacity:.7;margin:8px 0 16px}
+    .results-rankings{margin:12px 0;text-align:left;max-width:320px;margin-left:auto;margin-right:auto}
+    .rank-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px}
+    .rank-medal{min-width:22px;text-align:center}
+    .rank-score{margin-left:auto;font-weight:bold;color:#fbbf24}
+    .results-grids{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+    .results-grid-section{text-align:center}
+    .results-grid-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;opacity:.5;margin-bottom:6px}
+    .results-bingo-row{display:flex;gap:4px;justify-content:center;margin-top:6px}
+    .results-bingo-letter{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:rgba(245,158,11,.15);color:#fbbf24}
+    .results-bingo-letter.off{opacity:.25;text-decoration:line-through;color:#888;background:rgba(255,255,255,.03)}
+    .actionBtn{padding:10px 24px;border:none;border-radius:10px;background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;margin:6px}
+    .actionBtn:hover{background:rgba(255,255,255,.22)}
+    .actionBtn.primary{background:linear-gradient(135deg,#f59e0b,#d97706);box-shadow:0 2px 10px rgba(0,0,0,.2)}
+    .rulesLink{margin-top:20px;font-size:13px;opacity:.5;cursor:pointer;text-decoration:underline}
+    .rulesLink:hover{opacity:.8}
+    #rulesOverlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px}
+    .rulesCard{background:#1f1408;border-radius:16px;padding:28px 24px;max-width:540px;width:100%;max-height:80vh;overflow-y:auto;text-align:left;line-height:1.6}
+    .rulesCard h2{margin:0 0 16px;text-align:center}
+    .rulesCard h3{margin:14px 0 6px;font-size:15px;color:#fbbf24}
+    .rulesCard p,.rulesCard li{font-size:14px;opacity:.9}
+    .rulesCard ul{padding-left:20px;margin:4px 0 10px}
+    .rulesCard li{margin-bottom:4px}
+    .rulesCloseBtn{display:block;margin:18px auto 0;padding:8px 24px;border:none;border-radius:8px;font-size:14px;cursor:pointer;background:rgba(255,255,255,.2);color:#fff;font-weight:bold}
+    .rulesCloseBtn:hover{background:rgba(255,255,255,.35)}
+    .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(245,158,11,.92);color:#fff;padding:10px 22px;border-radius:10px;font-weight:bold;z-index:300;font-size:14px;pointer-events:none;transition:opacity .4s}
+    .toast.penalty{background:rgba(220,38,38,.92)}
+    @media(max-width:600px){.results-grids{flex-direction:column;align-items:center}.actions-area{max-width:100%}}
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
@@ -344,1010 +153,554 @@
 <body>
   <a class="homeLink" href="index.html">← Game Hub</a>
 
-  <!-- ═══════ SETUP ═══════ -->
   <div id="setupScreen">
     <h1>Bingo</h1>
     <p class="setup-sub">Complete lines and call BINGO to win!</p>
-
-    <div class="setupSection">
-      <div class="setupLabel">Grid Size</div>
-      <div class="slider-wrap">
-        <input type="range" id="gridSlider" min="5" max="10" value="5" oninput="updateGridDisplay()">
-        <span class="size-display" id="gridDisplay">5 × 5</span>
-      </div>
-    </div>
-
-    <div class="setupSection">
-      <div class="setupLabel">Mode</div>
+    <div class="setupSection"><div class="setupLabel">Players</div>
+      <div class="slider-wrap"><input type="range" id="playerSlider" min="1" max="8" value="2" oninput="updatePlayerDisplay()"><span class="size-display" id="playerDisplay">2 Players</span></div></div>
+    <div class="setupSection"><div class="setupLabel">Grid Size</div>
+      <div class="slider-wrap"><input type="range" id="gridSlider" min="5" max="10" value="5" oninput="updateGridDisplay()"><span class="size-display" id="gridDisplay">5 × 5</span></div></div>
+    <div class="setupSection"><div class="setupLabel">Mode</div>
       <div class="modeToggle" id="modeToggle">
         <button class="modeBtn selected" onclick="setMode('classic')">Classic</button>
         <button class="modeBtn" onclick="setMode('clash')">Clash</button>
-      </div>
-      <p id="modeHint" style="font-size:12px;opacity:0.5;margin-top:6px;">Turn-based — host chooses who goes first.</p>
-    </div>
-
-    <div id="firstTurnSection" class="setupSection">
-      <div class="setupLabel">Who Goes First</div>
-      <div class="modeToggle" id="firstTurnToggle">
-        <button class="modeBtn selected" onclick="setFirstTurn(true)">I Go First</button>
-        <button class="modeBtn" onclick="setFirstTurn(false)">Opponent First</button>
-      </div>
-    </div>
-
+        <button class="modeBtn" onclick="setMode('randomcall')">Random Call</button>
+      </div><p id="modeHint" class="setup-hint">Turn-based — host chooses who goes first.</p></div>
+    <div id="firstTurnSection" class="setupSection"><div class="setupLabel">Who Goes First</div>
+      <div class="modeToggle" id="firstTurnToggle"><button class="modeBtn selected" onclick="setFirstTurn(true)">I Go First</button><button class="modeBtn" id="firstTurnAltBtn" onclick="setFirstTurn(false)">Opponent First</button></div></div>
+    <div id="randomTurnSection" class="setupSection"><div class="setupLabel">Random Number Turn</div>
+      <div class="modeToggle" id="randomTurnToggle"><button class="modeBtn selected" onclick="setRandomTurn(true)">On</button><button class="modeBtn" onclick="setRandomTurn(false)">Off</button></div>
+      <p class="setup-hint">A random number is called at the end of each round.</p></div>
+    <div class="setupSection"><div class="setupLabel">Housie Scoring</div>
+      <div class="modeToggle" id="housieToggle"><button class="modeBtn selected" onclick="setHousie(false)">Off</button><button class="modeBtn" onclick="setHousie(true)">On</button></div></div>
+    <div id="roundsSection" class="setupSection hidden"><div class="setupLabel">Rounds</div>
+      <div class="slider-wrap"><input type="range" id="roundsSlider" min="1" max="10" value="3" oninput="updateRoundsDisplay()"><span class="size-display" id="roundsDisplay">3</span></div></div>
     <div class="setup-error" id="setupError"></div>
     <button class="startBtn" onclick="launchGame()">Create Game</button>
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
 
-  <!-- ═══════ LOBBY ═══════ -->
-  <div id="lobbyScreen" class="hidden">
-    <h1>Bingo</h1>
-    <div id="lobbyContent"></div>
-    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
-  </div>
+  <div id="lobbyScreen" class="hidden"><h1>Bingo</h1><div id="lobbyContent"></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button></div>
 
-  <!-- ═══════ FILL ═══════ -->
-  <div id="fillScreen" class="hidden">
-    <h1>Bingo</h1>
-    <p class="setup-sub" id="fillSub">Arrange your numbers on the grid</p>
+  <div id="fillScreen" class="hidden"><h1>Bingo</h1><p class="setup-sub" id="fillSub">Click cells to place numbers</p>
+    <div id="fillGridArea"></div><div class="fill-progress" id="fillProgress"></div>
+    <div class="fill-controls"><button onclick="undoFill()">Undo</button><button onclick="clearGrid()">Clear</button></div>
+    <button class="ready-btn" id="readyBtn" disabled onclick="confirmReady()">Ready!</button><div class="ready-status" id="readyStatus"></div></div>
 
-    <div id="fillGridArea"></div>
-
-    <div class="fill-controls">
-      <button onclick="shuffleGrid()">Shuffle</button>
-      <button onclick="clearSwapSelection()">Deselect</button>
-    </div>
-
-    <button class="ready-btn" id="readyBtn" onclick="confirmReady()">Ready!</button>
-    <div class="ready-status" id="readyStatus"></div>
-  </div>
-
-  <!-- ═══════ GAME ═══════ -->
-  <div id="gameScreen" class="hidden">
-    <h1>Bingo</h1>
+  <div id="gameScreen" class="hidden"><h1>Bingo</h1>
+    <div class="round-info" id="roundInfo"></div>
     <div class="game-status" id="gameStatus"></div>
-
     <div id="gameGridArea"></div>
-
+    <div class="selection-hint" id="selectionHint"></div>
     <div class="pending-indicator" id="pendingIndicator"></div>
-
+    <div id="actionsArea" class="actions-area hidden"></div>
+    <div id="standingsArea" class="standings-area"></div>
+    <div class="random-call-display" id="randomCallDisplay" style="display:none"><div class="random-call-number" id="randomCallNumber"></div></div>
     <div class="guess-area" id="guessArea">
-      <input type="number" class="guess-input" id="guessInput" min="1"
-        onkeydown="if(event.key==='Enter')handleCall()">
-      <button class="call-btn" id="callBtn" onclick="handleCall()">Call</button>
-    </div>
-
+      <input type="number" class="guess-input" id="guessInput" min="1" onkeydown="if(event.key==='Enter')handleCall()">
+      <button class="call-btn" id="callBtn" onclick="handleCall()">Call</button></div>
     <button class="bingo-btn" id="bingoBtn" onclick="handleBingo()">BINGO!</button>
-
-    <div class="called-numbers" id="calledSection">
-      <div class="called-label">Called Numbers</div>
-      <div class="called-list" id="calledList"></div>
-    </div>
-
+    <div class="called-numbers" id="calledSection"><div class="called-label">Called Numbers</div><div class="called-list" id="calledList"></div></div>
     <div id="gameResult"></div>
-
-    <div id="gameActions" style="display:none;justify-content:center;gap:12px;margin-top:12px;">
+    <div id="gameActions" style="display:none;justify-content:center;gap:12px;margin-top:12px">
       <button class="actionBtn primary" onclick="requestRematch()">Play Again</button>
-      <button class="actionBtn" onclick="backToSetup()">New Game</button>
-    </div>
-    <div class="rulesLink" onclick="showRules()">How to Play</div>
-  </div>
+      <button class="actionBtn" onclick="backToSetup()">New Game</button></div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div></div>
 
-  <!-- ═══════ RULES ═══════ -->
-  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
-    <div class="rulesCard">
-      <h2>How to Play</h2>
+  <div id="betweenRoundsScreen" class="hidden"><h1>Bingo</h1>
+    <div id="betweenRoundsContent"></div>
+    <button class="startBtn" id="nextRoundBtn" onclick="hostStartNextRound()">Next Round</button></div>
 
-      <h3>Objective</h3>
-      <p>Complete lines on your grid and cancel all five letters of BINGO before your opponent!</p>
-
-      <h3>Setup</h3>
-      <ul>
-        <li>Choose grid size (5×5 to 10×10).</li>
-        <li>Your grid is filled with numbers 1 to N² in a random order.</li>
-        <li>Click two cells to swap them and customize your layout, then click Ready.</li>
-      </ul>
-
-      <h3>Modes</h3>
-      <ul>
-        <li><strong>Classic:</strong> Players take turns calling a number. The host chooses who goes first.</li>
-        <li><strong>Clash:</strong> Both players call a number simultaneously each round. Both numbers are crossed off.</li>
-      </ul>
-
-      <h3>Lines & BINGO Letters</h3>
-      <ul>
-        <li>When a number is called, it is crossed off on <em>both</em> players' grids.</li>
-        <li>When all numbers in a row, column, or diagonal are crossed off, that line is complete.</li>
-        <li>Each completed line earns you one letter cancellation.</li>
-        <li>Click the glowing BINGO letter on the left to cancel it — letters must be cancelled in order (B → I → N → G → O).</li>
-      </ul>
-
-      <h3>Winning</h3>
-      <ul>
-        <li>Once all 5 letters are cancelled, press the <strong>BINGO!</strong> button to win.</li>
-        <li>The first player to press it with all letters cancelled wins.</li>
-        <li><strong>Penalty:</strong> Pressing BINGO before all letters are cancelled restores your last cancelled letter.</li>
-      </ul>
-
-      <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
-    </div>
-  </div>
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)"><div class="rulesCard"><h2>How to Play</h2>
+    <h3>Objective</h3><p>Complete lines on your grid, cancel BINGO letters, and call BINGO!</p>
+    <h3>Setup</h3><ul><li>1–8 players. 1 player plays vs CPU.</li><li>Grid size 5×5 to 10×10. Place numbers by clicking empty cells.</li></ul>
+    <h3>Modes</h3><ul><li><strong>Classic:</strong> Players take turns calling numbers.</li><li><strong>Clash:</strong> All players call simultaneously.</li><li><strong>Random Call:</strong> Computer calls numbers automatically (like Housie).</li></ul>
+    <h3>Cancelling BINGO Letters</h3><ul>
+      <li>Click crossed-off cells to select a complete line (row, column, or diagonal).</li>
+      <li>When a valid line is selected, click any uncancelled BINGO letter to cancel it.</li>
+      <li>Each line can only be used once. You can cancel letters in any order.</li>
+      <li><strong>Penalty:</strong> Clicking a letter without a valid line selected will restore your last cancelled letter.</li></ul>
+    <h3>Housie Scoring</h3><ul>
+      <li>First player to claim each pattern gets bonus points.</li>
+      <li>First H-Line: 5 · First V-Line: 5 · NE Diagonal: 5 · SE Diagonal: 5 · Center Grid: 9</li>
+      <li>BINGOs: 1st=25, 2nd=20, 3rd=15, 4th=10, 5th+=5 points.</li>
+      <li>Play multiple rounds — scores accumulate.</li></ul>
+    <h3>Winning</h3><ul><li>Cancel all 5 letters, press BINGO. For 3+ players, game continues until one player remains.</li><li>Premature BINGO restores your last cancelled letter.</li></ul>
+    <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button></div></div>
 
   <script>
-    /* ═══════════════════ STATE ═══════════════════ */
+    /* ═══════ STATE ═══════ */
+    let gridSize=5,gameMode='classic',hostGoesFirst=true,playerCount=2,randomTurnEnabled=true;
+    let housieEnabled=false,totalRounds=3,currentRound=1;
+    let peer=null,playerConns=[],hostConn=null,isHost=false,myPlayerIdx=0,joinTimer=null,lastRoomId='';
+    let gamePhase='setup',isCPUMode=false;
+    let myGrid=[],nextNumber=1,placedOrder=[],myReady=false,readyCount=0;
+    let crossedNumbers=new Set(),calledOrder=[];
+    let myBingoLetters=[false,false,false,false,false];
+    let selectedCells=new Set(),usedLines=new Set();
+    let activePlayers=[],turnIndex=0,currentTurnPlayer=-1,myTurn=false,myFinished=false;
+    let myClashCall=null,hostClashCalls={};
+    let finishedPlayers=[],allGrids={};
+    let cpuGrid=[],cpuCompletedLines=new Set(),cpuBingoLetters=[false,false,false,false,false],cpuPendingCancels=0,cpuFinished=false;
+    let claimedActions={},playerScores={},bingoCountRound=0;
+    let randomCallTimer=null;
+    const BINGO=['B','I','N','G','O'];
+    const HOUSIE_ACTIONS=[
+      {id:'first_hline',label:'1st H-Line',pts:5},{id:'first_vline',label:'1st V-Line',pts:5},
+      {id:'ne_diag',label:'NE Diag ↗',pts:5},{id:'se_diag',label:'SE Diag ↘',pts:5},
+      {id:'center_grid',label:'Center Grid',pts:9}
+    ];
 
-    let gridSize = 5;
-    let gameMode = 'classic';
-    let hostGoesFirst = true;
+    /* ═══════ HELPERS ═══════ */
+    function showScreen(id){['setupScreen','lobbyScreen','fillScreen','gameScreen','betweenRoundsScreen'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id))}
+    function makeEmptyGrid(s){return Array.from({length:s},()=>Array(s).fill(0))}
+    function generateRandomGrid(s){const n=[];for(let i=1;i<=s*s;i++)n.push(i);for(let i=n.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[n[i],n[j]]=[n[j],n[i]]}const g=[];for(let r=0;r<s;r++)g.push(n.slice(r*s,(r+1)*s));return g}
+    function isGridFull(){return nextNumber>gridSize*gridSize}
+    function checkLines(grid,crossed){const s=grid.length,comp=new Set();for(let r=0;r<s;r++){let ok=true;for(let c=0;c<s;c++)if(!crossed.has(grid[r][c])){ok=false;break}if(ok)comp.add('r'+r)}for(let c=0;c<s;c++){let ok=true;for(let r=0;r<s;r++)if(!crossed.has(grid[r][c])){ok=false;break}if(ok)comp.add('c'+c)}let d0=true,d1=true;for(let i=0;i<s;i++){if(!crossed.has(grid[i][i]))d0=false;if(!crossed.has(grid[i][s-1-i]))d1=false}if(d0)comp.add('d0');if(d1)comp.add('d1');return comp}
+    function getCellsInLine(lid,s){const c=new Set();if(lid[0]==='r'){const r=+lid.slice(1);for(let i=0;i<s;i++)c.add(r+','+i)}else if(lid[0]==='c'){const col=+lid.slice(1);for(let i=0;i<s;i++)c.add(i+','+col)}else if(lid==='d0'){for(let i=0;i<s;i++)c.add(i+','+i)}else if(lid==='d1'){for(let i=0;i<s;i++)c.add(i+','+(s-1-i))}return c}
+    function getCompletedCellSet(lines,s){const a=new Set();for(const l of lines)for(const k of getCellsInLine(l,s))a.add(k);return a}
+    function computeCellSize(forResult){if(forResult)return Math.max(18,Math.min(30,Math.floor(240/gridSize)));const m=Math.min(420,window.innerWidth-100);return Math.max(24,Math.min(50,Math.floor(m/(gridSize+1))))}
+    function showToast(msg,pen){const e=document.createElement('div');e.className='toast'+(pen?' penalty':'');e.textContent=msg;document.body.appendChild(e);setTimeout(()=>{e.style.opacity='0';setTimeout(()=>e.remove(),400)},2000)}
+    function playerName(i){if(i===myPlayerIdx)return'You';if(isCPUMode&&i===1)return'CPU';return'Player '+(i+1)}
+    function pickRandomUncalled(){const m=gridSize*gridSize,a=[];for(let i=1;i<=m;i++)if(!crossedNumbers.has(i))a.push(i);return a.length?a[Math.floor(Math.random()*a.length)]:null}
+    function broadcast(d){for(const c of playerConns)if(c&&c.open)c.send(d)}
 
-    let peer = null, conn = null, isHost = false;
-    let joinTimer = null, lastRoomId = '';
-
-    let gamePhase = 'setup';
-
-    let myGrid = [];
-    let oppGrid = [];
-    let crossedNumbers = new Set();
-    let calledOrder = [];
-
-    let myCompletedLines = new Set();
-    let myBingoLetters = [false, false, false, false, false];
-    let pendingCancels = 0;
-
-    let swapFirst = -1;
-    let myReady = false, oppReady = false;
-    let myTurn = false;
-
-    let myClashCall = null;
-    let oppClashCall = null;
-
-    const BINGO = ['B', 'I', 'N', 'G', 'O'];
-
-    /* ═══════════════════ HELPERS ═══════════════════ */
-
-    function showScreen(id) {
-      ['setupScreen', 'lobbyScreen', 'fillScreen', 'gameScreen'].forEach(s => {
-        document.getElementById(s).classList.toggle('hidden', s !== id);
-      });
+    function validateSelectedLine(){
+      if(selectedCells.size!==gridSize)return null;
+      const cells=[...selectedCells].map(k=>{const[r,c]=k.split(',').map(Number);return{r,c}});
+      for(const{r,c}of cells)if(!crossedNumbers.has(myGrid[r][c]))return null;
+      const rows=new Set(cells.map(c=>c.r)),cols=new Set(cells.map(c=>c.c));
+      if(rows.size===1&&cols.size===gridSize){let ok=true;for(let i=0;i<gridSize;i++)if(!cols.has(i))ok=false;if(ok)return'r'+cells[0].r}
+      if(cols.size===1&&rows.size===gridSize){let ok=true;for(let i=0;i<gridSize;i++)if(!rows.has(i))ok=false;if(ok)return'c'+cells[0].c}
+      const sorted=cells.slice().sort((a,b)=>a.r-b.r);
+      if(sorted.every((c,i)=>c.r===i&&c.c===i))return'd0';
+      if(sorted.every((c,i)=>c.r===i&&c.c===gridSize-1-i))return'd1';
+      return null;
     }
 
-    function shuffleArray(arr) {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+    function findCompleteLinesThrough(r,c){
+      const result=[];const allLines=['r'+r,'c'+c];
+      if(r===c)allLines.push('d0');if(r+c===gridSize-1)allLines.push('d1');
+      for(const lid of allLines){
+        if(usedLines.has(lid))continue;
+        const cells=getCellsInLine(lid,gridSize);let ok=true;
+        for(const k of cells){const[rr,cc]=k.split(',').map(Number);if(!crossedNumbers.has(myGrid[rr][cc])){ok=false;break}}
+        if(ok)result.push(lid);
       }
+      return result;
     }
 
-    function generateGrid(size) {
-      const nums = [];
-      for (let i = 1; i <= size * size; i++) nums.push(i);
-      shuffleArray(nums);
-      const grid = [];
-      for (let r = 0; r < size; r++) {
-        grid.push(nums.slice(r * size, (r + 1) * size));
+    function autoSelectLine(r,c){
+      const lines=findCompleteLinesThrough(r,c);
+      if(lines.length===0)return;
+      let best=null;
+      for(const lid of lines){
+        const lCells=getCellsInLine(lid,gridSize);
+        let allIn=true;for(const k of selectedCells)if(!lCells.has(k)){allIn=false;break}
+        if(allIn){best=lid;break}
       }
-      return grid;
+      if(!best)best=lines[0];
+      selectedCells=new Set(getCellsInLine(best,gridSize));
     }
 
-    function checkLines(grid, crossed) {
-      const size = grid.length;
-      const completed = new Set();
+    function checkHousieAction(actionId){
+      switch(actionId){
+        case'first_hline':for(let r=0;r<gridSize;r++){let ok=true;for(let c=0;c<gridSize;c++)if(!crossedNumbers.has(myGrid[r][c])){ok=false;break}if(ok)return true}return false;
+        case'first_vline':for(let c=0;c<gridSize;c++){let ok=true;for(let r=0;r<gridSize;r++)if(!crossedNumbers.has(myGrid[r][c])){ok=false;break}if(ok)return true}return false;
+        case'ne_diag':for(let i=0;i<gridSize;i++)if(!crossedNumbers.has(myGrid[gridSize-1-i][i]))return false;return true;
+        case'se_diag':for(let i=0;i<gridSize;i++)if(!crossedNumbers.has(myGrid[i][i]))return false;return true;
+        case'center_grid':{const cx=Math.floor((gridSize-1)/2);for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=cx+dr,c=cx+dc;if(r<0||r>=gridSize||c<0||c>=gridSize)return false;if(!crossedNumbers.has(myGrid[r][c]))return false}return true}
+      }return false;
+    }
+    function cpuCheckHousieAction(actionId){
+      if(!isCPUMode||cpuGrid.length===0)return false;
+      switch(actionId){
+        case'first_hline':for(let r=0;r<gridSize;r++){let ok=true;for(let c=0;c<gridSize;c++)if(!crossedNumbers.has(cpuGrid[r][c])){ok=false;break}if(ok)return true}return false;
+        case'first_vline':for(let c=0;c<gridSize;c++){let ok=true;for(let r=0;r<gridSize;r++)if(!crossedNumbers.has(cpuGrid[r][c])){ok=false;break}if(ok)return true}return false;
+        case'ne_diag':for(let i=0;i<gridSize;i++)if(!crossedNumbers.has(cpuGrid[gridSize-1-i][i]))return false;return true;
+        case'se_diag':for(let i=0;i<gridSize;i++)if(!crossedNumbers.has(cpuGrid[i][i]))return false;return true;
+        case'center_grid':{const cx=Math.floor((gridSize-1)/2);for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=cx+dr,c=cx+dc;if(r<0||r>=gridSize||c<0||c>=gridSize)return false;if(!crossedNumbers.has(cpuGrid[r][c]))return false}return true}
+      }return false;
+    }
 
-      for (let r = 0; r < size; r++) {
-        let ok = true;
-        for (let c = 0; c < size; c++) {
-          if (!crossed.has(grid[r][c])) { ok = false; break; }
-        }
-        if (ok) completed.add('r' + r);
+    /* ═══════ SETUP UI ═══════ */
+    function updatePlayerDisplay(){playerCount=+document.getElementById('playerSlider').value;document.getElementById('playerDisplay').textContent=playerCount===1?'1 (vs CPU)':playerCount+' Players';updateFirstTurnLabels()}
+    function updateGridDisplay(){gridSize=+document.getElementById('gridSlider').value;document.getElementById('gridDisplay').textContent=gridSize+' × '+gridSize}
+    function updateRoundsDisplay(){totalRounds=+document.getElementById('roundsSlider').value;document.getElementById('roundsDisplay').textContent=totalRounds}
+    function setMode(m){gameMode=m;document.querySelectorAll('#modeToggle .modeBtn').forEach((b,i)=>b.classList.toggle('selected',['classic','clash','randomcall'][i]===m));
+      document.getElementById('firstTurnSection').classList.toggle('hidden',m!=='classic');
+      document.getElementById('randomTurnSection').classList.toggle('hidden',m==='randomcall');
+      document.getElementById('modeHint').textContent=m==='classic'?'Turn-based — host chooses who goes first.':m==='clash'?'All players call simultaneously.':'Computer calls numbers automatically (Housie-style).'}
+    function setFirstTurn(h){hostGoesFirst=h;document.querySelectorAll('#firstTurnToggle .modeBtn').forEach((b,i)=>b.classList.toggle('selected',(i===0&&h)||(i===1&&!h)))}
+    function setRandomTurn(on){randomTurnEnabled=on;document.querySelectorAll('#randomTurnToggle .modeBtn').forEach((b,i)=>b.classList.toggle('selected',(i===0&&on)||(i===1&&!on)))}
+    function setHousie(on){housieEnabled=on;document.querySelectorAll('#housieToggle .modeBtn').forEach((b,i)=>b.classList.toggle('selected',(i===0&&!on)||(i===1&&on)));document.getElementById('roundsSection').classList.toggle('hidden',!on)}
+    function updateFirstTurnLabels(){const b=document.getElementById('firstTurnAltBtn');b.textContent=playerCount===1?'CPU Goes First':playerCount===2?'Opponent First':'Random Player'}
+    function launchGame(){gridSize=+document.getElementById('gridSlider').value;playerCount=+document.getElementById('playerSlider').value;if(housieEnabled)totalRounds=+document.getElementById('roundsSlider').value;
+      document.getElementById('setupError').textContent='';isCPUMode=playerCount===1;if(isCPUMode){isHost=true;myPlayerIdx=0;playerCount=2;currentRound=1;startFill()}else{currentRound=1;createRoom()}}
+
+    /* ═══════ NETWORKING ═══════ */
+    async function fetchIceServers(){try{const r=await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');if(!r.ok)throw 0;return{iceServers:await r.json()}}catch(e){return{iceServers:[{urls:'stun:stun.relay.metered.ca:80'},{urls:'turn:global.relay.metered.ca:80',username:'58b8d0b18984b4d0406a9640',credential:'u3embk/opEADZGUr'},{urls:'turn:global.relay.metered.ca:443',username:'58b8d0b18984b4d0406a9640',credential:'u3embk/opEADZGUr'}]}}}
+    function generateRoomId(){const c='abcdefghijklmnopqrstuvwxyz0123456789';let id='bng-';for(let i=0;i<8;i++)id+=c[Math.floor(Math.random()*c.length)];return id}
+    async function createRoom(){const rid=generateRoomId();showScreen('lobbyScreen');document.getElementById('lobbyContent').innerHTML='<p class="lobbyText">Creating room...</p>';const ice=await fetchIceServers();peer=new Peer(rid,{config:ice});isHost=true;myPlayerIdx=0;playerConns=[];
+      peer.on('open',id=>{const link=location.origin+location.pathname+'#room='+id;updateLobbyDisplay(1,link)});
+      peer.on('connection',cn=>{if(playerConns.length+1>=playerCount)return;const idx=playerConns.length+1;playerConns.push(cn);
+        cn.on('open',()=>{cn.send({type:'setup',gridSize,gameMode,hostGoesFirst,playerCount,randomTurnEnabled,housieEnabled,totalRounds,yourIdx:idx});const cur=playerConns.length+1;broadcast({type:'playerJoined',current:cur,needed:playerCount});updateLobbyDisplay(cur,null);if(cur===playerCount){startFill();broadcast({type:'startFill'})}});
+        cn.on('data',d=>handlePlayerMsg(d,idx));cn.on('close',()=>{if(gamePhase!=='over')showToast(playerName(idx)+' disconnected',true)})});
+      peer.on('error',e=>{document.getElementById('lobbyContent').innerHTML='<p class="lobbyError">Error: '+e.message+'</p>'})}
+    function updateLobbyDisplay(cur,link){let h='';if(link)h+='<p class="lobbyText">Share this link:</p><div class="lobbyLinkWrap"><input class="lobbyLinkInput" id="roomLink" value="'+link+'" readonly><button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button></div>';h+='<p class="lobbyWaiting">'+cur+' / '+playerCount+' players</p>';const el=document.getElementById('lobbyContent');if(link||!document.getElementById('roomLink'))el.innerHTML=h;else{const w=el.querySelector('.lobbyWaiting');if(w)w.textContent=cur+' / '+playerCount+' players'}}
+    async function joinRoom(rid){lastRoomId=rid;if(joinTimer){clearTimeout(joinTimer);joinTimer=null}showScreen('lobbyScreen');document.getElementById('lobbyContent').innerHTML='<p class="lobbyWaiting">Connecting...</p>';const ice=await fetchIceServers();peer=new Peer({config:ice});isHost=false;
+      joinTimer=setTimeout(()=>{document.getElementById('lobbyContent').innerHTML='<p class="lobbyError">Timed out.</p><button class="lobbyCopyBtn" style="margin-top:8px" onclick="retryJoin()">Retry</button>'},15000);
+      peer.on('open',()=>{hostConn=peer.connect(rid,{reliable:true});hostConn.on('open',()=>{if(joinTimer){clearTimeout(joinTimer);joinTimer=null}document.getElementById('lobbyContent').innerHTML='<p class="lobbyWaiting">Connected! Waiting...</p>'});hostConn.on('data',handleHostMsg);hostConn.on('close',()=>{if(gamePhase!=='over')alert('Disconnected.')})});
+      peer.on('error',()=>{if(joinTimer){clearTimeout(joinTimer);joinTimer=null}document.getElementById('lobbyContent').innerHTML='<p class="lobbyError">Could not connect.</p><button class="lobbyCopyBtn" style="margin-top:8px" onclick="retryJoin()">Retry</button>'})}
+    function retryJoin(){if(peer){peer.destroy();peer=null}hostConn=null;joinRoom(lastRoomId)}
+    function copyLink(){const i=document.getElementById('roomLink');i.select();navigator.clipboard.writeText(i.value).then(()=>{const b=document.getElementById('copyBtn');b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500)})}
+    function backToSetup(){stopRandomCalling();if(peer){peer.destroy();peer=null}hostConn=null;playerConns=[];gamePhase='setup';isCPUMode=false;showScreen('setupScreen')}
+
+    /* ═══════ HOST MSG ═══════ */
+    function handlePlayerMsg(d,idx){switch(d.type){
+      case'ready':allGrids[idx]=d.grid;readyCount++;broadcast({type:'playerReady',count:readyCount+1,needed:playerCount});if(readyCount+1>=playerCount){broadcast({type:'startGame'});startGameLocal()}break;
+      case'call':if(currentTurnPlayer!==idx)return;broadcast({type:'numberCalled',number:d.number,callerIdx:idx});processCalledNumber(d.number);advanceTurn();break;
+      case'clashCall':hostClashCalls[idx]=d.number;checkClashComplete();break;
+      case'bingo':handleBingoDeclaration(idx);break;
+      case'premature':broadcast({type:'playerPremature',idx});break;
+      case'claimAction':hostProcessActionClaim(idx,d.actionId);break;
+      case'rematch':broadcast({type:'rematch'});startFill();break;
+      case'nextRound':broadcast({type:'nextRound'});startFill();break;
+    }}
+
+    /* ═══════ GUEST MSG ═══════ */
+    function handleHostMsg(d){switch(d.type){
+      case'setup':gridSize=d.gridSize;gameMode=d.gameMode;hostGoesFirst=d.hostGoesFirst;playerCount=d.playerCount;randomTurnEnabled=d.randomTurnEnabled;housieEnabled=d.housieEnabled;totalRounds=d.totalRounds;myPlayerIdx=d.yourIdx;break;
+      case'playerJoined':document.getElementById('lobbyContent').innerHTML='<p class="lobbyWaiting">'+d.current+' / '+d.needed+' players</p>';break;
+      case'startFill':startFill();break;
+      case'playerReady':document.getElementById('readyStatus').textContent=d.count+' / '+d.needed+' ready';break;
+      case'startGame':startGameLocal();break;
+      case'turn':currentTurnPlayer=d.playerIdx;myTurn=(d.playerIdx===myPlayerIdx);updateGameStatus();updateGuessUI();renderGameGrid();updateStandings();break;
+      case'numberCalled':processCalledNumber(d.number);break;
+      case'randomNumber':showToast('Random: '+d.number,false);processCalledNumber(d.number);break;
+      case'clashReveal':for(const n of d.numbers)processCalledNumber(n);if(d.random){showToast('Random: '+d.random,false);processCalledNumber(d.random)}myClashCall=null;updateGuessUI();updateGameStatus();break;
+      case'playerBingo':{const e={idx:d.idx,rank:d.rank};if(!finishedPlayers.find(f=>f.idx===d.idx))finishedPlayers.push(e);activePlayers=activePlayers.filter(i=>i!==d.idx);if(d.idx===myPlayerIdx)myFinished=true;updateStandings();updateGuessUI();updateBingoBtn();
+        showToast(d.idx===myPlayerIdx?'BINGO! #'+d.rank:playerName(d.idx)+' BINGO #'+d.rank,false);break}
+      case'playerPremature':if(d.idx!==myPlayerIdx)showToast(playerName(d.idx)+' premature BINGO!',false);break;
+      case'actionClaimed':claimedActions[d.actionId]={idx:d.idx,pts:d.pts};if(!playerScores[d.idx])playerScores[d.idx]=0;playerScores[d.idx]+=d.pts;renderActions();updateStandings();
+        showToast(playerName(d.idx)+' claimed '+d.label+'!',false);break;
+      case'gameOver':finishedPlayers=d.rankings;showRoundEnd();break;
+      case'rematch':startFill();break;
+      case'nextRound':startFill();break;
+    }}
+
+    /* ═══════ FILL ═══════ */
+    function startFill(){
+      gamePhase='fill';myGrid=makeEmptyGrid(gridSize);nextNumber=1;placedOrder=[];myReady=false;readyCount=0;
+      crossedNumbers=new Set();calledOrder=[];myBingoLetters=[false,false,false,false,false];
+      selectedCells=new Set();usedLines=new Set();myFinished=false;myClashCall=null;hostClashCalls={};
+      finishedPlayers=[];allGrids={};activePlayers=[];turnIndex=0;currentTurnPlayer=-1;
+      claimedActions={};bingoCountRound=0;
+      cpuGrid=[];cpuCompletedLines=new Set();cpuBingoLetters=[false,false,false,false,false];cpuPendingCancels=0;cpuFinished=false;
+      if(isCPUMode){cpuGrid=generateRandomGrid(gridSize);allGrids[1]=cpuGrid}
+      if(currentRound===1){playerScores={};for(let i=0;i<playerCount;i++)playerScores[i]=0}
+      const ml=gameMode==='classic'?'Classic':gameMode==='clash'?'Clash':'Random Call';
+      const pl=isCPUMode?'vs CPU':playerCount+'P';
+      document.getElementById('fillSub').textContent=gridSize+'×'+gridSize+' · '+ml+' · '+pl;
+      document.getElementById('readyBtn').disabled=true;document.getElementById('readyStatus').textContent='';
+      showScreen('fillScreen');renderFillGrid();updateFillProgress();
+    }
+    function renderFillGrid(){const cs=computeCellSize(false);const a=document.getElementById('fillGridArea');a.innerHTML='';const w=document.createElement('div');w.className='grid-wrap';
+      const bc=document.createElement('div');bc.className='bingo-col';for(let r=0;r<gridSize;r++){const e=document.createElement('div');e.className='bingo-letter';e.style.width=(cs*.7)+'px';e.style.height=cs+'px';e.style.fontSize=Math.max(12,cs*.38)+'px';if(r<5)e.textContent=BINGO[r];bc.appendChild(e)}w.appendChild(bc);
+      const g=document.createElement('div');g.className='grid-container';g.style.gridTemplateColumns='repeat('+gridSize+','+cs+'px)';g.style.gridTemplateRows='repeat('+gridSize+','+cs+'px)';
+      const fs=Math.max(9,cs*.32)+'px';for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){const cl=document.createElement('div');cl.className='grid-cell';cl.style.fontSize=fs;const v=myGrid[r][c];if(v===0){cl.classList.add('empty');if(!myReady&&!isGridFull())cl.onclick=()=>handleFillClick(r,c)}else{cl.textContent=v;cl.classList.add('filled-preview')}g.appendChild(cl)}
+      w.appendChild(g);a.appendChild(w)}
+    function updateFillProgress(){const t=gridSize*gridSize,p=nextNumber-1;const e=document.getElementById('fillProgress');if(p>=t)e.innerHTML='Grid complete! Click <strong>Ready</strong>.';else e.innerHTML='Next: <span class="fill-next">'+nextNumber+'</span>  ·  '+p+'/'+t;document.getElementById('readyBtn').disabled=!isGridFull()||myReady}
+    function handleFillClick(r,c){if(myReady||isGridFull()||myGrid[r][c]!==0)return;myGrid[r][c]=nextNumber;placedOrder.push({r,c});nextNumber++;renderFillGrid();updateFillProgress()}
+    function undoFill(){if(myReady||!placedOrder.length)return;const l=placedOrder.pop();myGrid[l.r][l.c]=0;nextNumber--;renderFillGrid();updateFillProgress()}
+    function clearGrid(){if(myReady)return;myGrid=makeEmptyGrid(gridSize);nextNumber=1;placedOrder=[];renderFillGrid();updateFillProgress()}
+    function confirmReady(){if(!isGridFull())return;myReady=true;allGrids[myPlayerIdx]=myGrid;document.getElementById('readyBtn').disabled=true;
+      if(isCPUMode){readyCount=1;startGameLocal();return}
+      document.getElementById('readyStatus').textContent='Waiting...';
+      if(isHost){readyCount++;if(readyCount>=playerCount){broadcast({type:'startGame'});startGameLocal()}}else hostConn.send({type:'ready',grid:myGrid})}
+
+    /* ═══════ GAME START ═══════ */
+    function startGameLocal(){
+      gamePhase='game';showScreen('gameScreen');
+      activePlayers=[];for(let i=0;i<playerCount;i++)activePlayers.push(i);
+      finishedPlayers=[];myFinished=false;bingoCountRound=0;claimedActions={};
+      document.getElementById('gameResult').innerHTML='';document.getElementById('gameActions').style.display='none';
+      document.getElementById('bingoBtn').style.display='';
+      document.getElementById('roundInfo').textContent=housieEnabled?'Round '+currentRound+' / '+totalRounds:'';
+      document.getElementById('randomCallDisplay').style.display=gameMode==='randomcall'?'':'none';
+      document.getElementById('randomCallNumber').textContent='';
+
+      if(gameMode==='classic'){
+        if(hostGoesFirst)turnIndex=0;else{if(playerCount<=2)turnIndex=1;else turnIndex=Math.floor(Math.random()*(playerCount-1))+1;if(turnIndex>=activePlayers.length)turnIndex=0}
+        currentTurnPlayer=activePlayers[turnIndex];myTurn=(currentTurnPlayer===myPlayerIdx);
+        if(isHost)broadcast({type:'turn',playerIdx:currentTurnPlayer});
+        if(isCPUMode&&currentTurnPlayer===1)scheduleCPUTurn();
+      }else if(gameMode==='clash'){myTurn=true;if(isCPUMode)scheduleCPUClash()}
+      else if(gameMode==='randomcall'){myTurn=false;if(isHost||isCPUMode)startRandomCalling()}
+
+      updateAll();
+    }
+
+    function updateAll(){updateGameStatus();renderGameGrid();updateGuessUI();updateCalledList();updateBingoBtn();updatePendingIndicator();updateStandings();updateSelectionHint();if(housieEnabled)renderActions()}
+
+    /* ═══════ RANDOM CALL ═══════ */
+    function startRandomCalling(){stopRandomCalling();randomCallTimer=setInterval(()=>{if(gamePhase!=='game'){stopRandomCalling();return}
+      const n=pickRandomUncalled();if(n===null){stopRandomCalling();return}
+      if(!isCPUMode)broadcast({type:'numberCalled',number:n,callerIdx:-1});
+      document.getElementById('randomCallNumber').textContent=n;
+      processCalledNumber(n);cpuProcessNumber(n);
+    },3000)}
+    function stopRandomCalling(){if(randomCallTimer){clearInterval(randomCallTimer);randomCallTimer=null}}
+
+    /* ═══════ TURNS ═══════ */
+    function advanceTurn(){if(gamePhase==='over'||(!isHost&&!isCPUMode))return;
+      turnIndex++;if(turnIndex>=activePlayers.length){turnIndex=0;
+        if(randomTurnEnabled&&gameMode!=='randomcall'){const rn=pickRandomUncalled();if(rn!==null){if(!isCPUMode)broadcast({type:'randomNumber',number:rn});else showToast('Random: '+rn,false);processCalledNumber(rn);cpuProcessNumber(rn)}}}
+      if(!activePlayers.length)return;currentTurnPlayer=activePlayers[turnIndex%activePlayers.length];myTurn=(currentTurnPlayer===myPlayerIdx);
+      if(!isCPUMode)broadcast({type:'turn',playerIdx:currentTurnPlayer});
+      updateGameStatus();updateGuessUI();renderGameGrid();updateStandings();
+      if(isCPUMode&&currentTurnPlayer===1)scheduleCPUTurn()}
+    function checkClashComplete(){for(const idx of activePlayers){if(idx===myPlayerIdx&&myClashCall===null)return;if(idx!==myPlayerIdx&&!(idx in hostClashCalls))return}resolveClashRound()}
+    function resolveClashRound(){const all=new Set();if(myClashCall!==null)all.add(myClashCall);for(const i in hostClashCalls)all.add(hostClashCalls[i]);
+      let rn=null;if(randomTurnEnabled){const tmp=new Set(crossedNumbers);for(const n of all)tmp.add(n);const mx=gridSize*gridSize,av=[];for(let i=1;i<=mx;i++)if(!tmp.has(i))av.push(i);if(av.length)rn=av[Math.floor(Math.random()*av.length)]}
+      if(!isCPUMode)broadcast({type:'clashReveal',numbers:[...all],random:rn});
+      for(const n of all){processCalledNumber(n);cpuProcessNumber(n)}
+      if(rn!==null){showToast('Random: '+rn,false);processCalledNumber(rn);cpuProcessNumber(rn)}
+      myClashCall=null;hostClashCalls={};updateGuessUI();updateGameStatus();
+      if(gamePhase!=='over'&&isCPUMode&&!cpuFinished)scheduleCPUClash()}
+
+    /* ═══════ CPU ═══════ */
+    function scheduleCPUTurn(){if(gamePhase==='over'||cpuFinished)return;setTimeout(()=>{if(gamePhase==='over'||cpuFinished)return;const n=pickRandomUncalled();if(!n)return;broadcast({type:'numberCalled',number:n,callerIdx:1});processCalledNumber(n);cpuProcessNumber(n);advanceTurn()},800)}
+    function scheduleCPUClash(){if(gamePhase==='over'||cpuFinished)return;setTimeout(()=>{if(gamePhase==='over'||cpuFinished)return;const n=pickRandomUncalled();if(n){hostClashCalls[1]=n;checkClashComplete()}},500)}
+    function cpuProcessNumber(){
+      if(!isCPUMode||cpuFinished||!cpuGrid.length)return;
+      const nl=checkLines(cpuGrid,crossedNumbers);let nc=0;for(const l of nl)if(!cpuCompletedLines.has(l)){cpuCompletedLines.add(l);nc++}
+      cpuPendingCancels+=nc;
+      while(cpuPendingCancels>0){let ni=-1;for(let i=0;i<5;i++)if(!cpuBingoLetters[i]){ni=i;break}if(ni===-1)break;cpuBingoLetters[ni]=true;cpuPendingCancels--}
+      if(housieEnabled&&!cpuFinished){for(const act of HOUSIE_ACTIONS){if(claimedActions[act.id])continue;if(cpuCheckHousieAction(act.id))setTimeout(()=>{if(!claimedActions[act.id])hostProcessActionClaim(1,act.id)},Math.random()*1000+600)}}
+      if(cpuBingoLetters.every(Boolean)&&!cpuFinished)setTimeout(()=>{if(!cpuFinished&&gamePhase!=='over')handleBingoDeclaration(1)},1500)}
+
+    /* ═══════ GAME GRID ═══════ */
+    function renderGameGrid(){
+      const cs=computeCellSize(false);const a=document.getElementById('gameGridArea');a.innerHTML='';
+      const completedLines=checkLines(myGrid,crossedNumbers);
+      const completedCells=getCompletedCellSet(completedLines,gridSize);
+      const usedCells=getCompletedCellSet(usedLines,gridSize);
+      const w=document.createElement('div');w.className='grid-wrap';
+
+      const bc=document.createElement('div');bc.className='bingo-col';
+      const lineSelected=validateSelectedLine();const lineNotUsed=lineSelected&&!usedLines.has(lineSelected);
+      for(let r=0;r<gridSize;r++){const e=document.createElement('div');e.className='bingo-letter';e.style.width=(cs*.7)+'px';e.style.height=cs+'px';e.style.fontSize=Math.max(14,cs*.42)+'px';
+        if(r<5){e.textContent=BINGO[r];
+          if(myBingoLetters[r])e.classList.add('cancelled');
+          else if(!myFinished){e.classList.add('clickable');if(lineNotUsed)e.classList.add('pulse');e.onclick=()=>handleLetterClick(r)}}
+        bc.appendChild(e)}w.appendChild(bc);
+
+      const g=document.createElement('div');g.className='grid-container';g.style.gridTemplateColumns='repeat('+gridSize+','+cs+'px)';g.style.gridTemplateRows='repeat('+gridSize+','+cs+'px)';
+      const fs=Math.max(9,cs*(gridSize>=8?.28:.32))+'px';
+      const inputVal=parseInt(document.getElementById('guessInput').value)||0;
+      const canTap=gamePhase==='game'&&!myFinished&&gameMode!=='randomcall'&&((gameMode==='classic'&&myTurn)||(gameMode==='clash'&&myClashCall===null));
+
+      for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){
+        const num=myGrid[r][c],cell=document.createElement('div'),key=r+','+c;cell.className='grid-cell';cell.textContent=num;cell.style.fontSize=fs;
+        const isCrossed=crossedNumbers.has(num);
+        if(isCrossed){
+          cell.classList.add('crossed');
+          if(usedCells.has(key))cell.classList.add('line-used');
+          else if(completedCells.has(key))cell.classList.add('line-complete');
+          if(selectedCells.has(key))cell.classList.add('cell-selected');
+          if(!myFinished){cell.classList.add('selectable');cell.onclick=()=>handleCellSelect(r,c)}
+        }else if(canTap){cell.classList.add('tappable');if(num===inputVal)cell.classList.add('tap-selected');cell.onclick=()=>tapGridCell(num)}
+        g.appendChild(cell)}
+      w.appendChild(g);a.appendChild(w)}
+
+    function handleCellSelect(r,c){
+      if(myFinished||gamePhase==='over')return;const key=r+','+c;
+      if(selectedCells.has(key)){selectedCells.delete(key)}
+      else{selectedCells.add(key);autoSelectLine(r,c)}
+      renderGameGrid();updateSelectionHint()}
+    function tapGridCell(n){document.getElementById('guessInput').value=n;renderGameGrid()}
+
+    function handleLetterClick(idx){
+      if(myFinished||gamePhase==='over'||myBingoLetters[idx])return;
+      const lineId=validateSelectedLine();
+      if(lineId&&!usedLines.has(lineId)){
+        myBingoLetters[idx]=true;usedLines.add(lineId);selectedCells=new Set();
+        showToast('Letter '+BINGO[idx]+' cancelled!',false);
+      }else{
+        const last=myBingoLetters.lastIndexOf(true);
+        if(last>=0){myBingoLetters[last]=false;showToast('Invalid line! '+BINGO[last]+' restored.',true)}
+        else showToast('Select a complete line first!',true);
+        selectedCells=new Set();
       }
-
-      for (let c = 0; c < size; c++) {
-        let ok = true;
-        for (let r = 0; r < size; r++) {
-          if (!crossed.has(grid[r][c])) { ok = false; break; }
-        }
-        if (ok) completed.add('c' + c);
-      }
-
-      let d0 = true, d1 = true;
-      for (let i = 0; i < size; i++) {
-        if (!crossed.has(grid[i][i])) d0 = false;
-        if (!crossed.has(grid[i][size - 1 - i])) d1 = false;
-      }
-      if (d0) completed.add('d0');
-      if (d1) completed.add('d1');
-
-      return completed;
-    }
-
-    function getCellsInLine(lineId, size) {
-      const cells = new Set();
-      if (lineId.startsWith('r')) {
-        const r = parseInt(lineId.slice(1));
-        for (let c = 0; c < size; c++) cells.add(r + ',' + c);
-      } else if (lineId.startsWith('c')) {
-        const c = parseInt(lineId.slice(1));
-        for (let r = 0; r < size; r++) cells.add(r + ',' + c);
-      } else if (lineId === 'd0') {
-        for (let i = 0; i < size; i++) cells.add(i + ',' + i);
-      } else if (lineId === 'd1') {
-        for (let i = 0; i < size; i++) cells.add(i + ',' + (size - 1 - i));
-      }
-      return cells;
-    }
-
-    function getCompletedCellSet(completedLines, size) {
-      const all = new Set();
-      for (const lineId of completedLines) {
-        for (const key of getCellsInLine(lineId, size)) all.add(key);
-      }
-      return all;
-    }
-
-    function nextCancelIdx() {
-      for (let i = 0; i < 5; i++) {
-        if (!myBingoLetters[i]) return i;
-      }
-      return -1;
-    }
-
-    function computeCellSize(forResult) {
-      if (forResult) {
-        return Math.max(20, Math.min(32, Math.floor(280 / gridSize)));
-      }
-      const maxPx = Math.min(420, window.innerWidth - 100);
-      return Math.max(24, Math.min(50, Math.floor(maxPx / (gridSize + 1))));
-    }
-
-    function showToast(msg, isPenalty) {
-      const el = document.createElement('div');
-      el.className = 'toast' + (isPenalty ? ' penalty' : '');
-      el.textContent = msg;
-      document.body.appendChild(el);
-      setTimeout(() => {
-        el.style.opacity = '0';
-        setTimeout(() => el.remove(), 400);
-      }, 2000);
-    }
-
-    /* ═══════════════════ SETUP UI ═══════════════════ */
-
-    function updateGridDisplay() {
-      const v = document.getElementById('gridSlider').value;
-      gridSize = parseInt(v);
-      document.getElementById('gridDisplay').textContent = v + ' × ' + v;
-    }
-
-    function setMode(mode) {
-      gameMode = mode;
-      document.querySelectorAll('#modeToggle .modeBtn').forEach((b, i) => {
-        b.classList.toggle('selected', (i === 0 && mode === 'classic') || (i === 1 && mode === 'clash'));
-      });
-      document.getElementById('firstTurnSection').classList.toggle('hidden', mode === 'clash');
-      document.getElementById('modeHint').textContent =
-        mode === 'classic'
-          ? 'Turn-based — host chooses who goes first.'
-          : 'Both players call a number each round simultaneously.';
-    }
-
-    function setFirstTurn(hostFirst) {
-      hostGoesFirst = hostFirst;
-      document.querySelectorAll('#firstTurnToggle .modeBtn').forEach((b, i) => {
-        b.classList.toggle('selected', (i === 0 && hostFirst) || (i === 1 && !hostFirst));
-      });
-    }
-
-    function launchGame() {
-      gridSize = parseInt(document.getElementById('gridSlider').value);
-      document.getElementById('setupError').textContent = '';
-      createRoom();
-    }
-
-    /* ═══════════════════ TURN CREDENTIALS ═══════════════════ */
-
-    async function fetchIceServers() {
-      try {
-        const resp = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
-        if (!resp.ok) throw new Error('TURN credential fetch failed');
-        return { iceServers: await resp.json() };
-      } catch (e) {
-        console.warn('TURN credential fetch failed, using fallback:', e);
-        return {
-          iceServers: [
-            { urls: 'stun:stun.relay.metered.ca:80' },
-            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
-            { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
-            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
-            { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
-          ]
-        };
-      }
-    }
-
-    /* ═══════════════════ PEERJS ═══════════════════ */
-
-    function generateRoomId() {
-      const ch = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      let id = 'bng-';
-      for (let i = 0; i < 8; i++) id += ch[Math.floor(Math.random() * ch.length)];
-      return id;
-    }
-
-    async function createRoom() {
-      const roomId = generateRoomId();
-      showScreen('lobbyScreen');
-      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyText">Creating room...</p>';
-
-      const iceConfig = await fetchIceServers();
-      peer = new Peer(roomId, { config: iceConfig });
-      isHost = true;
-
-      peer.on('open', id => {
-        const link = location.origin + location.pathname + '#room=' + id;
-        document.getElementById('lobbyContent').innerHTML =
-          '<p class="lobbyText">Share this link with your opponent:</p>' +
-          '<div class="lobbyLinkWrap">' +
-          '<input class="lobbyLinkInput" id="roomLink" value="' + link + '" readonly>' +
-          '<button class="lobbyCopyBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
-          '</div>' +
-          '<p class="lobbyWaiting">Waiting for opponent to join...</p>';
-      });
-
-      peer.on('connection', connection => {
-        conn = connection;
-        conn.on('open', () => {
-          conn.send({ type: 'setup', gridSize, gameMode, hostGoesFirst });
-          startFill();
-        });
-        conn.on('data', handleData);
-        conn.on('close', handleDisconnect);
-      });
-
-      peer.on('error', err => {
-        document.getElementById('lobbyContent').innerHTML = '<p class="lobbyError">Error: ' + err.message + '</p>';
-      });
-    }
-
-    async function joinRoom(roomId) {
-      lastRoomId = roomId;
-      if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
-
-      showScreen('lobbyScreen');
-      document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connecting to room...</p>';
-
-      const iceConfig = await fetchIceServers();
-      peer = new Peer({ config: iceConfig });
-      isHost = false;
-
-      joinTimer = setTimeout(() => {
-        document.getElementById('lobbyContent').innerHTML =
-          '<p class="lobbyError">Connection timed out.</p>' +
-          '<p style="font-size:13px;opacity:0.7;margin-bottom:14px;">The host may have closed their tab.</p>' +
-          '<button class="lobbyCopyBtn" style="margin-top:4px" onclick="retryJoin()">Try Again</button>';
-      }, 15000);
-
-      peer.on('open', () => {
-        conn = peer.connect(roomId, { reliable: true });
-        conn.on('open', () => {
-          if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
-          document.getElementById('lobbyContent').innerHTML = '<p class="lobbyWaiting">Connected! Starting game...</p>';
-        });
-        conn.on('data', handleData);
-        conn.on('close', handleDisconnect);
-      });
-
-      peer.on('error', () => {
-        if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
-        document.getElementById('lobbyContent').innerHTML =
-          '<p class="lobbyError">Could not connect. The room may no longer exist.</p>' +
-          '<button class="lobbyCopyBtn" style="margin-top:12px" onclick="retryJoin()">Try Again</button>';
-      });
-    }
-
-    function retryJoin() {
-      if (peer) { peer.destroy(); peer = null; }
-      conn = null;
-      joinRoom(lastRoomId);
-    }
-
-    function copyLink() {
-      const inp = document.getElementById('roomLink');
-      inp.select();
-      navigator.clipboard.writeText(inp.value).then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy', 1500);
-      });
-    }
-
-    function handleDisconnect() {
-      if (gamePhase !== 'over') alert('Opponent disconnected.');
-    }
-
-    function backToSetup() {
-      if (peer) { peer.destroy(); peer = null; }
-      conn = null;
-      gamePhase = 'setup';
-      showScreen('setupScreen');
-    }
-
-    /* ═══════════════════ DATA HANDLER ═══════════════════ */
-
-    function handleData(data) {
-      switch (data.type) {
-        case 'setup':
-          gridSize = data.gridSize;
-          gameMode = data.gameMode;
-          hostGoesFirst = data.hostGoesFirst;
-          startFill();
-          break;
-
-        case 'ready':
-          oppGrid = data.grid;
-          oppReady = true;
-          document.getElementById('readyStatus').textContent = 'Opponent is ready!';
-          checkBothReady();
-          break;
-
-        case 'call':
-          processCalledNumber(data.number);
-          if (gameMode === 'classic') {
-            myTurn = true;
-            updateGameStatus();
-            updateGuessUI();
-          }
-          break;
-
-        case 'clashCall':
-          oppClashCall = data.number;
-          if (myClashCall !== null) resolveClash();
-          else updateGameStatus();
-          break;
-
-        case 'bingo':
-          if (gamePhase === 'over') break;
-          gamePhase = 'over';
-          showResult(false);
-          break;
-
-        case 'premature':
-          showToast('Opponent called BINGO prematurely!', false);
-          break;
-
-        case 'rematch':
-          startFill();
-          break;
-      }
-    }
-
-    /* ═══════════════════ FILL PHASE ═══════════════════ */
-
-    function startFill() {
-      gamePhase = 'fill';
-      myGrid = generateGrid(gridSize);
-      oppGrid = [];
-      crossedNumbers = new Set();
-      calledOrder = [];
-      myCompletedLines = new Set();
-      myBingoLetters = [false, false, false, false, false];
-      pendingCancels = 0;
-      swapFirst = -1;
-      myReady = false;
-      oppReady = false;
-      myTurn = false;
-      myClashCall = null;
-      oppClashCall = null;
-
-      const modeLabel = gameMode === 'classic' ? 'Classic' : 'Clash';
-      document.getElementById('fillSub').textContent =
-        gridSize + '×' + gridSize + ' · ' + modeLabel + ' · Arrange your numbers';
-
-      document.getElementById('readyBtn').disabled = false;
-      document.getElementById('readyStatus').textContent = '';
-
-      showScreen('fillScreen');
-      renderFillGrid();
-    }
-
-    function renderFillGrid() {
-      const cs = computeCellSize(false);
-      const area = document.getElementById('fillGridArea');
-      area.innerHTML = '';
-
-      const wrap = document.createElement('div');
-      wrap.className = 'grid-wrap';
-
-      const bingoCol = document.createElement('div');
-      bingoCol.className = 'bingo-col';
-      for (let r = 0; r < gridSize; r++) {
-        const el = document.createElement('div');
-        el.className = 'bingo-letter';
-        el.style.width = (cs * 0.7) + 'px';
-        el.style.height = cs + 'px';
-        el.style.fontSize = Math.max(12, cs * 0.38) + 'px';
-        if (r < 5) el.textContent = BINGO[r];
-        bingoCol.appendChild(el);
-      }
-      wrap.appendChild(bingoCol);
-
-      const grid = document.createElement('div');
-      grid.className = 'grid-container';
-      grid.style.gridTemplateColumns = 'repeat(' + gridSize + ',' + cs + 'px)';
-      grid.style.gridTemplateRows = 'repeat(' + gridSize + ',' + cs + 'px)';
-
-      for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-          const cell = document.createElement('div');
-          cell.className = 'grid-cell';
-          cell.textContent = myGrid[r][c];
-          cell.style.fontSize = Math.max(9, cs * 0.32) + 'px';
-          const idx = r * gridSize + c;
-          cell.onclick = () => handleFillClick(idx);
-          if (idx === swapFirst) cell.classList.add('swap-selected');
-          grid.appendChild(cell);
-        }
-      }
-      wrap.appendChild(grid);
-      area.appendChild(wrap);
-    }
-
-    function handleFillClick(idx) {
-      if (myReady) return;
-      if (swapFirst === -1) {
-        swapFirst = idx;
-      } else if (swapFirst === idx) {
-        swapFirst = -1;
-      } else {
-        const r1 = Math.floor(swapFirst / gridSize), c1 = swapFirst % gridSize;
-        const r2 = Math.floor(idx / gridSize), c2 = idx % gridSize;
-        [myGrid[r1][c1], myGrid[r2][c2]] = [myGrid[r2][c2], myGrid[r1][c1]];
-        swapFirst = -1;
-      }
-      renderFillGrid();
-    }
-
-    function shuffleGrid() {
-      if (myReady) return;
-      myGrid = generateGrid(gridSize);
-      swapFirst = -1;
-      renderFillGrid();
-    }
-
-    function clearSwapSelection() {
-      swapFirst = -1;
-      renderFillGrid();
-    }
-
-    function confirmReady() {
-      myReady = true;
-      document.getElementById('readyBtn').disabled = true;
-      document.getElementById('readyStatus').textContent = 'Waiting for opponent...';
-      conn.send({ type: 'ready', grid: myGrid });
-      checkBothReady();
-    }
-
-    function checkBothReady() {
-      if (myReady && oppReady) startGame();
-    }
-
-    /* ═══════════════════ GAME ═══════════════════ */
-
-    function startGame() {
-      gamePhase = 'game';
-      showScreen('gameScreen');
-
-      if (gameMode === 'classic') {
-        myTurn = isHost ? hostGoesFirst : !hostGoesFirst;
-      }
-
-      document.getElementById('gameResult').innerHTML = '';
-      document.getElementById('gameActions').style.display = 'none';
-      document.getElementById('bingoBtn').style.display = '';
-
-      updateGameStatus();
-      renderGameGrid();
-      updateGuessUI();
-      updateCalledList();
-      updateBingoBtn();
-      updatePendingIndicator();
-    }
-
-    function updateGameStatus() {
-      const el = document.getElementById('gameStatus');
-      if (gamePhase === 'over') {
-        el.textContent = '';
-        el.className = 'game-status';
-        return;
-      }
-      if (gameMode === 'classic') {
-        if (myTurn) {
-          el.textContent = 'Your turn — call a number!';
-          el.className = 'game-status your-turn';
-        } else {
-          el.textContent = "Opponent's turn...";
-          el.className = 'game-status opp-turn';
-        }
-      } else {
-        if (myClashCall !== null && oppClashCall === null) {
-          el.textContent = 'Waiting for opponent...';
-          el.className = 'game-status waiting';
-        } else {
-          el.textContent = 'Both call a number!';
-          el.className = 'game-status your-turn';
-        }
-      }
-    }
-
-    function updateGuessUI() {
-      const input = document.getElementById('guessInput');
-      const btn = document.getElementById('callBtn');
-      const area = document.getElementById('guessArea');
-
-      if (gamePhase === 'over') {
-        area.style.display = 'none';
-        return;
-      }
-      area.style.display = '';
-
-      input.max = gridSize * gridSize;
-      input.placeholder = '1–' + (gridSize * gridSize);
-
-      if (gameMode === 'classic') {
-        btn.disabled = !myTurn;
-        input.disabled = !myTurn;
-        btn.textContent = 'Call';
-      } else {
-        const sent = myClashCall !== null;
-        btn.disabled = sent;
-        input.disabled = sent;
-        btn.textContent = sent ? 'Waiting...' : 'Call';
-      }
-    }
-
-    function renderGameGrid() {
-      const cs = computeCellSize(false);
-      const area = document.getElementById('gameGridArea');
-      area.innerHTML = '';
-
-      const completedCells = getCompletedCellSet(myCompletedLines, gridSize);
-
-      const wrap = document.createElement('div');
-      wrap.className = 'grid-wrap';
-
-      const bingoCol = document.createElement('div');
-      bingoCol.className = 'bingo-col';
-      const nextIdx = nextCancelIdx();
-      for (let r = 0; r < gridSize; r++) {
-        const el = document.createElement('div');
-        el.className = 'bingo-letter';
-        el.style.width = (cs * 0.7) + 'px';
-        el.style.height = cs + 'px';
-        el.style.fontSize = Math.max(14, cs * 0.42) + 'px';
-        if (r < 5) {
-          el.textContent = BINGO[r];
-          if (myBingoLetters[r]) {
-            el.classList.add('cancelled');
-          } else if (pendingCancels > 0 && r === nextIdx) {
-            el.classList.add('eligible');
-            el.onclick = () => cancelLetter(r);
-          }
-        }
-        bingoCol.appendChild(el);
-      }
-      wrap.appendChild(bingoCol);
-
-      const grid = document.createElement('div');
-      grid.className = 'grid-container';
-      grid.style.gridTemplateColumns = 'repeat(' + gridSize + ',' + cs + 'px)';
-      grid.style.gridTemplateRows = 'repeat(' + gridSize + ',' + cs + 'px)';
-
-      const fontSize = Math.max(9, cs * (gridSize >= 8 ? 0.28 : 0.32)) + 'px';
-      const afterSize = Math.max(12, cs * 0.45) + 'px';
-
-      for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-          const cell = document.createElement('div');
-          cell.className = 'grid-cell';
-          cell.textContent = myGrid[r][c];
-          cell.style.fontSize = fontSize;
-
-          if (crossedNumbers.has(myGrid[r][c])) {
-            cell.classList.add('crossed');
-            cell.style.setProperty('--after-size', afterSize);
-          }
-          if (completedCells.has(r + ',' + c)) {
-            cell.classList.add('line-complete');
-          }
-          grid.appendChild(cell);
-        }
-      }
-      wrap.appendChild(grid);
-      area.appendChild(wrap);
-    }
-
-    function cancelLetter(idx) {
-      if (gamePhase === 'over') return;
-      if (pendingCancels <= 0) return;
-      if (idx !== nextCancelIdx()) return;
-      if (myBingoLetters[idx]) return;
-
-      myBingoLetters[idx] = true;
-      pendingCancels--;
-
-      renderGameGrid();
-      updateBingoBtn();
-      updatePendingIndicator();
-    }
-
-    function handleCall() {
-      if (gamePhase === 'over') return;
-      const input = document.getElementById('guessInput');
-      const num = parseInt(input.value);
-      const max = gridSize * gridSize;
-
-      if (isNaN(num) || num < 1 || num > max) {
-        input.style.borderColor = '#f87171';
-        setTimeout(() => input.style.borderColor = '', 800);
-        return;
-      }
-
-      if (crossedNumbers.has(num)) {
-        showToast('Number ' + num + ' was already called!', true);
-        input.style.borderColor = '#f87171';
-        setTimeout(() => input.style.borderColor = '', 800);
-        return;
-      }
-
-      input.value = '';
-
-      if (gameMode === 'classic') {
-        if (!myTurn) return;
-        conn.send({ type: 'call', number: num });
-        processCalledNumber(num);
-        myTurn = false;
-        updateGameStatus();
-        updateGuessUI();
-      } else {
-        if (myClashCall !== null) return;
-        myClashCall = num;
-        conn.send({ type: 'clashCall', number: num });
-        updateGuessUI();
-        updateGameStatus();
-        if (oppClashCall !== null) resolveClash();
-      }
-    }
-
-    function resolveClash() {
-      const nums = [myClashCall];
-      if (oppClashCall !== myClashCall) nums.push(oppClashCall);
-
-      for (const n of nums) processCalledNumber(n);
-
-      myClashCall = null;
-      oppClashCall = null;
-      updateGuessUI();
-      updateGameStatus();
-    }
-
-    function processCalledNumber(num) {
-      if (crossedNumbers.has(num)) return;
-      crossedNumbers.add(num);
-      calledOrder.push(num);
-
-      const newLines = checkLines(myGrid, crossedNumbers);
-      let newCount = 0;
-      for (const line of newLines) {
-        if (!myCompletedLines.has(line)) {
-          myCompletedLines.add(line);
-          newCount++;
-        }
-      }
-      if (newCount > 0) {
-        pendingCancels += newCount;
-        showToast(
-          newCount === 1
-            ? 'Line completed! Cancel a BINGO letter!'
-            : newCount + ' lines completed! Cancel BINGO letters!',
-          false
-        );
-      }
-
-      renderGameGrid();
-      updateCalledList();
-      updateBingoBtn();
-      updatePendingIndicator();
-    }
-
-    function updateCalledList() {
-      const list = document.getElementById('calledList');
-      list.innerHTML = '';
-      for (let i = 0; i < calledOrder.length; i++) {
-        const el = document.createElement('div');
-        el.className = 'called-num';
-        if (i === calledOrder.length - 1) el.classList.add('latest');
-        el.textContent = calledOrder[i];
-        list.appendChild(el);
-      }
-    }
-
-    function updatePendingIndicator() {
-      const el = document.getElementById('pendingIndicator');
-      if (gamePhase === 'over') { el.textContent = ''; return; }
-      if (pendingCancels > 0) {
-        el.textContent = pendingCancels + ' line' + (pendingCancels > 1 ? 's' : '') +
-          ' completed — click the glowing letter!';
-      } else {
-        const cancelled = myBingoLetters.filter(Boolean).length;
-        if (cancelled > 0 && cancelled < 5) {
-          el.textContent = cancelled + '/5 BINGO letters cancelled';
-        } else if (cancelled === 5) {
-          el.textContent = 'All letters cancelled — press BINGO!';
-        } else {
-          el.textContent = '';
-        }
-      }
-    }
-
-    function updateBingoBtn() {
-      const btn = document.getElementById('bingoBtn');
-      const allCancelled = myBingoLetters.every(Boolean);
-      btn.classList.toggle('ready', allCancelled);
-      btn.style.display = gamePhase === 'over' ? 'none' : '';
-    }
-
-    function handleBingo() {
-      if (gamePhase === 'over') return;
-
-      const allCancelled = myBingoLetters.every(Boolean);
-      if (allCancelled) {
-        gamePhase = 'over';
-        conn.send({ type: 'bingo', bingoLetters: myBingoLetters.slice() });
-        showResult(true);
-      } else {
-        const lastIdx = myBingoLetters.lastIndexOf(true);
-        if (lastIdx >= 0) {
-          myBingoLetters[lastIdx] = false;
-          showToast('Premature BINGO! Letter ' + BINGO[lastIdx] + ' restored.', true);
-        } else {
-          showToast('No letters cancelled yet!', true);
-        }
-        conn.send({ type: 'premature' });
-
-        renderGameGrid();
-        updateBingoBtn();
-        updatePendingIndicator();
-
-        const btn = document.getElementById('bingoBtn');
-        btn.style.background = 'linear-gradient(135deg, #991b1b, #7f1d1d)';
-        setTimeout(() => { btn.style.background = ''; }, 500);
-      }
-    }
-
-    /* ═══════════════════ RESULTS ═══════════════════ */
-
-    function showResult(iWon) {
-      gamePhase = 'over';
-
-      document.getElementById('guessArea').style.display = 'none';
-      document.getElementById('bingoBtn').style.display = 'none';
-      document.getElementById('pendingIndicator').textContent = '';
+      renderGameGrid();updateBingoBtn();updatePendingIndicator();updateSelectionHint()}
+
+    function updateSelectionHint(){
+      const e=document.getElementById('selectionHint');if(gamePhase==='over'||myFinished){e.textContent='';return}
+      const n=selectedCells.size;
+      if(n===0){e.textContent='Click crossed cells to select a line';return}
+      const lid=validateSelectedLine();
+      if(lid&&!usedLines.has(lid))e.textContent='✓ Valid line selected — click a BINGO letter!';
+      else if(lid&&usedLines.has(lid)){e.textContent='⚠ That line is already used. Select a different one.'}
+      else e.textContent=n+'/'+gridSize+' cells selected — complete the line'}
+
+    /* ═══════ CALLING ═══════ */
+    function handleCall(){if(gamePhase==='over'||myFinished||gameMode==='randomcall')return;
+      const inp=document.getElementById('guessInput'),num=parseInt(inp.value),mx=gridSize*gridSize;
+      if(isNaN(num)||num<1||num>mx){inp.style.borderColor='#f87171';setTimeout(()=>inp.style.borderColor='',800);return}
+      if(crossedNumbers.has(num)){showToast(num+' already called!',true);inp.style.borderColor='#f87171';setTimeout(()=>inp.style.borderColor='',800);return}
+      inp.value='';
+      if(gameMode==='classic'){if(!myTurn)return;if(isHost||isCPUMode){broadcast({type:'numberCalled',number:num,callerIdx:myPlayerIdx});processCalledNumber(num);cpuProcessNumber(num);advanceTurn()}else hostConn.send({type:'call',number:num})}
+      else{if(myClashCall!==null)return;myClashCall=num;if(isHost||isCPUMode){hostClashCalls[myPlayerIdx]=num;checkClashComplete()}else hostConn.send({type:'clashCall',number:num});updateGuessUI();updateGameStatus()}}
+
+    function processCalledNumber(num){if(crossedNumbers.has(num))return;crossedNumbers.add(num);calledOrder.push(num);
+      if(gameMode==='randomcall')document.getElementById('randomCallNumber').textContent=num;
+      renderGameGrid();updateCalledList();updateBingoBtn();updatePendingIndicator();updateSelectionHint();
+      if(housieEnabled&&!myFinished)renderActions()}
+    function updateCalledList(){const l=document.getElementById('calledList');l.innerHTML='';for(let i=0;i<calledOrder.length;i++){const e=document.createElement('div');e.className='called-num';if(i===calledOrder.length-1)e.classList.add('latest');e.textContent=calledOrder[i];l.appendChild(e)}}
+
+    /* ═══════ BINGO ═══════ */
+    function handleBingo(){if(gamePhase==='over'||myFinished)return;
+      if(myBingoLetters.every(Boolean)){if(isHost||isCPUMode)handleBingoDeclaration(myPlayerIdx);else hostConn.send({type:'bingo'})}
+      else{const li=myBingoLetters.lastIndexOf(true);if(li>=0){myBingoLetters[li]=false;showToast('Premature! '+BINGO[li]+' restored.',true)}else showToast('Cancel all letters first!',true);
+        if(!isCPUMode){if(isHost)broadcast({type:'playerPremature',idx:myPlayerIdx});else hostConn.send({type:'premature'})}
+        renderGameGrid();updateBingoBtn();updatePendingIndicator();
+        const b=document.getElementById('bingoBtn');b.style.background='linear-gradient(135deg,#991b1b,#7f1d1d)';setTimeout(()=>b.style.background='',500)}}
+
+    function handleBingoDeclaration(idx){
+      if(finishedPlayers.find(f=>f.idx===idx))return;
+      bingoCountRound++;const rank=bingoCountRound;finishedPlayers.push({idx,rank});activePlayers=activePlayers.filter(i=>i!==idx);
+      if(idx===myPlayerIdx)myFinished=true;if(isCPUMode&&idx===1)cpuFinished=true;
+      if(housieEnabled){const pts=rank===1?25:rank===2?20:rank===3?15:rank===4?10:5;if(!playerScores[idx])playerScores[idx]=0;playerScores[idx]+=pts;
+        if(!isCPUMode)broadcast({type:'actionClaimed',actionId:'bingo_'+rank,idx,pts,label:'BINGO #'+rank})}
+      if(!isCPUMode)broadcast({type:'playerBingo',idx,rank});
+      showToast(idx===myPlayerIdx?'BINGO! #'+rank:playerName(idx)+' BINGO #'+rank,false);
+      if(turnIndex>=activePlayers.length)turnIndex=0;
+      updateStandings();updateGuessUI();updateBingoBtn();if(housieEnabled)renderActions();
+
+      const need=playerCount<=2?1:playerCount-1;
+      if(finishedPlayers.length>=need){
+        for(const i of activePlayers)if(!finishedPlayers.find(f=>f.idx===i))finishedPlayers.push({idx:i,rank:finishedPlayers.length+1});
+        stopRandomCalling();
+        if(!isCPUMode)broadcast({type:'gameOver',rankings:finishedPlayers});
+        showRoundEnd();
+      }else if((isHost||isCPUMode)&&gameMode==='classic'&&currentTurnPlayer===idx)advanceTurn()}
+
+    /* ═══════ HOUSIE ACTIONS ═══════ */
+    function renderActions(){
+      const a=document.getElementById('actionsArea');if(!housieEnabled){a.classList.add('hidden');return}a.classList.remove('hidden');a.innerHTML='';
+      for(const act of HOUSIE_ACTIONS){
+        const btn=document.createElement('button');btn.className='action-btn';
+        const claimed=claimedActions[act.id];
+        if(claimed){btn.classList.add(claimed.idx===myPlayerIdx?'claimed-me':'claimed-other');btn.innerHTML='<span>'+act.label+'</span><span class="pts">'+act.pts+'</span>'+(claimed.idx!==myPlayerIdx?' · '+playerName(claimed.idx):' ✓')}
+        else{const ok=checkHousieAction(act.id)&&!myFinished;if(ok)btn.classList.add('enabled');btn.innerHTML='<span>'+act.label+'</span><span class="pts">'+act.pts+'</span>';
+          if(ok)btn.onclick=()=>claimAction(act.id)}
+        a.appendChild(btn)}}
+
+    function claimAction(actionId){
+      if(claimedActions[actionId]||myFinished)return;
+      if(isHost||isCPUMode)hostProcessActionClaim(myPlayerIdx,actionId);
+      else hostConn.send({type:'claimAction',actionId})}
+
+    function hostProcessActionClaim(idx,actionId){
+      if(claimedActions[actionId])return;
+      const act=HOUSIE_ACTIONS.find(a=>a.id===actionId);if(!act)return;
+      claimedActions[actionId]={idx,pts:act.pts};
+      if(!playerScores[idx])playerScores[idx]=0;playerScores[idx]+=act.pts;
+      broadcast({type:'actionClaimed',actionId,idx,pts:act.pts,label:act.label});
+      renderActions();updateStandings();
+      showToast(playerName(idx)+' claimed '+act.label+'! +'+act.pts,false)}
+
+    /* ═══════ UI UPDATES ═══════ */
+    function updateGameStatus(){const e=document.getElementById('gameStatus');if(gamePhase==='over'){e.textContent='';e.className='game-status';return}
+      if(myFinished){e.textContent='You finished! Watching...';e.className='game-status waiting';return}
+      if(gameMode==='randomcall'){e.textContent='Numbers being called...';e.className='game-status waiting';return}
+      if(gameMode==='classic'){if(myTurn){e.textContent='Your turn!';e.className='game-status your-turn'}else{e.textContent=playerName(currentTurnPlayer)+"'s turn";e.className='game-status opp-turn'}}
+      else{if(myClashCall!==null){e.textContent='Waiting for others...';e.className='game-status waiting'}else{e.textContent='Call a number!';e.className='game-status your-turn'}}}
+    function updateGuessUI(){const inp=document.getElementById('guessInput'),btn=document.getElementById('callBtn'),area=document.getElementById('guessArea');
+      if(gamePhase==='over'||myFinished||gameMode==='randomcall'){area.style.display='none';return}area.style.display='';
+      inp.max=gridSize*gridSize;inp.placeholder='1–'+gridSize*gridSize;
+      if(gameMode==='classic'){btn.disabled=!myTurn;inp.disabled=!myTurn;btn.textContent='Call'}
+      else{const s=myClashCall!==null;btn.disabled=s;inp.disabled=s;btn.textContent=s?'Waiting...':'Call'}}
+    function updatePendingIndicator(){const e=document.getElementById('pendingIndicator');if(gamePhase==='over'||myFinished){e.textContent='';return}
+      const cnt=myBingoLetters.filter(Boolean).length;
+      if(cnt>0&&cnt<5)e.textContent=cnt+'/5 BINGO letters cancelled';
+      else if(cnt===5)e.textContent='All cancelled — press BINGO!';
+      else e.textContent=''}
+    function updateBingoBtn(){const b=document.getElementById('bingoBtn');if(gamePhase==='over'||myFinished){b.style.display='none';return}b.style.display='';b.classList.toggle('ready',myBingoLetters.every(Boolean));
+      if(housieEnabled){const n=bingoCountRound+1;const pts=n===1?25:n===2?20:n===3?15:n===4?10:5;b.textContent='BINGO! ('+pts+'pts)'}}
+    function updateStandings(){const a=document.getElementById('standingsArea');if(playerCount<=2&&!housieEnabled&&!isCPUMode){a.innerHTML='';return}
+      let h='';for(let i=0;i<playerCount;i++){const f=finishedPlayers.find(x=>x.idx===i);const me=i===myPlayerIdx;const cur=gameMode==='classic'&&currentTurnPlayer===i&&!f;
+        let cls='standing-item';if(me)cls+=' me';if(f)cls+=' finished';if(cur)cls+=' current-turn';
+        const medal=f?(f.rank<=3?['🥇','🥈','🥉'][f.rank-1]:'#'+f.rank):(cur?'→':'');
+        const status=f?'BINGO #'+f.rank:(cur?'calling...':'');
+        const score=housieEnabled?'<span class="standing-score">'+(playerScores[i]||0)+'pts</span>':'';
+        h+='<div class="'+cls+'"><span class="standing-rank">'+medal+'</span><span class="standing-name">'+playerName(i)+'</span>'+score+'<span class="standing-status">'+status+'</span></div>'}
+      a.innerHTML=h}
+
+    /* ═══════ ROUND END / RESULTS ═══════ */
+    function showRoundEnd(){
+      gamePhase='over';stopRandomCalling();
+      document.getElementById('guessArea').style.display='none';document.getElementById('bingoBtn').style.display='none';
+      document.getElementById('pendingIndicator').textContent='';document.getElementById('selectionHint').textContent='';
+      document.getElementById('standingsArea').innerHTML='';document.getElementById('actionsArea').classList.add('hidden');
       updateGameStatus();
 
-      const resultDiv = document.getElementById('gameResult');
-      resultDiv.innerHTML = '';
+      if(housieEnabled&&currentRound<totalRounds){showBetweenRounds();return}
+      showFinalResult()}
 
-      const card = document.createElement('div');
-      card.className = 'results-card';
+    function showBetweenRounds(){
+      showScreen('betweenRoundsScreen');
+      const sorted=Object.entries(playerScores).map(([i,s])=>({idx:+i,score:s})).sort((a,b)=>b.score-a.score);
+      let h='<div class="results-card"><h2>Round '+currentRound+' Complete</h2>';
+      h+='<div class="results-verdict">Numbers called: '+calledOrder.length+' / '+gridSize*gridSize+'</div>';
+      h+='<div class="results-rankings">';
+      const medals=['🥇','🥈','🥉'];
+      sorted.forEach((p,i)=>{h+='<div class="rank-item"><span class="rank-medal">'+(i<3?medals[i]:'#'+(i+1))+'</span><span>'+(p.idx===myPlayerIdx?'<b>'+playerName(p.idx)+'</b>':playerName(p.idx))+'</span><span class="rank-score">'+p.score+' pts</span></div>'});
+      h+='</div></div>';
+      document.getElementById('betweenRoundsContent').innerHTML=h;
+      document.getElementById('nextRoundBtn').style.display=(isHost||isCPUMode)?'':'none'}
 
-      const h2 = document.createElement('h2');
-      h2.textContent = iWon ? 'BINGO! You Win!' : 'Opponent called BINGO!';
-      h2.style.color = iWon ? '#4ade80' : '#f87171';
-      card.appendChild(h2);
+    function hostStartNextRound(){currentRound++;if(!isCPUMode)broadcast({type:'nextRound'});startFill()}
 
-      const verdict = document.createElement('div');
-      verdict.className = 'results-verdict';
-      verdict.textContent = 'Numbers called: ' + calledOrder.length + ' / ' + (gridSize * gridSize);
-      card.appendChild(verdict);
+    function showFinalResult(){
+      showScreen('gameScreen');gamePhase='over';
+      document.getElementById('guessArea').style.display='none';document.getElementById('bingoBtn').style.display='none';
+      document.getElementById('pendingIndicator').textContent='';document.getElementById('selectionHint').textContent='';
+      document.getElementById('standingsArea').innerHTML='';document.getElementById('actionsArea').classList.add('hidden');
+      document.getElementById('roundInfo').textContent='';document.getElementById('randomCallDisplay').style.display='none';
+      updateGameStatus();
 
-      const gridsDiv = document.createElement('div');
-      gridsDiv.className = 'results-grids';
+      const rd=document.getElementById('gameResult');rd.innerHTML='';
+      const card=document.createElement('div');card.className='results-card';
 
-      const mySection = document.createElement('div');
-      mySection.className = 'results-grid-section';
-      const myLabel = document.createElement('div');
-      myLabel.className = 'results-grid-label';
-      myLabel.textContent = 'Your Grid';
-      mySection.appendChild(myLabel);
-      mySection.appendChild(buildResultGrid(myGrid));
-      mySection.appendChild(buildResultBingoRow(myGrid));
-      gridsDiv.appendChild(mySection);
-
-      if (oppGrid.length > 0) {
-        const oppSection = document.createElement('div');
-        oppSection.className = 'results-grid-section';
-        const oppLabel = document.createElement('div');
-        oppLabel.className = 'results-grid-label';
-        oppLabel.textContent = "Opponent's Grid";
-        oppSection.appendChild(oppLabel);
-        oppSection.appendChild(buildResultGrid(oppGrid));
-        oppSection.appendChild(buildResultBingoRow(oppGrid));
-        gridsDiv.appendChild(oppSection);
+      if(housieEnabled){
+        const sorted=Object.entries(playerScores).map(([i,s])=>({idx:+i,score:s})).sort((a,b)=>b.score-a.score);
+        const myR=sorted.findIndex(p=>p.idx===myPlayerIdx);
+        const h2=document.createElement('h2');h2.textContent=myR===0?'You Win!':'Game Over';h2.style.color=myR===0?'#4ade80':'#fbbf24';card.appendChild(h2);
+        const v=document.createElement('div');v.className='results-verdict';v.textContent=totalRounds+' round'+(totalRounds>1?'s':'')+' played';card.appendChild(v);
+        const rk=document.createElement('div');rk.className='results-rankings';
+        sorted.forEach((p,i)=>{const it=document.createElement('div');it.className='rank-item';it.innerHTML='<span class="rank-medal">'+(i<3?['🥇','🥈','🥉'][i]:'#'+(i+1))+'</span><span>'+(p.idx===myPlayerIdx?'<b>'+playerName(p.idx)+'</b>':playerName(p.idx))+'</span><span class="rank-score">'+p.score+' pts</span>';rk.appendChild(it)});
+        card.appendChild(rk);
+      }else{
+        const myRank=finishedPlayers.find(f=>f.idx===myPlayerIdx);const won=myRank&&myRank.rank===1;
+        const h2=document.createElement('h2');h2.textContent=won?'BINGO! You Win!':(myRank?'#'+myRank.rank:'Game Over');h2.style.color=won?'#4ade80':'#f87171';card.appendChild(h2);
+        const v=document.createElement('div');v.className='results-verdict';v.textContent='Numbers called: '+calledOrder.length+' / '+gridSize*gridSize;card.appendChild(v);
       }
 
-      card.appendChild(gridsDiv);
-      resultDiv.appendChild(card);
+      const gd=document.createElement('div');gd.className='results-grids';
+      const myS=document.createElement('div');myS.className='results-grid-section';myS.innerHTML='<div class="results-grid-label">Your Grid</div>';myS.appendChild(buildResultGrid(myGrid));myS.appendChild(buildResultBingoRow(myGrid));gd.appendChild(myS);
+      const og=isCPUMode?{1:cpuGrid}:allGrids;for(const i in og){if(+i===myPlayerIdx)continue;const g=og[i];if(!g||!g.length)continue;const s=document.createElement('div');s.className='results-grid-section';s.innerHTML='<div class="results-grid-label">'+playerName(+i)+'</div>';s.appendChild(buildResultGrid(g));s.appendChild(buildResultBingoRow(g));gd.appendChild(s)}
+      card.appendChild(gd);rd.appendChild(card);document.getElementById('gameActions').style.display='flex'}
 
-      document.getElementById('gameActions').style.display = 'flex';
-    }
+    function buildResultGrid(grid){const cs=computeCellSize(true);const cl=checkLines(grid,crossedNumbers);const cc=getCompletedCellSet(cl,gridSize);const cn=document.createElement('div');cn.className='grid-container';cn.style.gridTemplateColumns='repeat('+gridSize+','+cs+'px)';cn.style.gridTemplateRows='repeat('+gridSize+','+cs+'px)';const fs=Math.max(8,cs*.32)+'px';for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){const ce=document.createElement('div');ce.className='grid-cell';ce.textContent=grid[r][c];ce.style.fontSize=fs;if(crossedNumbers.has(grid[r][c]))ce.classList.add('crossed');if(cc.has(r+','+c))ce.classList.add('line-complete');cn.appendChild(ce)}return cn}
+    function buildResultBingoRow(grid){const lc=checkLines(grid,crossedNumbers).size;const r=document.createElement('div');r.className='results-bingo-row';for(let i=0;i<5;i++){const e=document.createElement('div');e.className='results-bingo-letter';e.textContent=BINGO[i];if(i>=lc)e.classList.add('off');r.appendChild(e)}return r}
 
-    function buildResultGrid(grid) {
-      const cs = computeCellSize(true);
-      const completedLines = checkLines(grid, crossedNumbers);
-      const completedCells = getCompletedCellSet(completedLines, gridSize);
+    function requestRematch(){if(isCPUMode){currentRound=1;startFill()}else if(isHost){currentRound=1;broadcast({type:'rematch'});startFill()}else hostConn.send({type:'rematch'})}
+    function showRules(){document.getElementById('rulesOverlay').classList.remove('hidden')}
+    function hideRules(e){if(e.target===document.getElementById('rulesOverlay')||e.target.classList.contains('rulesCloseBtn'))document.getElementById('rulesOverlay').classList.add('hidden')}
 
-      const container = document.createElement('div');
-      container.className = 'grid-container';
-      container.style.gridTemplateColumns = 'repeat(' + gridSize + ',' + cs + 'px)';
-      container.style.gridTemplateRows = 'repeat(' + gridSize + ',' + cs + 'px)';
-
-      const fontSize = Math.max(8, cs * 0.32) + 'px';
-
-      for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-          const cell = document.createElement('div');
-          cell.className = 'grid-cell';
-          cell.textContent = grid[r][c];
-          cell.style.fontSize = fontSize;
-          if (crossedNumbers.has(grid[r][c])) cell.classList.add('crossed');
-          if (completedCells.has(r + ',' + c)) cell.classList.add('line-complete');
-          container.appendChild(cell);
-        }
-      }
-      return container;
-    }
-
-    function buildResultBingoRow(grid) {
-      const completedLines = checkLines(grid, crossedNumbers);
-      const lineCount = completedLines.size;
-      const row = document.createElement('div');
-      row.className = 'results-bingo-row';
-      for (let i = 0; i < 5; i++) {
-        const el = document.createElement('div');
-        el.className = 'results-bingo-letter';
-        el.textContent = BINGO[i];
-        if (i >= lineCount) el.classList.add('off');
-        row.appendChild(el);
-      }
-      return row;
-    }
-
-    function requestRematch() {
-      conn.send({ type: 'rematch' });
-      startFill();
-    }
-
-    /* ═══════════════════ RULES ═══════════════════ */
-
-    function showRules() {
-      document.getElementById('rulesOverlay').classList.remove('hidden');
-    }
-
-    function hideRules(e) {
-      if (e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn')) {
-        document.getElementById('rulesOverlay').classList.add('hidden');
-      }
-    }
-
-    /* ═══════════════════ INIT ═══════════════════ */
-
-    (function init() {
-      const hash = location.hash;
-      if (hash.includes('room=')) {
-        const roomId = hash.split('room=')[1];
-        joinRoom(roomId);
-      }
-    })();
+    (function init(){const h=location.hash;if(h.includes('room=')){const r=h.split('room=')[1];joinRoom(r)}})();
   </script>
 </body>
-
 </html>
