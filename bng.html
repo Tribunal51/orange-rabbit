@@ -517,7 +517,7 @@
     function handleCellSelect(r,c){
       if(myFinished||gamePhase==='over')return;const key=r+','+c;
       if(selectedCells.has(key)){selectedCells.delete(key)}
-      else{selectedCells.add(key);autoSelectLine(r,c)}
+      else{selectedCells.add(key)}
       renderGameGrid();updateSelectionHint()}
     function tapGridCell(n){document.getElementById('guessInput').value=n;renderGameGrid()}
 
@@ -528,12 +528,11 @@
         myBingoLetters[idx]=true;usedLines.add(lineId);selectedCells=new Set();
         showToast('Letter '+BINGO[idx]+' cancelled!',false);
       }else{
-        const last=myBingoLetters.lastIndexOf(true);
-        if(last>=0){myBingoLetters[last]=false;showToast('Invalid line! '+BINGO[last]+' restored.',true)}
-        else showToast('Select a complete line first!',true);
+        if(housieEnabled){const pen=Math.min(playerScores[myPlayerIdx]||0,2);playerScores[myPlayerIdx]=(playerScores[myPlayerIdx]||0)-pen;showToast('Invalid line! −'+pen+' pts',true)}
+        else{const last=myBingoLetters.lastIndexOf(true);if(last>=0){myBingoLetters[last]=false;showToast('Invalid line! '+BINGO[last]+' restored.',true)}else showToast('Select a complete line first!',true)}
         selectedCells=new Set();
       }
-      renderGameGrid();updateBingoBtn();updatePendingIndicator();updateSelectionHint()}
+      renderGameGrid();updateBingoBtn();updatePendingIndicator();updateSelectionHint();if(housieEnabled)updateStandings()}
 
     function updateSelectionHint(){
       const e=document.getElementById('selectionHint');if(gamePhase==='over'||myFinished){e.textContent='';return}
