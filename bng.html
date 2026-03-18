@@ -212,7 +212,9 @@
     <div class="pending-indicator" id="pendingIndicator"></div>
     <div id="actionsArea" class="actions-area hidden"></div>
     <div id="standingsArea" class="standings-area"></div>
-    <div class="random-call-display" id="randomCallDisplay" style="display:none"><div class="random-call-number" id="randomCallNumber"></div></div>
+    <div class="random-call-display" id="randomCallDisplay" style="display:none"><div class="random-call-number" id="randomCallNumber"></div>
+      <button class="call-btn" id="nextNumBtn" onclick="handleNextNumber()" style="margin-top:8px">Next Number</button>
+      <div class="ready-status" id="nextNumStatus"></div></div>
     <div class="guess-area" id="guessArea">
       <input type="number" class="guess-input" id="guessInput" min="1" onkeydown="if(event.key==='Enter')handleCall()">
       <button class="call-btn" id="callBtn" onclick="handleCall()">Call</button></div>
@@ -263,7 +265,7 @@
     let finishedPlayers=[],allGrids={};
     let cpuGrid=[],cpuCompletedLines=new Set(),cpuBingoLetters=[false,false,false,false,false],cpuPendingCancels=0,cpuFinished=false;
     let claimedActions={},playerScores={},bingoCountRound=0;
-    let randomCallTimer=null;
+    let randomCallTimer=null,nextNumReady=new Set();
     const BINGO=['B','I','N','G','O'];
     const HOUSIE_ACTIONS=[
       {id:'first_hline',label:'1st H-Line',pts:5},{id:'first_vline',label:'1st V-Line',pts:5},
@@ -362,6 +364,7 @@
       case'bingo':handleBingoDeclaration(idx);break;
       case'premature':broadcast({type:'playerPremature',idx});break;
       case'claimAction':hostProcessActionClaim(idx,d.actionId);break;
+      case'nextReady':nextNumReady.add(idx);updateNextNumUI();checkAllNextReady();break;
       case'rematch':broadcast({type:'rematch'});startFill();break;
       case'nextRound':broadcast({type:'nextRound'});startFill();break;
     }}
@@ -387,6 +390,7 @@
       case'gameOver':finishedPlayers=d.rankings;
         if(housieEnabled&&!myFinished){const letters=myBingoLetters.filter(Boolean).length;if(!playerScores[myPlayerIdx])playerScores[myPlayerIdx]=0;playerScores[myPlayerIdx]+=letters;myFinished=true}
         showRoundEnd();break;
+      case'nextNumCalled':updateNextNumUI();break;
       case'rematch':startFill();break;
       case'nextRound':startFill();break;
     }}
@@ -439,20 +443,43 @@
         if(isHost)broadcast({type:'turn',playerIdx:currentTurnPlayer});
         if(isCPUMode&&currentTurnPlayer===1)scheduleCPUTurn();
       }else if(gameMode==='clash'){myTurn=true;if(isCPUMode)scheduleCPUClash()}
-      else if(gameMode==='randomcall'){myTurn=false;if(isHost||isCPUMode)startRandomCalling()}
+      else if(gameMode==='randomcall'){myTurn=false;startRandomCalling()}
 
       updateAll();
     }
 
-    function updateAll(){updateGameStatus();renderGameGrid();updateGuessUI();updateCalledList();updateBingoBtn();updatePendingIndicator();updateStandings();updateSelectionHint();updateUncrossedCount();if(housieEnabled)renderActions()}
+    function updateAll(){updateGameStatus();renderGameGrid();updateGuessUI();updateCalledList();updateBingoBtn();updatePendingIndicator();updateStandings();updateSelectionHint();updateUncrossedCount();updateNextNumUI();if(housieEnabled)renderActions()}
 
     /* ═══════ RANDOM CALL ═══════ */
-    function startRandomCalling(){stopRandomCalling();randomCallTimer=setInterval(()=>{if(gamePhase!=='game'){stopRandomCalling();return}
-      const n=pickRandomUncalled();if(n===null){stopRandomCalling();return}
+    function startRandomCalling(){nextNumReady=new Set();updateNextNumUI()}
+    function stopRandomCalling(){if(randomCallTimer){clearInterval(randomCallTimer);randomCallTimer=null}}
+    function handleNextNumber(){
+      if(gamePhase!=='game'||gameMode!=='randomcall'||myFinished)return;
+      if(isCPUMode){callNextRandomNumber();return}
+      if(isHost){nextNumReady.add(myPlayerIdx);checkAllNextReady()}
+      else{hostConn.send({type:'nextReady'});document.getElementById('nextNumBtn').disabled=true;document.getElementById('nextNumBtn').textContent='Waiting...'}
+    }
+    function checkAllNextReady(){
+      const active=activePlayers.filter(i=>!finishedPlayers.find(f=>f.idx===i));
+      for(const i of active)if(!nextNumReady.has(i))return;
+      callNextRandomNumber();nextNumReady=new Set();
+      broadcast({type:'nextNumCalled'});
+    }
+    function callNextRandomNumber(){
+      const n=pickRandomUncalled();if(n===null)return;
       if(!isCPUMode)broadcast({type:'numberCalled',number:n,callerIdx:-1});
       processCalledNumber(n,-1);cpuProcessNumber();
-    },3000)}
-    function stopRandomCalling(){if(randomCallTimer){clearInterval(randomCallTimer);randomCallTimer=null}}
+      updateNextNumUI();
+    }
+    function updateNextNumUI(){
+      if(gameMode!=='randomcall')return;
+      const btn=document.getElementById('nextNumBtn'),st=document.getElementById('nextNumStatus');
+      if(!btn)return;
+      if(gamePhase==='over'||myFinished){btn.style.display='none';st.textContent='';return}
+      btn.style.display='';btn.disabled=false;btn.textContent='Next Number';
+      if(!isCPUMode&&isHost){const active=activePlayers.filter(i=>!finishedPlayers.find(f=>f.idx===i));const c=nextNumReady.size;st.textContent=c>0?c+'/'+active.length+' ready':''}
+      else st.textContent='';
+    }
 
     /* ═══════ TURNS ═══════ */
     function advanceTurn(){if(gamePhase==='over'||(!isHost&&!isCPUMode))return;
@@ -662,7 +689,7 @@
     /* ═══════ UI UPDATES ═══════ */
     function updateGameStatus(){const e=document.getElementById('gameStatus');if(gamePhase==='over'){e.textContent='';e.className='game-status';return}
       if(myFinished){e.textContent='You finished! Watching...';e.className='game-status waiting';return}
-      if(gameMode==='randomcall'){e.textContent='Numbers being called — cross them off!';e.className='game-status waiting';return}
+      if(gameMode==='randomcall'){e.textContent='Click "Next Number" when ready';e.className='game-status your-turn';return}
       if(gameMode==='classic'){if(myTurn){e.textContent='Your turn!';e.className='game-status your-turn'}else{e.textContent=playerName(currentTurnPlayer)+"'s turn";e.className='game-status opp-turn'}}
       else{if(myClashCall!==null){e.textContent='Waiting for others...';e.className='game-status waiting'}else{e.textContent='Call a number!';e.className='game-status your-turn'}}}
     function updateGuessUI(){const inp=document.getElementById('guessInput'),btn=document.getElementById('callBtn'),area=document.getElementById('guessArea');
