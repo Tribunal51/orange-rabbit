@@ -101,6 +101,46 @@
       background: linear-gradient(135deg, #2d1b0a, #4a3520);
     }
 
+    .game-icon.transword {
+      background: linear-gradient(135deg, #0a1628, #134e4a);
+    }
+
+    .tw-chain {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .tw-row {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .tw-letter {
+      width: 13px;
+      height: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: bold;
+      border-radius: 2px;
+      background: rgba(45,212,191,.12);
+      color: #5eead4;
+    }
+
+    .tw-letter.changed {
+      background: rgba(250,204,21,.25);
+      color: #fde68a;
+    }
+
+    .tw-arrow {
+      font-size: 10px;
+      color: rgba(255,255,255,.3);
+    }
+
     .bng-mini-grid {
       display: grid;
       grid-template-columns: repeat(3, 14px);
@@ -450,7 +490,37 @@
       </div>
       <div class="game-title">Bingo</div>
       <div class="game-desc">Fill your grid, call numbers, complete lines and shout BINGO to win!</div>
-      <span class="game-badge badge-players">2 Players · Online</span>
+      <span class="game-badge badge-players">1–8 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="tw.html">
+      <div class="game-icon transword">
+        <div class="tw-chain">
+          <div class="tw-row">
+            <div class="tw-letter">C</div>
+            <div class="tw-letter">O</div>
+            <div class="tw-letter">L</div>
+            <div class="tw-letter">D</div>
+          </div>
+          <div class="tw-arrow">↓</div>
+          <div class="tw-row">
+            <div class="tw-letter">C</div>
+            <div class="tw-letter">O</div>
+            <div class="tw-letter changed">R</div>
+            <div class="tw-letter">D</div>
+          </div>
+          <div class="tw-arrow">↓</div>
+          <div class="tw-row">
+            <div class="tw-letter changed">W</div>
+            <div class="tw-letter">O</div>
+            <div class="tw-letter">R</div>
+            <div class="tw-letter">D</div>
+          </div>
+        </div>
+      </div>
+      <div class="game-title">Transword</div>
+      <div class="game-desc">Mutate words one letter at a time to bridge two words together.</div>
+      <span class="game-badge badge-players">1–2 Players · Local</span>
     </a>
 
     <a class="game-card" href="hm.html">
