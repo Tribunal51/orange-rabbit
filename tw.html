@@ -269,6 +269,37 @@
     }
     .hintBtn:hover { background: rgba(250,204,21,.25); }
 
+    /* ── hint panel ── */
+    .hint-panel {
+      position: fixed; bottom: 16px; right: 16px; z-index: 150;
+      background: linear-gradient(135deg, #1a2332, #1e293b);
+      border: 1px solid rgba(250,204,21,.25);
+      border-radius: 14px; padding: 14px 16px;
+      max-height: 50vh; min-width: 140px; max-width: 200px;
+      overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .hint-panel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hint-panel-title {
+      font-size: 12px; font-weight: 700; letter-spacing: .5px;
+      color: #fde68a; text-transform: uppercase;
+    }
+    .hint-panel-close {
+      background: none; border: none; color: rgba(255,255,255,.4);
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
+    }
+    .hint-panel-close:hover { color: #fff; }
+    .hint-word {
+      display: block; width: 100%; text-align: left;
+      background: none; border: none; color: #e2e8f0;
+      font-family: 'Courier New', monospace; font-size: 14px;
+      padding: 5px 8px; border-radius: 6px; cursor: pointer;
+      letter-spacing: 1px; transition: .15s;
+    }
+    .hint-word:hover { background: rgba(250,204,21,.12); color: #fde68a; }
+
     .letter.inserted {
       background: rgba(34,197,94,.2);
       color: #86efac !important;
@@ -553,6 +584,8 @@
       <button class="actionBtn" onclick="backToSetup()">Settings</button>
     </div>
 
+    <div id="hintPanel" class="hint-panel hidden"></div>
+
     <!-- ── GAME OVER OVERLAY ── -->
     <div id="gameOverOverlay" class="hidden win-overlay">
       <div class="win-content game-over">
@@ -739,13 +772,30 @@
       return childWord.split('').map(() => '');
     }
 
+    function wordHasMoves(word) {
+      const tmpTree = new Map();
+      tmpTree.set(word, { parent: null, children: [] });
+      return getValidMoves(word, tmpTree, 'left').length > 0;
+    }
+
     function pickWords() {
       const ls = VALID_WORDS[leftWordLen], rs = VALID_WORDS[rightWordLen];
       if (!ls || !rs) return ['word', 'game'];
-      const la = Array.from(ls), ra = Array.from(rs);
-      let a = la[Math.floor(Math.random() * la.length)], b, tries = 0;
-      do { b = ra[Math.floor(Math.random() * ra.length)]; tries++; } while (a === b && tries < 100);
+      const la = shuffle(Array.from(ls)), ra = shuffle(Array.from(rs));
+      let a = null, b = null;
+      for (const w of la) { if (wordHasMoves(w)) { a = w; break; } }
+      for (const w of ra) { if (w !== a && wordHasMoves(w)) { b = w; break; } }
+      if (!a) a = la[0];
+      if (!b) b = ra[0];
       return [a, b];
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
     }
 
     /* ── PeerJS networking ── */
@@ -949,7 +999,7 @@
       document.getElementById('rightWordLabel').textContent = b.toUpperCase();
       hideOverlays();
       document.getElementById('wordInput').value = '';
-      clearFeedback(); render();
+      closeHintPanel(); clearFeedback(); render();
       document.getElementById('wordInput').focus();
     }
 
@@ -1029,7 +1079,7 @@
     function selectNode(word, side) {
       if (!canSelectSide(side)) return;
       selectedWord = word; selectedSide = side;
-      clearFeedback(); render();
+      closeHintPanel(); clearFeedback(); render();
       document.getElementById('wordInput').focus();
     }
 
@@ -1136,7 +1186,7 @@
       }
 
       selectedWord = raw;
-      clearFeedback(); render(); input.focus();
+      closeHintPanel(); clearFeedback(); render(); input.focus();
     }
 
     function shakeInput() {
@@ -1154,15 +1204,9 @@
       if (getHintBudget(side) <= 0) return;
       const tree = side === 'left' ? leftTree : rightTree;
       const validMoves = getValidMoves(selectedWord, tree, side);
-      if (validMoves.length === 0) { showFeedback('No moves from this word — try a different one', 'info'); return; }
-      const hint = validMoves[Math.floor(Math.random() * validMoves.length)];
-      if (hint.length === selectedWord.length) {
-        const idx = [...hint].findIndex((c, i) => c !== selectedWord[i]);
-        showFeedback('Try changing letter ' + (idx + 1) + ' to "' + hint[idx].toUpperCase() + '"', 'info');
-      } else if (hint.length > selectedWord.length) {
-        showFeedback('Try adding a letter → ' + hint.toUpperCase(), 'info');
-      } else {
-        showFeedback('Try removing a letter → ' + hint.toUpperCase(), 'info');
+      if (validMoves.length === 0) {
+        showFeedback('No moves from this word — try a different one', 'info');
+        return;
       }
       hintsRemaining = useBudget(hintsRemaining, side);
       if (mode === '1p' && (typeof hintsRemaining === 'number' ? hintsRemaining : 0) <= 0) {
@@ -1172,7 +1216,31 @@
         document.getElementById('gameOverOverlay').classList.remove('hidden');
         return;
       }
+      renderHintPanel(validMoves);
       render();
+    }
+
+    function renderHintPanel(words) {
+      const panel = document.getElementById('hintPanel');
+      let html = '<div class="hint-panel-head">'
+        + '<span class="hint-panel-title">Hint Words</span>'
+        + '<button class="hint-panel-close" onclick="closeHintPanel()">&times;</button></div>';
+      words.sort();
+      for (const w of words) {
+        html += '<button class="hint-word" onclick="fillHint(\'' + w + '\')">' + w.toUpperCase() + '</button>';
+      }
+      panel.innerHTML = html;
+      panel.classList.remove('hidden');
+    }
+
+    function fillHint(word) {
+      const input = document.getElementById('wordInput');
+      input.value = word;
+      input.focus();
+    }
+
+    function closeHintPanel() {
+      document.getElementById('hintPanel').classList.add('hidden');
     }
 
     /* ── feedback ── */

@@ -578,6 +578,21 @@
       border-top: 1px solid rgba(255, 255, 255, 0.25);
       padding-top: 8px;
     }
+
+    .capture-sub {
+      display: block;
+      font-size: 11px;
+      font-weight: normal;
+      opacity: 0.82;
+      margin-top: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    #leaderboard .cap-foot td {
+      font-size: 12px;
+      opacity: 0.9;
+      padding-top: 4px;
+    }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
@@ -677,8 +692,13 @@
         <li>Each player who would complete a line earns <strong>1 point</strong>.</li>
       </ul>
 
+      <h3>Captures</h3>
+      <p>After each round, a stone counts as <strong>captured</strong> if every neighboring cell (including diagonals) is occupied by the opponent. Captures are shown per round but <strong>do not add to your score</strong>.</p>
+      <p>The <strong>final empty cell</strong> is evaluated like line scoring: captures are counted as if that cell were <strong>O</strong> and as if it were <strong>X</strong>; each side’s capture count is the <strong>better</strong> of those two outcomes (same idea as checking both players for a line on the last tile).</p>
+
       <h3>Winning</h3>
-      <p>The player with the higher total score wins!</p>
+      <p><strong>Single round:</strong> higher line-based score wins.</p>
+      <p><strong>Multi-round match:</strong> add line scores across rounds. If tied, the player with more <strong>total captures</strong> across rounds wins. If still tied, the match is a draw.</p>
 
       <h3>Match Formats</h3>
       <ul>
@@ -699,6 +719,10 @@
       [[0,0],[0,1],[0,2]], [[1,0],[1,1],[1,2]], [[2,0],[2,1],[2,2]],
       [[0,0],[1,0],[2,0]], [[0,1],[1,1],[2,1]], [[0,2],[1,2],[2,2]],
       [[0,0],[1,1],[2,2]], [[0,2],[1,1],[2,0]]
+    ];
+
+    const CAPTURE_DIRS = [
+      [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]
     ];
 
     /* ── game (single-round) state ── */
@@ -809,7 +833,8 @@
     }
 
     function onRoundEnd() {
-      roundScores.push({ mySymbol, scores: { O: score.O, X: score.X } });
+      const captures = computeCaptures(board);
+      roundScores.push({ mySymbol, scores: { O: score.O, X: score.X }, captures });
       if (currentRound >= totalRounds) matchOver = true;
     }
 
@@ -964,6 +989,8 @@
       if (!gameOver || !finalResult || !atEnd) { sec.innerHTML = ""; return; }
 
       const s = history[replayIndex].score;
+      const rb = history[replayIndex].board;
+      const cap = computeCaptures(rb);
       let h = '<h3>Final Tile Evaluation</h3>';
       h += '<p class="resultLine ' + (finalResult.oLine ? 'resultPositive' : 'resultNeutral') + '">';
       h += finalResult.oLine ? 'O completes a line → +1' : 'O does not complete a line → +0';
@@ -980,6 +1007,9 @@
           '<span class="O">O</span> ' + s.O +
           ' — ' + s.X + ' <span class="X">X</span></p>';
       }
+      h += '<p class="resultLine resultNeutral" style="margin-top:10px;">Captures — ' +
+        '<span class="O">O</span> ' + cap.O + ' · <span class="X">X</span> ' + cap.X +
+        ' <span style="opacity:0.75">(ninth tile as O or X, best for each side; tie-break in multi-round matches only)</span></p>';
       sec.innerHTML = h;
     }
 
@@ -1002,23 +1032,30 @@
         ctl.innerHTML = '<button class="startBtn" style="margin-top:12px;font-size:15px;" onclick="requestNextRound()">Next Round →</button>';
       } else if (matchOver && matchFormat > 1) {
         const hasId = onlineMode || playerCount === 1;
-        let l1, l2, t1 = 0, t2 = 0;
+        let l1, l2, t1 = 0, t2 = 0, c1 = 0, c2 = 0;
         if (hasId) {
           l1 = 'You'; l2 = playerCount === 1 ? 'CPU' : 'Opponent';
           roundScores.forEach(e => {
             t1 += e.scores[e.mySymbol];
             t2 += e.scores[e.mySymbol === 'O' ? 'X' : 'O'];
+            c1 += e.captures[e.mySymbol];
+            c2 += e.captures[e.mySymbol === 'O' ? 'X' : 'O'];
           });
         } else {
           l1 = 'P1'; l2 = 'P2';
           roundScores.forEach((e, idx) => {
             const p1s = getP1SymbolForRound(idx + 1);
-            t1 += e.scores[p1s]; t2 += e.scores[p1s === 'O' ? 'X' : 'O'];
+            const p2s = p1s === 'O' ? 'X' : 'O';
+            t1 += e.scores[p1s]; t2 += e.scores[p2s];
+            c1 += e.captures[p1s]; c2 += e.captures[p2s];
           });
         }
-        const verdict = t1 > t2 ? l1 + ' wins the match!'
-          : t1 < t2 ? l2 + ' wins the match!'
-          : 'Match is tied!';
+        let verdict;
+        if (t1 > t2) verdict = l1 + ' wins the match!';
+        else if (t1 < t2) verdict = l2 + ' wins the match!';
+        else if (c1 > c2) verdict = l1 + ' wins the match (tie-break: captures)!';
+        else if (c2 > c1) verdict = l2 + ' wins the match (tie-break: captures)!';
+        else verdict = 'Match is tied!';
         let html = '<p style="margin-top:12px;font-size:16px;font-weight:bold;">' + verdict + '</p>';
         if (onlineMode) {
           html += '<button class="startBtn" style="margin-top:10px;font-size:15px;" onclick="requestRematch()">Rematch (swap roles)</button>';
@@ -1041,7 +1078,15 @@
       const col2 = hasId ? (playerCount === 1 ? 'CPU' : 'Opp') : 'P2';
 
       let h = '<h3>Match Scoreboard</h3><table><thead><tr><th></th><th>' + col1 + '</th><th>' + col2 + '</th></tr></thead><tbody>';
-      let tM = 0, tO = 0;
+      let tM = 0, tO = 0, tcM = 0, tcO = 0;
+
+      const cellPtsCap = function(sym, pts, cap, showCap) {
+        let inner = '<span class="' + sym + '">' + sym + '</span> ' + pts;
+        if (showCap && cap !== undefined && cap !== null) {
+          inner += '<span class="capture-sub">Captures ' + cap + '</span>';
+        }
+        return '<td>' + inner + '</td>';
+      };
 
       for (let i = 0; i < totalRounds; i++) {
         const rn = i + 1;
@@ -1053,17 +1098,21 @@
 
         const s1 = hasId ? (done ? roundScores[i].mySymbol : mySymbol) : getP1SymbolForRound(rn);
         const s2 = s1 === 'O' ? 'X' : 'O';
-        const c = function(sym, val) { return '<td><span class="' + sym + '">' + sym + '</span> ' + val + '</td>'; };
 
         if (done) {
           const e = roundScores[i];
           const m = e.scores[s1], o = e.scores[s2];
+          const cm = e.captures[s1], co = e.captures[s2];
           tM += m; tO += o;
-          h += c(s1, m) + c(s2, o);
+          tcM += cm; tcO += co;
+          h += cellPtsCap(s1, m, cm, true) + cellPtsCap(s2, o, co, true);
         } else if (cur) {
-          h += c(s1, score[s1] || 0) + c(s2, score[s2] || 0);
+          const liveCap = gameOver ? computeCaptures(board) : null;
+          const cm = liveCap ? liveCap[s1] : null;
+          const co = liveCap ? liveCap[s2] : null;
+          h += cellPtsCap(s1, score[s1] || 0, cm, gameOver) + cellPtsCap(s2, score[s2] || 0, co, gameOver);
         } else {
-          h += c(s1, '-') + c(s2, '-');
+          h += cellPtsCap(s1, '-', null, false) + cellPtsCap(s2, '-', null, false);
         }
         h += '</tr>';
       }
@@ -1071,9 +1120,17 @@
       if (!matchOver && score && roundScores.length < currentRound) {
         const ts = hasId ? mySymbol : getP1SymbolForRound(currentRound);
         tM += score[ts] || 0; tO += score[ts === 'O' ? 'X' : 'O'] || 0;
+        if (gameOver) {
+          const cap = computeCaptures(board);
+          tcM += cap[ts]; tcO += cap[ts === 'O' ? 'X' : 'O'];
+        }
       }
 
-      h += '</tbody><tfoot><tr class="total-row"><th>Total</th><td>' + tM + '</td><td>' + tO + '</td></tr></tfoot></table>';
+      h += '</tbody><tfoot>';
+      h += '<tr class="total-row"><th>Total pts</th><td>' + tM + '</td><td>' + tO + '</td></tr>';
+      h += '<tr class="cap-foot"><th>Captures</th><td>' + tcM + '</td><td>' + tcO + '</td></tr>';
+      h += '</tfoot></table>';
+      h += '<p style="margin:10px 0 0;font-size:11px;opacity:0.75;">Captures break ties only (not added to points).</p>';
       el.innerHTML = h;
     }
 
@@ -1202,6 +1259,60 @@
           for (let c = SIZE-1, i = 0; c >= 0; c--, i++) board[r][c] = s[i] || "";
         }
       }
+    }
+
+    function cellAt(board, r, c) {
+      const v = board[r][c];
+      if (v === '' || v === 'BOTH') return '';
+      return v;
+    }
+
+    /** Resolved board only (no BOTH). Opponent stones each side captured (all 8 neighbors opponent). */
+    function computeCapturesResolved(board) {
+      let capO = 0, capX = 0;
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const v = board[r][c];
+          if (v !== 'O' && v !== 'X') continue;
+          const s = v;
+          const opp = s === 'O' ? 'X' : 'O';
+          let hasNeighbor = false, allOpp = true;
+          for (const [dr, dc] of CAPTURE_DIRS) {
+            const nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) continue;
+            hasNeighbor = true;
+            const nv = board[nr][nc];
+            if (nv !== opp) { allOpp = false; break; }
+          }
+          if (hasNeighbor && allOpp) {
+            if (s === 'X') capO++;
+            else capX++;
+          }
+        }
+      }
+      return { O: capO, X: capX };
+    }
+
+    /**
+     * If the final cell is BOTH, count captures for that cell as O and as X (like line checks),
+     * then take the max per side so each player gets credit for their possible ninth tile.
+     */
+    function computeCaptures(board) {
+      let br = -1, bc = -1;
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (board[r][c] === 'BOTH') { br = r; bc = c; break; }
+        }
+        if (br >= 0) break;
+      }
+      if (br < 0) return computeCapturesResolved(board);
+      const bO = board.map(row => [...row]);
+      bO[br][bc] = 'O';
+      const bX = board.map(row => [...row]);
+      bX[br][bc] = 'X';
+      const kO = computeCapturesResolved(bO);
+      const kX = computeCapturesResolved(bX);
+      return { O: Math.max(kO.O, kX.O), X: Math.max(kO.X, kX.X) };
     }
 
     function hasLine(p) {

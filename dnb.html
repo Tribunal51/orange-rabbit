@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
   <title>Dots and Boxes</title>
   <link rel="icon" type="image/png" href="favicon.png">
@@ -92,6 +93,12 @@
       border-color: #a044ff;
       background: rgba(160, 68, 255, 0.2);
       font-weight: bold;
+    }
+
+    .modeBtn.disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .slider-wrap {
@@ -304,120 +311,30 @@
       box-shadow: 0 0 12px rgba(255, 110, 199, 0.2);
     }
 
-    /* ── board ── */
+    /* ── SVG board ── */
 
     #boardContainer {
       display: inline-block;
       margin: 0 auto 20px;
     }
 
-    #board {
-      display: inline-grid;
-      gap: 0;
+    #boardSvg {
+      display: block;
+      max-width: 90vw;
+      max-height: 55vh;
     }
 
-    .dot {
-      width: 14px;
-      height: 14px;
-      background: rgba(255, 255, 255, 0.85);
-      border-radius: 50%;
-      z-index: 2;
-    }
-
-    .hline-cell {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 1;
-    }
-
-    .hline-bar {
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, 0.1);
-      transition: background 0.2s, height 0.15s;
-    }
-
-    .hline-cell:hover .hline-bar.available {
-      background: rgba(255, 255, 255, 0.35);
-      height: 8px;
-    }
-
-    .hline-bar.drawn-p1 {
-      background: #7dd3fc;
-      height: 6px;
-      box-shadow: 0 0 6px rgba(125, 211, 252, 0.4);
-    }
-
-    .hline-bar.drawn-p2 {
-      background: #ff6ec7;
-      height: 6px;
-      box-shadow: 0 0 6px rgba(255, 110, 199, 0.4);
-    }
-
-    .vline-cell {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 1;
-    }
-
-    .vline-bar {
-      width: 6px;
-      height: 100%;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, 0.1);
-      transition: background 0.2s, width 0.15s;
-    }
-
-    .vline-cell:hover .vline-bar.available {
-      background: rgba(255, 255, 255, 0.35);
-      width: 8px;
-    }
-
-    .vline-bar.drawn-p1 {
-      background: #7dd3fc;
-      width: 6px;
-      box-shadow: 0 0 6px rgba(125, 211, 252, 0.4);
-    }
-
-    .vline-bar.drawn-p2 {
-      background: #ff6ec7;
-      width: 6px;
-      box-shadow: 0 0 6px rgba(255, 110, 199, 0.4);
-    }
-
-    .box-cell {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 16px;
-      border-radius: 4px;
-      transition: background 0.3s;
-    }
-
-    .box-cell.claimed-p1 {
-      background: rgba(125, 211, 252, 0.2);
-      color: #7dd3fc;
-    }
-
-    .box-cell.claimed-p2 {
-      background: rgba(255, 110, 199, 0.2);
-      color: #ff6ec7;
+    #modernInfo {
+      font-size: 14px;
+      margin-bottom: 10px;
+      min-height: 22px;
+      color: #d0a0ff;
     }
 
     @keyframes boxPop {
       0% { transform: scale(0.6); opacity: 0; }
       60% { transform: scale(1.15); }
       100% { transform: scale(1); opacity: 1; }
-    }
-
-    .box-cell.just-claimed {
-      animation: boxPop 0.35s ease-out;
     }
 
     .btn-row {
@@ -584,6 +501,46 @@
       font-size: 15px;
       color: #d0a0ff;
     }
+
+    @keyframes dotPulse {
+      0%, 100% { r: 9; opacity: 0.6; }
+      50% { r: 11; opacity: 1; }
+    }
+
+    #handoffOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      cursor: pointer;
+    }
+
+    .lockInBtn {
+      padding: 12px 40px;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #34d399, #059669);
+      color: white;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .lockInBtn:hover {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+    }
+
+    .lockInBtn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      filter: none;
+      transform: none;
+    }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
@@ -604,11 +561,43 @@
       </div>
     </div>
 
+    <div class="setupSection">
+      <div class="setupLabel">Game Type</div>
+      <div id="gameTypeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGameType('boxes')">Dots and Boxes</button>
+        <button class="modeBtn" onclick="setGameType('triangles')">Dots and Triangles</button>
+      </div>
+    </div>
+
+    <div id="structureSection" class="setupSection hidden">
+      <div class="setupLabel">Structure</div>
+      <div id="structureToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setBoardStructure('grid')">Grid</button>
+        <button class="modeBtn" onclick="setBoardStructure('hex')">Hexagonal</button>
+      </div>
+    </div>
+
     <div id="variantSection" class="setupSection">
-      <div class="setupLabel">Game Variant</div>
+      <div class="setupLabel">Game Mode</div>
       <div id="variantToggle" class="modeToggle">
         <button class="modeBtn selected" onclick="setGameVariant('classic')">Classic</button>
-        <button class="modeBtn" onclick="setGameVariant('dice')">Dice and Boxes</button>
+        <button class="modeBtn" onclick="setGameVariant('modern')">Modern</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Lines per Play</div>
+      <div id="linesToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setLinesPerPlay('single')">Single</button>
+        <button class="modeBtn" onclick="setLinesPerPlay('random')">Random (Dice)</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Turn Style</div>
+      <div id="turnStyleToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setTurnStyle('turnBased')">Turn Based</button>
+        <button class="modeBtn" onclick="setTurnStyle('parallel')">Parallel</button>
       </div>
     </div>
 
@@ -659,9 +648,13 @@
     <h1 id="gameTitle">Dots and Boxes</h1>
     <div id="turnIndicator"></div>
     <div id="diceArea" class="hidden"></div>
+    <div id="modernInfo" class="hidden"></div>
     <div class="scoreboard" id="scoreboard"></div>
     <div id="boardContainer">
-      <div id="board"></div>
+      <svg id="boardSvg"></svg>
+    </div>
+    <div id="lockInRow" class="btn-row hidden">
+      <button class="lockInBtn" id="lockInBtn" onclick="lockIn()" disabled>Lock In</button>
     </div>
     <div id="gameOverBanner" class="hidden"></div>
     <div class="btn-row" id="btnRow">
@@ -671,34 +664,56 @@
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
 
+  <!-- ═══════ HANDOFF ═══════ -->
+  <div id="handoffOverlay" class="hidden" onclick="dismissHandoff()">
+    <div class="rulesCard" style="text-align:center">
+      <h2 id="handoffTitle">Pass to Player 2</h2>
+      <div id="handoffBody"></div>
+      <p style="margin:16px 0;opacity:0.7">Tap anywhere to continue</p>
+    </div>
+  </div>
+
   <!-- ═══════ RULES ═══════ -->
   <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
     <div class="rulesCard">
       <h2>How to Play</h2>
 
-      <h3>Setup</h3>
-      <p>A grid of boxes is created (from 3×3 up to 9×9). Two players take turns. Choose between <strong>Classic</strong> or <strong>Dice and Boxes</strong> mode.</p>
+      <h3>Game Types</h3>
+      <ul>
+        <li><strong>Dots and Boxes</strong> — claim territory by completing squares on a grid.</li>
+        <li><strong>Dots and Triangles</strong> — claim territory by completing triangles. Choose a <em>Grid</em> layout (with diagonal lines) or a <em>Hexagonal</em> lattice.</li>
+      </ul>
 
       <h3>Classic Mode</h3>
       <ul>
         <li>On your turn, click any available line between two adjacent dots to draw it.</li>
-        <li>If your line completes the 4th side of a box, you <strong>claim</strong> that box and <strong>take another turn</strong>.</li>
-        <li>If no box is completed, the turn passes to the other player.</li>
+        <li>If your line completes a territory (box or triangle), you <strong>claim</strong> it and <strong>take another turn</strong>.</li>
+        <li>If no territory is completed, the turn passes to the other player.</li>
       </ul>
 
-      <h3>Dice and Boxes Mode</h3>
+      <h3>Modern Mode</h3>
       <ul>
-        <li>At the start of your turn, <strong>roll a dice</strong> (1–6).</li>
-        <li>You can draw that many lines in a row.</li>
-        <li>Completing a box does <strong>not</strong> grant an extra line — only the dice roll determines how many lines you play.</li>
-        <li>If you roll <strong>more than the number of available lines</strong>, your turn is <strong>forfeit</strong> and passes to the other player.</li>
-        <li>After all your moves are used, the turn passes to the other player who then rolls.</li>
+        <li>On your turn, click a <strong>starting dot</strong>, then click an <strong>ending dot</strong> in a straight line from it.</li>
+        <li>All empty line segments between the two dots are drawn at once. The line can pass over already-drawn segments, but must cover at least one new segment.</li>
+        <li>After drawing, the turn passes to the other player.</li>
+      </ul>
+
+      <h3>Lines per Play</h3>
+      <ul>
+        <li><strong>Single</strong> — one line per turn (default).</li>
+        <li><strong>Random (Dice)</strong> — roll a dice (1–6) at the start of your turn. You draw that many lines in a row. If you roll <strong>more than the number of available lines</strong>, your turn is <strong>forfeit</strong>.</li>
+      </ul>
+
+      <h3>Turn Style</h3>
+      <ul>
+        <li><strong>Turn Based</strong> — players take turns one at a time (default).</li>
+        <li><strong>Parallel</strong> — both players choose their move(s) simultaneously. After locking in, moves are revealed together. If a territory is completed by both players' lines, the player who contributed <strong>more edges</strong> this round claims it. If both contributed <strong>equally</strong>, it becomes a <strong>deadzone</strong> (gray, belongs to neither). No extra turns for completing territories in Parallel mode.</li>
       </ul>
 
       <h3>Winning</h3>
       <ul>
-        <li>The game ends when all possible lines have been drawn.</li>
-        <li>The player who claimed the most boxes wins!</li>
+        <li>The game ends when all territories have been claimed (or turned into deadzones).</li>
+        <li>The player who claimed the most territories wins!</li>
       </ul>
 
       <button class="rulesCloseBtn" onclick="hideRules()">Got it</button>
@@ -713,19 +728,42 @@
     let p2 = { name: 'Player 2', initial: '' };
     let currentPlayer = 1;
     let scores = { 1: 0, 2: 0 };
-    let totalBoxes = 0;
+    let totalTerritories = 0;
     let gameOver = false;
 
-    let hLines = [];
-    let vLines = [];
-    let boxes = [];
+    let gameType = 'boxes';
+    let boardStructure = 'grid';
+    let gameVariant = 'classic';
+    let linesPerPlay = 'single';
+
+    let dotPositions = [];
+    let edgeMap = {};
+    let territoryMap = {};
+    let edgeToTerritories = {};
+    let straightLines = [];
+
+    /* ── modern mode ── */
+    let modernSelectedDot = -1;
+    let modernContinueDot = -1;
+    let modernMustContinue = false;
+    let modernValidEndpoints = [];
 
     /* ── dice variant ── */
-    let gameVariant = 'classic';
     let diceValue = 0;
     let movesRemaining = 0;
     let needsRoll = false;
     let diceForfeit = false;
+
+    /* ── parallel mode ── */
+    let turnStyle = 'turnBased';
+    let parallelPhase = '';
+    let parallelChoosingPlayer = 0;
+    let pendingEdges = { 1: [], 2: [] };
+    let parallelMovesLeft = 0;
+    let parallelNeedsRoll = false;
+    let parallelDiceValues = { 1: 0, 2: 0 };
+    let parallelDiceForfeits = { 1: false, 2: false };
+    let parallelDiceTotals = { 1: 0, 2: 0 };
 
     /* ── player mode ── */
     let playerMode = 'local';
@@ -735,8 +773,20 @@
     let conn = null;
     let isHost = false;
     let onlineMode = false;
-    let myPlayerNum = 0; // 1 or 2
-    let hostTurnOrder = 1; // 1 = host plays first, 2 = host plays second
+    let myPlayerNum = 0;
+    let hostTurnOrder = 1;
+
+    /* ── SVG rendering ── */
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    let svgSpacing = 50;
+    let svgPadding = 25;
+    const P1_COLOR = '#7dd3fc';
+    const P2_COLOR = '#ff6ec7';
+    const P1_FILL = 'rgba(125, 211, 252, 0.25)';
+    const P2_FILL = 'rgba(255, 110, 199, 0.25)';
+    const LINE_IDLE = 'rgba(255, 255, 255, 0.18)';
+    const LINE_HOVER = 'rgba(255, 255, 255, 0.35)';
+    const DOT_COLOR = 'rgba(255, 255, 255, 0.85)';
 
     /* ═══════════════════ setup UI ═══════════════════ */
 
@@ -761,16 +811,375 @@
       });
     }
 
+    function setGameType(type) {
+      gameType = type;
+      document.querySelectorAll('#gameTypeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && type === 'boxes') || (i === 1 && type === 'triangles'));
+      });
+      document.getElementById('structureSection').classList.toggle('hidden', type !== 'triangles');
+      if (type === 'boxes') {
+        boardStructure = 'grid';
+        document.querySelectorAll('#structureToggle .modeBtn').forEach((b, i) => {
+          b.classList.toggle('selected', i === 0);
+        });
+      }
+    }
+
+    function setBoardStructure(structure) {
+      boardStructure = structure;
+      document.querySelectorAll('#structureToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && structure === 'grid') || (i === 1 && structure === 'hex'));
+      });
+    }
+
     function setGameVariant(variant) {
       gameVariant = variant;
       document.querySelectorAll('#variantToggle .modeBtn').forEach((b, i) => {
-        b.classList.toggle('selected', (i === 0 && variant === 'classic') || (i === 1 && variant === 'dice'));
+        b.classList.toggle('selected',
+          (i === 0 && variant === 'classic') ||
+          (i === 1 && variant === 'modern'));
+      });
+    }
+
+    function setLinesPerPlay(mode) {
+      linesPerPlay = mode;
+      document.querySelectorAll('#linesToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && mode === 'single') || (i === 1 && mode === 'random'));
+      });
+    }
+
+    function setTurnStyle(style) {
+      turnStyle = style;
+      document.querySelectorAll('#turnStyleToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && style === 'turnBased') || (i === 1 && style === 'parallel'));
       });
     }
 
     function getInitial(name) {
       const trimmed = name.trim();
       return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
+    }
+
+    /* ═══════════════════ board type helpers ═══════════════════ */
+
+    function getBoardType() {
+      if (boardStructure === 'hex') return 'hex_triangles';
+      if (gameType === 'triangles') return 'grid_triangles';
+      return 'grid_boxes';
+    }
+
+    function makeEdgeKey(d1, d2) {
+      return d1 < d2 ? d1 + '-' + d2 : d2 + '-' + d1;
+    }
+
+    function getDotIdx(r, c, n) {
+      if (getBoardType() === 'hex_triangles') {
+        let idx = 0;
+        for (let row = 0; row < r; row++) {
+          idx += (row % 2 === 0) ? n : n - 1;
+        }
+        return idx + c;
+      }
+      return r * n + c;
+    }
+
+    function addEdge(d1, d2) {
+      const key = makeEdgeKey(d1, d2);
+      if (!edgeMap[key]) {
+        edgeMap[key] = { d1, d2, owner: 0 };
+      }
+      return key;
+    }
+
+    function addTerritory(dotIndices, edgeKeys) {
+      const sorted = [...dotIndices].sort((a, b) => a - b);
+      const key = sorted.join(',');
+      territoryMap[key] = { dots: dotIndices, edges: edgeKeys, owner: 0 };
+      for (const ek of edgeKeys) {
+        if (!edgeToTerritories[ek]) edgeToTerritories[ek] = [];
+        edgeToTerritories[ek].push(key);
+      }
+      return key;
+    }
+
+    /* ═══════════════════ board initialization ═══════════════════ */
+
+    function initGridBoxes(n) {
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          dotPositions.push({
+            r, c, idx: r * n + c,
+            x: svgPadding + c * svgSpacing,
+            y: svgPadding + r * svgSpacing
+          });
+        }
+      }
+
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n - 1; c++) {
+          addEdge(getDotIdx(r, c, n), getDotIdx(r, c + 1, n));
+        }
+      }
+      for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n; c++) {
+          addEdge(getDotIdx(r, c, n), getDotIdx(r + 1, c, n));
+        }
+      }
+
+      for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n - 1; c++) {
+          const tl = getDotIdx(r, c, n);
+          const tr = getDotIdx(r, c + 1, n);
+          const bl = getDotIdx(r + 1, c, n);
+          const br = getDotIdx(r + 1, c + 1, n);
+          addTerritory(
+            [tl, tr, br, bl],
+            [makeEdgeKey(tl, tr), makeEdgeKey(bl, br), makeEdgeKey(tl, bl), makeEdgeKey(tr, br)]
+          );
+        }
+      }
+
+      for (let r = 0; r < n; r++) {
+        const line = [];
+        for (let c = 0; c < n; c++) line.push(getDotIdx(r, c, n));
+        straightLines.push(line);
+      }
+      for (let c = 0; c < n; c++) {
+        const line = [];
+        for (let r = 0; r < n; r++) line.push(getDotIdx(r, c, n));
+        straightLines.push(line);
+      }
+    }
+
+    function initGridTriangles(n) {
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          dotPositions.push({
+            r, c, idx: r * n + c,
+            x: svgPadding + c * svgSpacing,
+            y: svgPadding + r * svgSpacing
+          });
+        }
+      }
+
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n - 1; c++) {
+          addEdge(getDotIdx(r, c, n), getDotIdx(r, c + 1, n));
+        }
+      }
+      for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n; c++) {
+          addEdge(getDotIdx(r, c, n), getDotIdx(r + 1, c, n));
+        }
+      }
+      for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n - 1; c++) {
+          addEdge(getDotIdx(r, c, n), getDotIdx(r + 1, c + 1, n));
+        }
+      }
+
+      for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n - 1; c++) {
+          const tl = getDotIdx(r, c, n);
+          const tr = getDotIdx(r, c + 1, n);
+          const bl = getDotIdx(r + 1, c, n);
+          const br = getDotIdx(r + 1, c + 1, n);
+
+          addTerritory(
+            [tl, tr, br],
+            [makeEdgeKey(tl, tr), makeEdgeKey(tr, br), makeEdgeKey(tl, br)]
+          );
+          addTerritory(
+            [tl, bl, br],
+            [makeEdgeKey(tl, bl), makeEdgeKey(bl, br), makeEdgeKey(tl, br)]
+          );
+        }
+      }
+
+      for (let r = 0; r < n; r++) {
+        const line = [];
+        for (let c = 0; c < n; c++) line.push(getDotIdx(r, c, n));
+        straightLines.push(line);
+      }
+      for (let c = 0; c < n; c++) {
+        const line = [];
+        for (let r = 0; r < n; r++) line.push(getDotIdx(r, c, n));
+        straightLines.push(line);
+      }
+      for (let k = -(n - 2); k <= n - 2; k++) {
+        const line = [];
+        for (let r = 0; r < n; r++) {
+          const c = r + k;
+          if (c >= 0 && c < n) line.push(getDotIdx(r, c, n));
+        }
+        if (line.length >= 2) straightLines.push(line);
+      }
+    }
+
+    function initHexTriangles(n) {
+      const numRows = n;
+      const rowHeight = svgSpacing * Math.sqrt(3) / 2;
+      let idx = 0;
+
+      for (let r = 0; r < numRows; r++) {
+        const numCols = (r % 2 === 0) ? n : n - 1;
+        const offsetX = (r % 2 === 1) ? svgSpacing / 2 : 0;
+        for (let c = 0; c < numCols; c++) {
+          dotPositions.push({
+            r, c, idx: idx,
+            x: svgPadding + c * svgSpacing + offsetX,
+            y: svgPadding + r * rowHeight
+          });
+          idx++;
+        }
+      }
+
+      const dotLookup = {};
+      for (const d of dotPositions) {
+        dotLookup[d.r + ',' + d.c] = d.idx;
+      }
+      function getDot(r, c) {
+        const key = r + ',' + c;
+        return dotLookup[key] !== undefined ? dotLookup[key] : -1;
+      }
+
+      for (let r = 0; r < numRows; r++) {
+        const numCols = (r % 2 === 0) ? n : n - 1;
+        for (let c = 0; c < numCols - 1; c++) {
+          addEdge(getDot(r, c), getDot(r, c + 1));
+        }
+      }
+
+      for (let r = 0; r < numRows - 1; r++) {
+        const isEven = r % 2 === 0;
+        const numCols = isEven ? n : n - 1;
+        for (let c = 0; c < numCols; c++) {
+          if (isEven) {
+            const dr = getDot(r + 1, c);
+            if (dr >= 0) addEdge(getDot(r, c), dr);
+            if (c > 0) {
+              const dl = getDot(r + 1, c - 1);
+              if (dl >= 0) addEdge(getDot(r, c), dl);
+            }
+          } else {
+            const dl = getDot(r + 1, c);
+            if (dl >= 0) addEdge(getDot(r, c), dl);
+            const dr = getDot(r + 1, c + 1);
+            if (dr >= 0) addEdge(getDot(r, c), dr);
+          }
+        }
+      }
+
+      for (let r = 0; r < numRows - 1; r++) {
+        const isEven = r % 2 === 0;
+        if (isEven) {
+          for (let c = 0; c < n - 1; c++) {
+            const top1 = getDot(r, c);
+            const top2 = getDot(r, c + 1);
+            const bot = getDot(r + 1, c);
+            if (top1 >= 0 && top2 >= 0 && bot >= 0) {
+              addTerritory([top1, top2, bot], [
+                makeEdgeKey(top1, top2), makeEdgeKey(top1, bot), makeEdgeKey(top2, bot)
+              ]);
+            }
+          }
+          for (let c = 0; c < n - 2; c++) {
+            const bot1 = getDot(r + 1, c);
+            const bot2 = getDot(r + 1, c + 1);
+            const top = getDot(r, c + 1);
+            if (bot1 >= 0 && bot2 >= 0 && top >= 0) {
+              addTerritory([bot1, bot2, top], [
+                makeEdgeKey(bot1, bot2), makeEdgeKey(bot1, top), makeEdgeKey(bot2, top)
+              ]);
+            }
+          }
+        } else {
+          for (let c = 0; c < n - 1; c++) {
+            const top = getDot(r, c);
+            const bot1 = getDot(r + 1, c);
+            const bot2 = getDot(r + 1, c + 1);
+            if (top >= 0 && bot1 >= 0 && bot2 >= 0) {
+              addTerritory([top, bot1, bot2], [
+                makeEdgeKey(top, bot1), makeEdgeKey(top, bot2), makeEdgeKey(bot1, bot2)
+              ]);
+            }
+          }
+          for (let c = 0; c < n - 2; c++) {
+            const top1 = getDot(r, c);
+            const top2 = getDot(r, c + 1);
+            const bot = getDot(r + 1, c + 1);
+            if (top1 >= 0 && top2 >= 0 && bot >= 0) {
+              addTerritory([top1, top2, bot], [
+                makeEdgeKey(top1, top2), makeEdgeKey(top1, bot), makeEdgeKey(top2, bot)
+              ]);
+            }
+          }
+        }
+      }
+
+      for (let r = 0; r < numRows; r++) {
+        const numCols = (r % 2 === 0) ? n : n - 1;
+        if (numCols >= 2) {
+          const line = [];
+          for (let c = 0; c < numCols; c++) line.push(getDot(r, c));
+          straightLines.push(line);
+        }
+      }
+
+      function traceLine(startR, startC, dirFn) {
+        const line = [];
+        let r = startR, c = startC;
+        while (true) {
+          const d = getDot(r, c);
+          if (d < 0) break;
+          line.push(d);
+          const next = dirFn(r, c);
+          if (!next) break;
+          r = next.r;
+          c = next.c;
+        }
+        return line;
+      }
+
+      const drVisited = new Set();
+      const dlVisited = new Set();
+
+      for (let r = 0; r < numRows; r++) {
+        const numCols = (r % 2 === 0) ? n : n - 1;
+        for (let c = 0; c < numCols; c++) {
+          const startDot = getDot(r, c);
+          if (!drVisited.has(startDot)) {
+            const line = traceLine(r, c, (cr, cc) => {
+              const isEven = cr % 2 === 0;
+              const nr = cr + 1;
+              const nc = isEven ? cc : cc + 1;
+              if (nr >= numRows) return null;
+              const numC = (nr % 2 === 0) ? n : n - 1;
+              if (nc < 0 || nc >= numC) return null;
+              return { r: nr, c: nc };
+            });
+            if (line.length >= 2) {
+              for (const d of line) drVisited.add(d);
+              straightLines.push(line);
+            }
+          }
+          if (!dlVisited.has(startDot)) {
+            const line = traceLine(r, c, (cr, cc) => {
+              const isEven = cr % 2 === 0;
+              const nr = cr + 1;
+              const nc = isEven ? cc - 1 : cc;
+              if (nr >= numRows) return null;
+              const numC = (nr % 2 === 0) ? n : n - 1;
+              if (nc < 0 || nc >= numC) return null;
+              return { r: nr, c: nc };
+            });
+            if (line.length >= 2) {
+              for (const d of line) dlVisited.add(d);
+              straightLines.push(line);
+            }
+          }
+        }
+      }
     }
 
     /* ═══════════════════ game init ═══════════════════ */
@@ -805,10 +1214,41 @@
       const n = gridSize;
       currentPlayer = 1;
       scores = { 1: 0, 2: 0 };
-      totalBoxes = (n - 1) * (n - 1);
       gameOver = false;
 
-      if (gameVariant === 'dice') {
+      dotPositions = [];
+      edgeMap = {};
+      territoryMap = {};
+      edgeToTerritories = {};
+      straightLines = [];
+
+      modernSelectedDot = -1;
+      modernContinueDot = -1;
+      modernMustContinue = false;
+      modernValidEndpoints = [];
+
+      pendingEdges = { 1: [], 2: [] };
+      parallelPhase = '';
+      parallelChoosingPlayer = 0;
+      parallelMovesLeft = 0;
+      parallelNeedsRoll = false;
+      parallelDiceValues = { 1: 0, 2: 0 };
+      parallelDiceForfeits = { 1: false, 2: false };
+      parallelDiceTotals = { 1: 0, 2: 0 };
+
+      if (turnStyle === 'parallel') {
+        parallelChoosingPlayer = onlineMode ? myPlayerNum : 1;
+        if (linesPerPlay === 'random') {
+          parallelPhase = 'p1Roll';
+          parallelNeedsRoll = true;
+          parallelMovesLeft = 0;
+        } else {
+          parallelPhase = 'p1Choose';
+          parallelMovesLeft = 1;
+        }
+      }
+
+      if (linesPerPlay === 'random') {
         needsRoll = true;
         diceValue = 0;
         movesRemaining = 0;
@@ -818,126 +1258,280 @@
         diceForfeit = false;
       }
 
-      hLines = [];
-      for (let r = 0; r < n; r++) {
-        hLines[r] = [];
-        for (let c = 0; c < n - 1; c++) hLines[r][c] = 0;
-      }
+      svgSpacing = Math.max(30, Math.min(60, Math.floor(400 / (n - 1))));
 
-      vLines = [];
-      for (let r = 0; r < n - 1; r++) {
-        vLines[r] = [];
-        for (let c = 0; c < n; c++) vLines[r][c] = 0;
-      }
+      const bt = getBoardType();
+      if (bt === 'grid_boxes') initGridBoxes(n);
+      else if (bt === 'grid_triangles') initGridTriangles(n);
+      else initHexTriangles(n);
 
-      boxes = [];
-      for (let r = 0; r < n - 1; r++) {
-        boxes[r] = [];
-        for (let c = 0; c < n - 1; c++) boxes[r][c] = 0;
-      }
+      totalTerritories = Object.keys(territoryMap).length;
 
-      document.getElementById('gameTitle').textContent =
-        gameVariant === 'dice' ? 'Dice and Boxes' : 'Dots and Boxes';
+      let title = '';
+      if (gameType === 'triangles') {
+        title = boardStructure === 'hex' ? 'Dots & Triangles (Hex)' : 'Dots & Triangles';
+      } else {
+        title = 'Dots and Boxes';
+      }
+      if (gameVariant === 'modern') title = 'Modern ' + title;
+      if (turnStyle === 'parallel') title = title + ' ⚡ Parallel';
+      if (linesPerPlay === 'random') title = title + ' (Dice)';
+      document.getElementById('gameTitle').textContent = title;
+
       document.getElementById('gameOverBanner').classList.add('hidden');
+      document.getElementById('lockInRow').classList.toggle('hidden', turnStyle !== 'parallel');
+      document.getElementById('lockInBtn').disabled = true;
+      document.getElementById('handoffOverlay').classList.add('hidden');
       renderBoard();
       renderScoreboard();
       renderTurn();
       renderDiceArea();
+      renderModernInfo();
     }
 
-    /* ═══════════════════ rendering ═══════════════════ */
+    /* ═══════════════════ SVG rendering ═══════════════════ */
+
+    function computeSvgSize() {
+      let maxX = 0, maxY = 0;
+      for (const d of dotPositions) {
+        if (d.x > maxX) maxX = d.x;
+        if (d.y > maxY) maxY = d.y;
+      }
+      return { w: maxX + svgPadding, h: maxY + svgPadding };
+    }
 
     function renderBoard() {
-      const n = gridSize;
-      const gridRows = 2 * n - 1;
-      const gridCols = 2 * n - 1;
+      const svg = document.getElementById('boardSvg');
+      svg.innerHTML = '';
+      const size = computeSvgSize();
+      svg.setAttribute('viewBox', '0 0 ' + size.w + ' ' + size.h);
+      svg.setAttribute('width', size.w);
+      svg.setAttribute('height', size.h);
 
-      const lineLen = Math.max(24, Math.min(48, Math.floor(360 / (n - 1))));
-      const dotSize = 14;
-
-      const colTemplate = [];
-      for (let gc = 0; gc < gridCols; gc++) {
-        colTemplate.push(gc % 2 === 0 ? dotSize + 'px' : lineLen + 'px');
-      }
-      const rowTemplate = [];
-      for (let gr = 0; gr < gridRows; gr++) {
-        rowTemplate.push(gr % 2 === 0 ? dotSize + 'px' : lineLen + 'px');
-      }
-
-      const board = document.getElementById('board');
-      board.style.gridTemplateColumns = colTemplate.join(' ');
-      board.style.gridTemplateRows = rowTemplate.join(' ');
-      board.innerHTML = '';
-
+      const isParallel = turnStyle === 'parallel';
+      const inChoosePhase = isParallel && (parallelPhase === 'p1Choose' || parallelPhase === 'p2Choose');
       const isMyTurn = !onlineMode || currentPlayer === myPlayerNum;
-      const canPlay = isMyTurn && !(gameVariant === 'dice' && (needsRoll || diceForfeit));
+      const diceBlocked = linesPerPlay === 'random' && (isParallel ? parallelNeedsRoll : (needsRoll || diceForfeit));
+      const canPlayEdge = !gameOver && gameVariant === 'classic' && !diceBlocked &&
+        (isParallel ? inChoosePhase : isMyTurn);
+      const canClickDot = !gameOver && gameVariant === 'modern' && !diceBlocked &&
+        (isParallel ? inChoosePhase : isMyTurn);
 
-      for (let gr = 0; gr < gridRows; gr++) {
-        for (let gc = 0; gc < gridCols; gc++) {
-          const isEvenRow = gr % 2 === 0;
-          const isEvenCol = gc % 2 === 0;
+      const pendingSet = isParallel && parallelChoosingPlayer > 0
+        ? new Set(pendingEdges[parallelChoosingPlayer])
+        : new Set();
 
-          if (isEvenRow && isEvenCol) {
-            const dot = document.createElement('div');
-            dot.className = 'dot';
-            board.appendChild(dot);
-          } else if (isEvenRow && !isEvenCol) {
-            const r = gr / 2;
-            const c = (gc - 1) / 2;
-            const cell = document.createElement('div');
-            cell.className = 'hline-cell';
-            const bar = document.createElement('div');
-            const v = hLines[r][c];
-            bar.className = 'hline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver && canPlay) {
-              cell.onclick = () => drawLine('h', r, c);
-            } else {
-              cell.style.cursor = 'default';
-            }
-            cell.appendChild(bar);
-            board.appendChild(cell);
-          } else if (!isEvenRow && isEvenCol) {
-            const r = (gr - 1) / 2;
-            const c = gc / 2;
-            const cell = document.createElement('div');
-            cell.className = 'vline-cell';
-            const bar = document.createElement('div');
-            const v = vLines[r][c];
-            bar.className = 'vline-bar' + (v === 0 ? ' available' : v === 1 ? ' drawn-p1' : ' drawn-p2');
-            if (v === 0 && !gameOver && canPlay) {
-              cell.onclick = () => drawLine('v', r, c);
-            } else {
-              cell.style.cursor = 'default';
-            }
-            cell.appendChild(bar);
-            board.appendChild(cell);
+      const previewEdges = new Set();
+      if (gameVariant === 'modern' && modernSelectedDot >= 0) {
+        for (const ep of modernValidEndpoints) {
+          for (const ek of ep.edgeKeys) previewEdges.add(ek);
+        }
+      }
+
+      for (const [key, terr] of Object.entries(territoryMap)) {
+        if (terr.owner !== 0) {
+          const points = terr.dots.map(di => dotPositions[di].x + ',' + dotPositions[di].y).join(' ');
+          const poly = document.createElementNS(SVG_NS, 'polygon');
+          poly.setAttribute('points', points);
+          if (terr.owner === -1) {
+            poly.setAttribute('fill', 'rgba(128, 128, 128, 0.35)');
           } else {
-            const r = (gr - 1) / 2;
-            const c = (gc - 1) / 2;
-            const cell = document.createElement('div');
-            cell.className = 'box-cell';
-            const v = boxes[r][c];
-            if (v === 1) {
-              cell.classList.add('claimed-p1');
-              cell.textContent = p1.initial;
-            } else if (v === 2) {
-              cell.classList.add('claimed-p2');
-              cell.textContent = p2.initial;
-            }
-            board.appendChild(cell);
+            poly.setAttribute('fill', terr.owner === 1 ? P1_FILL : P2_FILL);
           }
+          poly.setAttribute('stroke', 'none');
+          svg.appendChild(poly);
+
+          const cx = terr.dots.reduce((s, di) => s + dotPositions[di].x, 0) / terr.dots.length;
+          const cy = terr.dots.reduce((s, di) => s + dotPositions[di].y, 0) / terr.dots.length;
+          const txt = document.createElementNS(SVG_NS, 'text');
+          txt.setAttribute('x', cx);
+          txt.setAttribute('y', cy + 5);
+          txt.setAttribute('text-anchor', 'middle');
+          if (terr.owner === -1) {
+            txt.setAttribute('fill', 'rgba(200, 200, 200, 0.6)');
+            txt.textContent = '×';
+          } else {
+            txt.setAttribute('fill', terr.owner === 1 ? P1_COLOR : P2_COLOR);
+            txt.textContent = terr.owner === 1 ? p1.initial : p2.initial;
+          }
+          txt.setAttribute('font-size', getBoardType() === 'grid_boxes' ? '14' : '11');
+          txt.setAttribute('font-weight', 'bold');
+          txt.setAttribute('font-family', 'Segoe UI, sans-serif');
+          svg.appendChild(txt);
+        }
+      }
+
+      for (const [key, edge] of Object.entries(edgeMap)) {
+        const d1 = dotPositions[edge.d1];
+        const d2 = dotPositions[edge.d2];
+        const isPending = pendingSet.has(key);
+
+        if (edge.owner > 0) {
+          const glowLine = document.createElementNS(SVG_NS, 'line');
+          glowLine.setAttribute('x1', d1.x);
+          glowLine.setAttribute('y1', d1.y);
+          glowLine.setAttribute('x2', d2.x);
+          glowLine.setAttribute('y2', d2.y);
+          glowLine.setAttribute('stroke', edge.owner === 1 ? P1_COLOR : P2_COLOR);
+          glowLine.setAttribute('stroke-width', '10');
+          glowLine.setAttribute('stroke-linecap', 'round');
+          glowLine.setAttribute('opacity', '0.3');
+          svg.appendChild(glowLine);
+        }
+
+        if (isPending) {
+          const glowLine = document.createElementNS(SVG_NS, 'line');
+          glowLine.setAttribute('x1', d1.x);
+          glowLine.setAttribute('y1', d1.y);
+          glowLine.setAttribute('x2', d2.x);
+          glowLine.setAttribute('y2', d2.y);
+          glowLine.setAttribute('stroke', parallelChoosingPlayer === 1 ? P1_COLOR : P2_COLOR);
+          glowLine.setAttribute('stroke-width', '10');
+          glowLine.setAttribute('stroke-linecap', 'round');
+          glowLine.setAttribute('opacity', '0.2');
+          svg.appendChild(glowLine);
+        }
+
+        const line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', d1.x);
+        line.setAttribute('y1', d1.y);
+        line.setAttribute('x2', d2.x);
+        line.setAttribute('y2', d2.y);
+        line.setAttribute('stroke-linecap', 'round');
+
+        if (edge.owner > 0) {
+          line.setAttribute('stroke', edge.owner === 1 ? P1_COLOR : P2_COLOR);
+          line.setAttribute('stroke-width', '5');
+        } else if (isPending) {
+          line.setAttribute('stroke', parallelChoosingPlayer === 1 ? P1_COLOR : P2_COLOR);
+          line.setAttribute('stroke-width', '5');
+          line.setAttribute('stroke-dasharray', '8,4');
+          line.setAttribute('opacity', '0.7');
+        } else if (previewEdges.has(key)) {
+          const previewPlayer = isParallel ? parallelChoosingPlayer : currentPlayer;
+          line.setAttribute('stroke', previewPlayer === 1 ? P1_COLOR : P2_COLOR);
+          line.setAttribute('stroke-width', '4');
+          line.setAttribute('opacity', '0.35');
+        } else {
+          line.setAttribute('stroke', LINE_IDLE);
+          line.setAttribute('stroke-width', '4');
+        }
+        svg.appendChild(line);
+
+        const edgeAvailForClick = edge.owner === 0 && !isPending;
+        if (edgeAvailForClick && canPlayEdge) {
+          const hitArea = document.createElementNS(SVG_NS, 'line');
+          hitArea.setAttribute('x1', d1.x);
+          hitArea.setAttribute('y1', d1.y);
+          hitArea.setAttribute('x2', d2.x);
+          hitArea.setAttribute('y2', d2.y);
+          hitArea.setAttribute('stroke', 'transparent');
+          hitArea.setAttribute('stroke-width', '16');
+          hitArea.setAttribute('stroke-linecap', 'round');
+          hitArea.setAttribute('pointer-events', 'all');
+          hitArea.style.cursor = 'pointer';
+          hitArea.addEventListener('mouseenter', () => {
+            line.setAttribute('stroke', LINE_HOVER);
+            line.setAttribute('stroke-width', '6');
+          });
+          hitArea.addEventListener('mouseleave', () => {
+            if (edgeMap[key].owner === 0 && !pendingSet.has(key)) {
+              line.setAttribute('stroke', LINE_IDLE);
+              line.setAttribute('stroke-width', '4');
+            }
+          });
+          hitArea.addEventListener('click', () => handleEdgeClick(key));
+          svg.appendChild(hitArea);
+        }
+      }
+
+      if (gameVariant === 'modern' && !gameOver) {
+        const activeP = isParallel ? parallelChoosingPlayer : currentPlayer;
+        const activeColor = activeP === 1 ? P1_COLOR : P2_COLOR;
+        const validEndpointDots = new Set(modernValidEndpoints.map(ep => ep.dotIdx));
+        for (let i = 0; i < dotPositions.length; i++) {
+          const d = dotPositions[i];
+          const isSelected = i === modernSelectedDot;
+          const isContinue = i === modernContinueDot && modernMustContinue;
+          const isValidEndpoint = validEndpointDots.has(i);
+
+          if (isSelected) {
+            const ring = document.createElementNS(SVG_NS, 'circle');
+            ring.setAttribute('cx', d.x);
+            ring.setAttribute('cy', d.y);
+            ring.setAttribute('r', '12');
+            ring.setAttribute('fill', 'none');
+            ring.setAttribute('stroke', activeColor);
+            ring.setAttribute('stroke-width', '2.5');
+            ring.setAttribute('opacity', '0.8');
+            svg.appendChild(ring);
+          }
+
+          if (isContinue && modernSelectedDot < 0) {
+            const ring = document.createElementNS(SVG_NS, 'circle');
+            ring.setAttribute('cx', d.x);
+            ring.setAttribute('cy', d.y);
+            ring.setAttribute('r', '11');
+            ring.setAttribute('fill', 'none');
+            ring.setAttribute('stroke', '#ffd700');
+            ring.setAttribute('stroke-width', '2.5');
+            ring.setAttribute('opacity', '0.8');
+            svg.appendChild(ring);
+          }
+
+          if (isValidEndpoint && !isSelected) {
+            const indicator = document.createElementNS(SVG_NS, 'circle');
+            indicator.setAttribute('cx', d.x);
+            indicator.setAttribute('cy', d.y);
+            indicator.setAttribute('r', '9');
+            indicator.setAttribute('fill', 'none');
+            indicator.setAttribute('stroke', activeColor);
+            indicator.setAttribute('stroke-width', '1.5');
+            indicator.setAttribute('opacity', '0.6');
+            indicator.setAttribute('stroke-dasharray', '3,3');
+            svg.appendChild(indicator);
+          }
+        }
+      }
+
+      for (let i = 0; i < dotPositions.length; i++) {
+        const d = dotPositions[i];
+        const dot = document.createElementNS(SVG_NS, 'circle');
+        dot.setAttribute('cx', d.x);
+        dot.setAttribute('cy', d.y);
+        dot.setAttribute('r', '6');
+        dot.setAttribute('fill', DOT_COLOR);
+        svg.appendChild(dot);
+
+        if (canClickDot) {
+          const hitDot = document.createElementNS(SVG_NS, 'circle');
+          hitDot.setAttribute('cx', d.x);
+          hitDot.setAttribute('cy', d.y);
+          hitDot.setAttribute('r', '14');
+          hitDot.setAttribute('fill', 'transparent');
+          hitDot.setAttribute('pointer-events', 'all');
+          hitDot.style.cursor = 'pointer';
+          const dotIdx = i;
+          hitDot.addEventListener('click', () => handleDotClick(dotIdx));
+          svg.appendChild(hitDot);
         }
       }
     }
 
     function renderScoreboard() {
       const sb = document.getElementById('scoreboard');
+      const isP = turnStyle === 'parallel';
+      const showDiceTotals = isP && linesPerPlay === 'random';
+      const p1Active = !gameOver && (isP ? parallelChoosingPlayer === 1 : currentPlayer === 1);
+      const p2Active = !gameOver && (isP ? parallelChoosingPlayer === 2 : currentPlayer === 2);
+      const p1Dice = showDiceTotals ? ' <span style="opacity:0.5;font-size:12px">🎲' + parallelDiceTotals[1] + '</span>' : '';
+      const p2Dice = showDiceTotals ? ' <span style="opacity:0.5;font-size:12px">🎲' + parallelDiceTotals[2] + '</span>' : '';
       sb.innerHTML =
-        '<div class="score-item' + (currentPlayer === 1 && !gameOver ? ' active-p1' : '') + '">' +
-          '<span class="p1-color">' + p1.name + '</span>: ' + scores[1] +
+        '<div class="score-item' + (p1Active ? ' active-p1' : '') + '">' +
+          '<span class="p1-color">' + p1.name + '</span>: ' + scores[1] + p1Dice +
         '</div>' +
-        '<div class="score-item' + (currentPlayer === 2 && !gameOver ? ' active-p2' : '') + '">' +
-          '<span class="p2-color">' + p2.name + '</span>: ' + scores[2] +
+        '<div class="score-item' + (p2Active ? ' active-p2' : '') + '">' +
+          '<span class="p2-color">' + p2.name + '</span>: ' + scores[2] + p2Dice +
         '</div>';
     }
 
@@ -945,6 +1539,30 @@
       const ti = document.getElementById('turnIndicator');
       if (gameOver) {
         ti.textContent = '';
+        return;
+      }
+      if (turnStyle === 'parallel') {
+        if (parallelPhase === 'p1Roll' || parallelPhase === 'p2Roll') {
+          const pNum = parallelChoosingPlayer;
+          const info = pNum === 1 ? p1 : p2;
+          const cls = pNum === 1 ? 'p1-color' : 'p2-color';
+          ti.innerHTML = '<span class="' + cls + '">' + info.name + '</span> — roll the dice';
+          ti.style.opacity = '1';
+        } else if (parallelPhase === 'p1Choose' || parallelPhase === 'p2Choose') {
+          const pNum = parallelChoosingPlayer;
+          const info = pNum === 1 ? p1 : p2;
+          const cls = pNum === 1 ? 'p1-color' : 'p2-color';
+          ti.innerHTML = '<span class="' + cls + '">' + info.name + '</span> — choose your move';
+          ti.style.opacity = '1';
+        } else if (parallelPhase === 'reveal') {
+          ti.innerHTML = 'Revealing moves…';
+          ti.style.opacity = '0.8';
+        } else if (parallelPhase === 'waiting') {
+          ti.innerHTML = 'Locked in — waiting for opponent…';
+          ti.style.opacity = '0.6';
+        } else {
+          ti.textContent = '';
+        }
         return;
       }
       if (onlineMode) {
@@ -962,90 +1580,91 @@
       }
     }
 
+    function renderModernInfo() {
+      const el = document.getElementById('modernInfo');
+      if (gameVariant !== 'modern' || gameOver) {
+        el.classList.add('hidden');
+        return;
+      }
+      el.classList.remove('hidden');
+      if (turnStyle === 'parallel') {
+        if (parallelPhase !== 'p1Choose' && parallelPhase !== 'p2Choose') {
+          el.innerHTML = '';
+          return;
+        }
+        if (linesPerPlay === 'random' && parallelNeedsRoll) {
+          el.innerHTML = '';
+        } else if (modernSelectedDot >= 0) {
+          el.innerHTML = 'Now click an endpoint to draw a line.';
+        } else {
+          el.innerHTML = 'Click a dot to start your line.';
+        }
+        return;
+      }
+      if (linesPerPlay === 'random' && (needsRoll || diceForfeit)) {
+        el.innerHTML = '';
+      } else if (modernSelectedDot >= 0) {
+        el.innerHTML = 'Now click an endpoint to draw a line.';
+      } else {
+        el.innerHTML = 'Click a dot to start your line.';
+      }
+    }
+
     /* ═══════════════════ game logic ═══════════════════ */
 
-    function countBoxSides(r, c) {
+    function countAvailableEdges() {
+      const pSet = (turnStyle === 'parallel' && parallelChoosingPlayer > 0)
+        ? new Set(pendingEdges[parallelChoosingPlayer])
+        : new Set();
       let count = 0;
-      if (hLines[r][c]) count++;
-      if (hLines[r + 1][c]) count++;
-      if (vLines[r][c]) count++;
-      if (vLines[r][c + 1]) count++;
+      for (const key of Object.keys(edgeMap)) {
+        if (edgeMap[key].owner === 0 && !pSet.has(key)) count++;
+      }
       return count;
     }
 
-    function countAvailableLines() {
-      let count = 0;
-      for (let r = 0; r < hLines.length; r++)
-        for (let c = 0; c < hLines[r].length; c++)
-          if (hLines[r][c] === 0) count++;
-      for (let r = 0; r < vLines.length; r++)
-        for (let c = 0; c < vLines[r].length; c++)
-          if (vLines[r][c] === 0) count++;
-      return count;
+    function checkTerritoriesForEdge(edgeKey) {
+      let claimed = 0;
+      const terrs = edgeToTerritories[edgeKey] || [];
+      for (const tKey of terrs) {
+        const terr = territoryMap[tKey];
+        if (terr.owner !== 0) continue;
+        const allDrawn = terr.edges.every(ek => edgeMap[ek].owner !== 0);
+        if (allDrawn) {
+          terr.owner = currentPlayer;
+          scores[currentPlayer]++;
+          claimed++;
+        }
+      }
+      return claimed;
     }
 
-    function drawLine(type, r, c, isRemote) {
+    function applyEdge(edgeKey, isRemote) {
       if (gameOver) return;
-      if (gameVariant === 'dice' && needsRoll && !isRemote) return;
+      const edge = edgeMap[edgeKey];
+      if (!edge || edge.owner !== 0) return;
       if (onlineMode && !isRemote && currentPlayer !== myPlayerNum) return;
 
-      if (type === 'h') {
-        if (hLines[r][c] !== 0) return;
-        hLines[r][c] = currentPlayer;
-      } else {
-        if (vLines[r][c] !== 0) return;
-        vLines[r][c] = currentPlayer;
-      }
+      edge.owner = currentPlayer;
 
       if (onlineMode && !isRemote && conn) {
-        conn.send({ type: 'move', lineType: type, r: r, c: c });
+        conn.send({ type: 'move', edgeKey: edgeKey });
       }
 
-      let claimed = 0;
+      const claimed = checkTerritoriesForEdge(edgeKey);
 
-      if (type === 'h') {
-        if (r > 0 && c < gridSize - 1 && boxes[r - 1][c] === 0) {
-          if (countBoxSides(r - 1, c) === 4) {
-            boxes[r - 1][c] = currentPlayer;
-            scores[currentPlayer]++;
-            claimed++;
-          }
-        }
-        if (r < gridSize - 1 && c < gridSize - 1 && boxes[r][c] === 0) {
-          if (countBoxSides(r, c) === 4) {
-            boxes[r][c] = currentPlayer;
-            scores[currentPlayer]++;
-            claimed++;
-          }
-        }
-      } else {
-        if (c > 0 && r < gridSize - 1 && boxes[r][c - 1] === 0) {
-          if (countBoxSides(r, c - 1) === 4) {
-            boxes[r][c - 1] = currentPlayer;
-            scores[currentPlayer]++;
-            claimed++;
-          }
-        }
-        if (c < gridSize - 1 && r < gridSize - 1 && boxes[r][c] === 0) {
-          if (countBoxSides(r, c) === 4) {
-            boxes[r][c] = currentPlayer;
-            scores[currentPlayer]++;
-            claimed++;
-          }
-        }
-      }
-
-      if (scores[1] + scores[2] === totalBoxes) {
+      if (scores[1] + scores[2] >= totalTerritories) {
         gameOver = true;
         renderBoard();
         renderScoreboard();
         renderTurn();
         renderDiceArea();
+        renderModernInfo();
         showGameOver();
         return;
       }
 
-      if (gameVariant === 'dice') {
+      if (linesPerPlay === 'random') {
         movesRemaining--;
         if (movesRemaining <= 0) {
           currentPlayer = currentPlayer === 1 ? 2 : 1;
@@ -1062,13 +1681,460 @@
       renderScoreboard();
       renderTurn();
       renderDiceArea();
+      renderModernInfo();
     }
+
+    function handleEdgeClick(edgeKey) {
+      if (gameOver) return;
+      if (gameVariant === 'modern') return;
+
+      if (turnStyle === 'parallel') {
+        if (parallelPhase !== 'p1Choose' && parallelPhase !== 'p2Choose') return;
+        if (linesPerPlay === 'random' && parallelNeedsRoll) return;
+        if (parallelMovesLeft <= 0) return;
+        if (edgeMap[edgeKey].owner !== 0) return;
+        if (pendingEdges[parallelChoosingPlayer].includes(edgeKey)) return;
+        pendingEdges[parallelChoosingPlayer].push(edgeKey);
+        parallelMovesLeft--;
+        if (parallelMovesLeft <= 0) enableLockIn();
+        renderBoard();
+        return;
+      }
+
+      if (linesPerPlay === 'random' && (needsRoll || diceForfeit)) return;
+      if (onlineMode && currentPlayer !== myPlayerNum) return;
+      applyEdge(edgeKey, false);
+    }
+
+    /* ═══════════════════ modern mode ═══════════════════ */
+
+    function getNeighborEdges(dotIdx) {
+      const result = [];
+      for (const [key, edge] of Object.entries(edgeMap)) {
+        if (edge.d1 === dotIdx || edge.d2 === dotIdx) {
+          result.push(key);
+        }
+      }
+      return result;
+    }
+
+    function computeValidEndpoints(fromDotIdx) {
+      const pSet = (turnStyle === 'parallel' && parallelChoosingPlayer > 0)
+        ? new Set(pendingEdges[parallelChoosingPlayer])
+        : new Set();
+
+      const results = [];
+      for (const line of straightLines) {
+        const pos = line.indexOf(fromDotIdx);
+        if (pos < 0) continue;
+
+        for (let dir = -1; dir <= 1; dir += 2) {
+          const newEdgeKeys = [];
+          let i = pos + dir;
+          while (i >= 0 && i < line.length) {
+            const prevDot = line[i - dir];
+            const curDot = line[i];
+            const ek = makeEdgeKey(prevDot, curDot);
+            if (!edgeMap[ek]) break;
+            if (edgeMap[ek].owner === 0 && !pSet.has(ek)) {
+              newEdgeKeys.push(ek);
+            }
+            if (newEdgeKeys.length > 0) {
+              results.push({ dotIdx: line[i], edgeKeys: [...newEdgeKeys] });
+            }
+            i += dir;
+          }
+        }
+      }
+      return results;
+    }
+
+    function hasValidMovesFromDot(dotIdx) {
+      return computeValidEndpoints(dotIdx).length > 0;
+    }
+
+    function handleDotClick(dotIdx) {
+      if (gameOver || gameVariant !== 'modern') return;
+
+      if (turnStyle === 'parallel') {
+        if (parallelPhase !== 'p1Choose' && parallelPhase !== 'p2Choose') return;
+        if (linesPerPlay === 'random' && parallelNeedsRoll) return;
+        if (parallelMovesLeft <= 0) return;
+
+        if (modernSelectedDot < 0) {
+          const endpoints = computeValidEndpoints(dotIdx);
+          if (endpoints.length === 0) return;
+          modernSelectedDot = dotIdx;
+          modernValidEndpoints = endpoints;
+          renderBoard();
+          renderModernInfo();
+          return;
+        }
+
+        if (dotIdx === modernSelectedDot) {
+          modernSelectedDot = -1;
+          modernValidEndpoints = [];
+          renderBoard();
+          renderModernInfo();
+          return;
+        }
+
+        const endpoint = modernValidEndpoints.find(ep => ep.dotIdx === dotIdx);
+        if (!endpoint) return;
+
+        for (const ek of endpoint.edgeKeys) {
+          if (edgeMap[ek] && edgeMap[ek].owner === 0 && !pendingEdges[parallelChoosingPlayer].includes(ek)) {
+            pendingEdges[parallelChoosingPlayer].push(ek);
+          }
+        }
+        modernSelectedDot = -1;
+        modernValidEndpoints = [];
+        parallelMovesLeft--;
+        if (parallelMovesLeft <= 0) enableLockIn();
+        renderBoard();
+        renderModernInfo();
+        return;
+      }
+
+      if (linesPerPlay === 'random' && (needsRoll || diceForfeit)) return;
+      if (onlineMode && currentPlayer !== myPlayerNum) return;
+
+      if (modernSelectedDot < 0) {
+        if (modernMustContinue && modernContinueDot >= 0 && dotIdx !== modernContinueDot) return;
+
+        const endpoints = computeValidEndpoints(dotIdx);
+        if (endpoints.length === 0) return;
+
+        modernSelectedDot = dotIdx;
+        modernValidEndpoints = endpoints;
+        renderBoard();
+        renderModernInfo();
+        return;
+      }
+
+      if (dotIdx === modernSelectedDot) {
+        modernSelectedDot = -1;
+        modernValidEndpoints = [];
+        renderBoard();
+        renderModernInfo();
+        return;
+      }
+
+      const endpoint = modernValidEndpoints.find(ep => ep.dotIdx === dotIdx);
+      if (!endpoint) return;
+
+      applyModernLine(modernSelectedDot, dotIdx, endpoint.edgeKeys, false);
+    }
+
+    function applyModernLine(startDot, endDot, edgeKeys, isRemote) {
+      if (gameOver) return;
+      if (onlineMode && !isRemote && currentPlayer !== myPlayerNum) return;
+
+      if (onlineMode && !isRemote && conn) {
+        conn.send({ type: 'modernMove', startDot, endDot, edgeKeys });
+      }
+
+      let totalClaimed = 0;
+      for (const ek of edgeKeys) {
+        const edge = edgeMap[ek];
+        if (!edge || edge.owner !== 0) continue;
+        edge.owner = currentPlayer;
+        totalClaimed += checkTerritoriesForEdge(ek);
+      }
+
+      modernSelectedDot = -1;
+      modernValidEndpoints = [];
+
+      if (scores[1] + scores[2] >= totalTerritories) {
+        gameOver = true;
+        modernMustContinue = false;
+        modernContinueDot = -1;
+        renderBoard();
+        renderScoreboard();
+        renderTurn();
+        renderModernInfo();
+        showGameOver();
+        return;
+      }
+
+      modernMustContinue = false;
+      modernContinueDot = -1;
+
+      if (linesPerPlay === 'random') {
+        movesRemaining--;
+        if (movesRemaining <= 0) {
+          currentPlayer = currentPlayer === 1 ? 2 : 1;
+          needsRoll = true;
+          movesRemaining = 0;
+        }
+      } else {
+        currentPlayer = currentPlayer === 1 ? 2 : 1;
+      }
+
+      renderBoard();
+      renderScoreboard();
+      renderTurn();
+      renderDiceArea();
+      renderModernInfo();
+    }
+
+    /* ═══════════════════ parallel mode ═══════════════════ */
+
+    function enableLockIn() {
+      document.getElementById('lockInBtn').disabled = false;
+    }
+
+    function lockIn() {
+      if (turnStyle !== 'parallel') return;
+      const hasEdges = pendingEdges[parallelChoosingPlayer].length > 0;
+      const diceForfeitParallel = linesPerPlay === 'random' && !parallelNeedsRoll && parallelMovesLeft === 0 && !hasEdges;
+      if (!hasEdges && !diceForfeitParallel) return;
+      document.getElementById('lockInBtn').disabled = true;
+
+      modernSelectedDot = -1;
+      modernValidEndpoints = [];
+
+      if (parallelPhase === 'p1Choose') {
+        if (onlineMode) {
+          conn.send({ type: 'parallelLock', edges: pendingEdges[myPlayerNum] });
+          parallelPhase = 'waiting';
+          renderTurn();
+          renderBoard();
+          return;
+        }
+        if (linesPerPlay === 'random') {
+          parallelPhase = 'moveHandoff2';
+          showHandoffOverlay('Pass to ' + p2.name + ' to make moves');
+        } else {
+          parallelPhase = 'handoff';
+          showHandoffOverlay('Pass to ' + p2.name);
+        }
+        renderBoard();
+        renderTurn();
+      } else if (parallelPhase === 'p2Choose') {
+        if (onlineMode) {
+          conn.send({ type: 'parallelLock', edges: pendingEdges[myPlayerNum] });
+          parallelPhase = 'waiting';
+          renderTurn();
+          renderBoard();
+          return;
+        }
+        parallelPhase = 'reveal';
+        renderTurn();
+        revealMoves();
+      }
+    }
+
+    function showHandoffOverlay(title) {
+      document.getElementById('handoffTitle').textContent = title;
+      document.getElementById('handoffBody').innerHTML = '';
+      document.getElementById('handoffOverlay').classList.remove('hidden');
+    }
+
+    function showDiceRevealOverlay() {
+      document.getElementById('handoffTitle').textContent = 'Dice Results';
+      const v1 = parallelDiceValues[1];
+      const v2 = parallelDiceValues[2];
+      const f1 = parallelDiceForfeits[1];
+      const f2 = parallelDiceForfeits[2];
+      let html =
+        '<div style="display:flex;justify-content:center;gap:32px;margin:20px 0">' +
+          '<div style="text-align:center">' +
+            '<div style="margin-bottom:8px;font-weight:bold" class="p1-color">' + p1.name + '</div>' +
+            '<div class="dice" style="display:inline-flex">' + renderDiceFace(v1) + '</div>' +
+            (f1 ? '<div style="color:#ff6ec7;margin-top:6px;font-size:13px">Forfeit!</div>' : '<div style="margin-top:6px;font-size:13px">' + v1 + ' move' + (v1 !== 1 ? 's' : '') + '</div>') +
+          '</div>' +
+          '<div style="text-align:center">' +
+            '<div style="margin-bottom:8px;font-weight:bold" class="p2-color">' + p2.name + '</div>' +
+            '<div class="dice" style="display:inline-flex">' + renderDiceFace(v2) + '</div>' +
+            (f2 ? '<div style="color:#ff6ec7;margin-top:6px;font-size:13px">Forfeit!</div>' : '<div style="margin-top:6px;font-size:13px">' + v2 + ' move' + (v2 !== 1 ? 's' : '') + '</div>') +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:8px;font-size:12px;opacity:0.5">Running totals: ' +
+          p1.name + ' 🎲' + parallelDiceTotals[1] + ' · ' +
+          p2.name + ' 🎲' + parallelDiceTotals[2] +
+        '</div>';
+      document.getElementById('handoffBody').innerHTML = html;
+      document.getElementById('handoffOverlay').classList.remove('hidden');
+    }
+
+    function dismissHandoff() {
+      document.getElementById('handoffOverlay').classList.add('hidden');
+      modernSelectedDot = -1;
+      modernValidEndpoints = [];
+
+      if (parallelPhase === 'rollHandoff') {
+        parallelPhase = 'p2Roll';
+        parallelChoosingPlayer = 2;
+        parallelNeedsRoll = true;
+        renderBoard();
+        renderTurn();
+        renderDiceArea();
+        return;
+      }
+
+      if (parallelPhase === 'diceReveal') {
+        parallelPhase = 'moveHandoff1';
+        showHandoffOverlay('Pass to ' + p1.name + ' to make moves');
+        return;
+      }
+
+      if (parallelPhase === 'moveHandoff1') {
+        parallelPhase = 'p1Choose';
+        parallelChoosingPlayer = 1;
+        parallelMovesLeft = parallelDiceForfeits[1] ? 0 : parallelDiceValues[1];
+        document.getElementById('lockInBtn').disabled = !parallelDiceForfeits[1];
+        if (parallelDiceForfeits[1]) enableLockIn();
+        renderBoard();
+        renderTurn();
+        renderDiceArea();
+        renderModernInfo();
+        return;
+      }
+
+      if (parallelPhase === 'moveHandoff2') {
+        parallelPhase = 'p2Choose';
+        parallelChoosingPlayer = 2;
+        parallelMovesLeft = parallelDiceForfeits[2] ? 0 : parallelDiceValues[2];
+        document.getElementById('lockInBtn').disabled = !parallelDiceForfeits[2];
+        if (parallelDiceForfeits[2]) enableLockIn();
+        renderBoard();
+        renderTurn();
+        renderDiceArea();
+        renderModernInfo();
+        return;
+      }
+
+      if (parallelPhase === 'handoff') {
+        parallelPhase = 'p2Choose';
+        parallelChoosingPlayer = 2;
+        if (linesPerPlay === 'random') {
+          parallelMovesLeft = parallelDiceForfeits[2] ? 0 : parallelDiceValues[2];
+          if (parallelDiceForfeits[2]) enableLockIn();
+        } else {
+          parallelMovesLeft = 1;
+        }
+        document.getElementById('lockInBtn').disabled = true;
+        renderBoard();
+        renderTurn();
+        renderDiceArea();
+        renderModernInfo();
+      }
+    }
+
+    function revealMoves() {
+      const p1Edges = pendingEdges[1].slice();
+      const p2Edges = pendingEdges[2].slice();
+      pendingEdges = { 1: [], 2: [] };
+
+      const roundContrib = {};
+      for (const ek of p1Edges) {
+        if (!roundContrib[ek]) roundContrib[ek] = new Set();
+        roundContrib[ek].add(1);
+        if (edgeMap[ek] && edgeMap[ek].owner === 0) edgeMap[ek].owner = 1;
+      }
+      for (const ek of p2Edges) {
+        if (!roundContrib[ek]) roundContrib[ek] = new Set();
+        roundContrib[ek].add(2);
+        if (edgeMap[ek] && edgeMap[ek].owner === 0) edgeMap[ek].owner = 2;
+      }
+
+      let deadzoneCount = 0;
+      for (const [key, terr] of Object.entries(territoryMap)) {
+        if (terr.owner !== 0) continue;
+        const allDrawn = terr.edges.every(ek => edgeMap[ek] && edgeMap[ek].owner !== 0);
+        if (!allDrawn) continue;
+
+        let p1Count = 0, p2Count = 0;
+        for (const ek of terr.edges) {
+          if (roundContrib[ek]) {
+            if (roundContrib[ek].has(1)) p1Count++;
+            if (roundContrib[ek].has(2)) p2Count++;
+          }
+        }
+
+        if (p1Count > 0 && p2Count > 0) {
+          if (p1Count > p2Count) {
+            terr.owner = 1;
+            scores[1]++;
+          } else if (p2Count > p1Count) {
+            terr.owner = 2;
+            scores[2]++;
+          } else {
+            terr.owner = -1;
+            deadzoneCount++;
+          }
+        } else if (p1Count > 0) {
+          terr.owner = 1;
+          scores[1]++;
+        } else if (p2Count > 0) {
+          terr.owner = 2;
+          scores[2]++;
+        }
+      }
+
+      const totalDead = Object.values(territoryMap).filter(t => t.owner === -1).length;
+      if (scores[1] + scores[2] + totalDead >= totalTerritories) {
+        gameOver = true;
+        parallelPhase = '';
+        renderBoard();
+        renderScoreboard();
+        renderTurn();
+        renderDiceArea();
+        renderModernInfo();
+        document.getElementById('lockInRow').classList.add('hidden');
+        showGameOver();
+        return;
+      }
+
+      renderBoard();
+      renderScoreboard();
+
+      setTimeout(startNextParallelRound, 1200);
+    }
+
+    function startNextParallelRound() {
+      if (gameOver) return;
+      pendingEdges = { 1: [], 2: [] };
+      parallelChoosingPlayer = onlineMode ? myPlayerNum : 1;
+      modernSelectedDot = -1;
+      modernValidEndpoints = [];
+      document.getElementById('lockInBtn').disabled = true;
+
+      if (linesPerPlay === 'random') {
+        parallelPhase = 'p1Roll';
+        parallelNeedsRoll = true;
+        parallelMovesLeft = 0;
+        parallelDiceValues = { 1: 0, 2: 0 };
+        parallelDiceForfeits = { 1: false, 2: false };
+      } else {
+        parallelPhase = 'p1Choose';
+        parallelMovesLeft = 1;
+      }
+
+      renderBoard();
+      renderScoreboard();
+      renderTurn();
+      renderDiceArea();
+      renderModernInfo();
+    }
+
+    /* ═══════════════════ game over ═══════════════════ */
 
     function showGameOver() {
       const banner = document.getElementById('gameOverBanner');
       banner.classList.remove('hidden');
       let verdict, detail;
-      if (scores[1] > scores[2]) {
+      const tied = scores[1] === scores[2];
+      const useDiceTiebreak = tied && turnStyle === 'parallel' && linesPerPlay === 'random';
+
+      if (useDiceTiebreak && parallelDiceTotals[1] !== parallelDiceTotals[2]) {
+        const winner = parallelDiceTotals[1] < parallelDiceTotals[2] ? 1 : 2;
+        const wName = winner === 1 ? p1.name : p2.name;
+        verdict = wName + ' wins on tiebreak!';
+        detail = scores[1] + ' – ' + scores[2] +
+          ' (🎲 ' + parallelDiceTotals[1] + ' vs ' + parallelDiceTotals[2] + ' — fewer dice wins)';
+      } else if (scores[1] > scores[2]) {
         verdict = p1.name + ' wins!';
         detail = scores[1] + ' – ' + scores[2];
       } else if (scores[2] > scores[1]) {
@@ -1077,6 +2143,13 @@
       } else {
         verdict = "It's a tie!";
         detail = scores[1] + ' – ' + scores[2];
+        if (useDiceTiebreak) {
+          detail += ' (🎲 ' + parallelDiceTotals[1] + ' vs ' + parallelDiceTotals[2] + ' — still tied!)';
+        }
+      }
+      const totalDead = Object.values(territoryMap).filter(t => t.owner === -1).length;
+      if (totalDead > 0) {
+        detail += ' (' + totalDead + ' deadzone' + (totalDead > 1 ? 's' : '') + ')';
       }
       banner.innerHTML = '<h2>' + verdict + '</h2><p>' + detail + '</p>';
     }
@@ -1102,16 +2175,64 @@
 
     function renderDiceArea() {
       const area = document.getElementById('diceArea');
-      if (gameVariant !== 'dice' || gameOver) {
+      if (linesPerPlay !== 'random' || gameOver) {
         area.classList.add('hidden');
         return;
       }
       area.classList.remove('hidden');
+
+      if (turnStyle === 'parallel') {
+        const cp = parallelChoosingPlayer;
+        if (parallelPhase === 'p1Roll' || parallelPhase === 'p2Roll') {
+          area.innerHTML =
+            '<div class="dice" id="diceEl">' + renderDiceFace(1) + '</div>' +
+            '<button class="rollBtn" onclick="rollDiceParallel()">Roll Dice</button>';
+          return;
+        }
+        if (parallelPhase === 'p1Choose' || parallelPhase === 'p2Choose') {
+          const op = cp === 1 ? 2 : 1;
+          const cpInfo = cp === 1 ? p1 : p2;
+          const opInfo = op === 1 ? p1 : p2;
+          const cpCls = cp === 1 ? 'p1-color' : 'p2-color';
+          const opCls = op === 1 ? 'p1-color' : 'p2-color';
+
+          let myStatus = '';
+          if (parallelDiceForfeits[cp]) {
+            myStatus = '<span style="color:#ff6ec7">Forfeit!</span>';
+          } else {
+            myStatus = '<span class="moves-remaining">' + parallelMovesLeft + ' move' + (parallelMovesLeft !== 1 ? 's' : '') + ' left</span>';
+          }
+
+          let opStatus = '';
+          if (parallelDiceForfeits[op]) {
+            opStatus = '<span style="color:#ff6ec7;font-size:12px">Forfeit!</span>';
+          } else {
+            opStatus = '<span style="opacity:0.6;font-size:12px">' + parallelDiceValues[op] + ' move' + (parallelDiceValues[op] !== 1 ? 's' : '') + '</span>';
+          }
+
+          area.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:center;gap:20px">' +
+              '<div style="text-align:center">' +
+                '<div style="font-size:11px;margin-bottom:4px" class="' + cpCls + '">' + cpInfo.name + '</div>' +
+                '<div class="dice" id="diceEl">' + renderDiceFace(parallelDiceValues[cp]) + '</div>' +
+                '<div style="margin-top:4px">' + myStatus + '</div>' +
+              '</div>' +
+              '<div style="text-align:center;opacity:0.5;transform:scale(0.75)">' +
+                '<div style="font-size:11px;margin-bottom:4px" class="' + opCls + '">' + opInfo.name + '</div>' +
+                '<div class="dice">' + renderDiceFace(parallelDiceValues[op]) + '</div>' +
+                '<div style="margin-top:4px">' + opStatus + '</div>' +
+              '</div>' +
+            '</div>';
+          return;
+        }
+        area.classList.add('hidden');
+        return;
+      }
+
       const isMyTurn = !onlineMode || currentPlayer === myPlayerNum;
 
       if (diceForfeit) {
-        const available = countAvailableLines();
-        const who = onlineMode ? (isMyTurn ? 'You' : 'Opponent') : (currentPlayer === 1 ? p1.name : p2.name);
+        const available = countAvailableEdges();
         area.innerHTML =
           '<div class="dice" id="diceEl">' + renderDiceFace(diceValue) + '</div>' +
           '<span class="moves-remaining" style="color:#ff6ec7">Rolled ' + diceValue +
@@ -1160,8 +2281,45 @@
       }, 60);
     }
 
+    function rollDiceParallel() {
+      if (!parallelNeedsRoll || gameOver) return;
+      if (turnStyle !== 'parallel') return;
+
+      const el = document.getElementById('diceEl');
+      el.classList.add('rolling');
+      const cp = parallelChoosingPlayer;
+
+      let rolls = 0;
+      const interval = setInterval(() => {
+        el.innerHTML = renderDiceFace(Math.floor(Math.random() * 6) + 1);
+        rolls++;
+        if (rolls >= 8) {
+          clearInterval(interval);
+          const val = Math.floor(Math.random() * 6) + 1;
+          el.innerHTML = renderDiceFace(val);
+          el.classList.remove('rolling');
+
+          parallelDiceValues[cp] = val;
+          const available = countAvailableEdges();
+          parallelDiceForfeits[cp] = val > available;
+          if (!parallelDiceForfeits[cp]) parallelDiceTotals[cp] += val;
+          parallelNeedsRoll = false;
+
+          setTimeout(() => {
+            if (parallelPhase === 'p1Roll') {
+              parallelPhase = 'rollHandoff';
+              showHandoffOverlay('Pass to ' + p2.name + ' to roll');
+            } else if (parallelPhase === 'p2Roll') {
+              parallelPhase = 'diceReveal';
+              showDiceRevealOverlay();
+            }
+          }, 600);
+        }
+      }, 60);
+    }
+
     function applyDiceRoll(value) {
-      const available = countAvailableLines();
+      const available = countAvailableEdges();
       if (value > available) {
         diceForfeit = true;
         needsRoll = false;
@@ -1253,7 +2411,11 @@
             type: 'setup',
             guestPlayerNum: guestNum,
             gridSize: gridSize,
-            variant: gameVariant
+            variant: gameVariant,
+            linesPerPlay: linesPerPlay,
+            gameType: gameType,
+            boardStructure: boardStructure,
+            turnStyle: turnStyle
           });
 
           onlineMode = true;
@@ -1326,6 +2488,10 @@
         myPlayerNum = data.guestPlayerNum;
         gridSize = data.gridSize;
         gameVariant = data.variant || 'classic';
+        linesPerPlay = data.linesPerPlay || 'single';
+        gameType = data.gameType || 'boxes';
+        boardStructure = data.boardStructure || 'grid';
+        turnStyle = data.turnStyle || 'turnBased';
         onlineMode = true;
 
         p1.name = myPlayerNum === 1 ? 'You' : 'Opponent';
@@ -1337,10 +2503,22 @@
         document.getElementById('gameScreen').classList.remove('hidden');
         initBoard();
       } else if (data.type === 'move') {
-        drawLine(data.lineType, data.r, data.c, true);
+        applyEdge(data.edgeKey, true);
+      } else if (data.type === 'modernMove') {
+        applyModernLine(data.startDot, data.endDot, data.edgeKeys, true);
       } else if (data.type === 'diceRoll') {
         diceValue = data.value;
         applyDiceRoll(data.value);
+      } else if (data.type === 'parallelLock') {
+        const opponentNum = myPlayerNum === 1 ? 2 : 1;
+        pendingEdges[opponentNum] = data.edges || [];
+        if (pendingEdges[myPlayerNum].length > 0) {
+          parallelPhase = 'reveal';
+          renderTurn();
+          revealMoves();
+        } else {
+          renderTurn();
+        }
       } else if (data.type === 'rematch') {
         doRematch(data.gridSize);
       }
@@ -1365,7 +2543,7 @@
       }
 
       if (onlineMode && conn) {
-        conn.send({ type: 'rematch', gridSize: gridSize, variant: gameVariant });
+        conn.send({ type: 'rematch', gridSize: gridSize, variant: gameVariant, linesPerPlay: linesPerPlay, gameType: gameType, boardStructure: boardStructure, turnStyle: turnStyle });
       }
       doRematch(gridSize);
     }
@@ -1388,7 +2566,10 @@
       onlineMode = false;
       myPlayerNum = 0;
       gameOver = false;
+      parallelPhase = '';
+      parallelChoosingPlayer = 0;
       window.location.hash = '';
+      document.getElementById('handoffOverlay').classList.add('hidden');
       document.getElementById('lobbyScreen').classList.add('hidden');
       document.getElementById('gameScreen').classList.add('hidden');
       document.getElementById('setupScreen').classList.remove('hidden');
