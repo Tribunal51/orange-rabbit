@@ -689,7 +689,7 @@
       <ul>
         <li>After all 4 stages, one cell remains empty.</li>
         <li>The game checks if placing each player's symbol there would complete a line.</li>
-        <li>Each player who would complete a line earns <strong>1 point</strong>.</li>
+        <li>Each player earns <strong>1 point per line</strong> they would complete (possibly 2 if the tile completes two lines at once).</li>
       </ul>
 
       <h3>Captures</h3>
@@ -993,9 +993,15 @@
       const cap = computeCaptures(rb);
       let h = '<h3>Final Tile Evaluation</h3>';
       h += '<p class="resultLine ' + (finalResult.oLine ? 'resultPositive' : 'resultNeutral') + '">';
-      h += finalResult.oLine ? 'O completes a line → +1' : 'O does not complete a line → +0';
+      const oLn = finalResult.oLines || 0;
+      const xLn = finalResult.xLines || 0;
+      h += finalResult.oLine
+        ? 'O completes ' + oLn + ' line' + (oLn > 1 ? 's' : '') + ' → +' + oLn
+        : 'O does not complete a line → +0';
       h += '</p><p class="resultLine ' + (finalResult.xLine ? 'resultPositive' : 'resultNeutral') + '">';
-      h += finalResult.xLine ? 'X completes a line → +1' : 'X does not complete a line → +0';
+      h += finalResult.xLine
+        ? 'X completes ' + xLn + ' line' + (xLn > 1 ? 's' : '') + ' → +' + xLn
+        : 'X does not complete a line → +0';
       if (!onlineMode && playerCount === 2 && matchFormat > 1) {
         const p1s = getP1SymbolForRound(currentRound);
         const p2s = p1s === 'O' ? 'X' : 'O';
@@ -1219,15 +1225,15 @@
 
       const { r, c } = ec;
       board[r][c] = "O";
-      const oLine = hasLineThroughCell("O", r, c);
+      const oLines = countLinesThroughCell("O", r, c);
       board[r][c] = "X";
-      const xLine = hasLineThroughCell("X", r, c);
+      const xLines = countLinesThroughCell("X", r, c);
       board[r][c] = "BOTH";
 
-      if (oLine) score.O += 1;
-      if (xLine) score.X += 1;
+      score.O += oLines;
+      score.X += xLines;
 
-      finalResult = { oLine, xLine };
+      finalResult = { oLine: oLines > 0, xLine: xLines > 0, oLines, xLines };
       saveState("Final Tile");
       replayIndex = history.length - 1;
       onRoundEnd();
@@ -1323,6 +1329,13 @@
       return ALL_LINES
         .filter(l => l.some(([r,c]) => r === tr && c === tc))
         .some(l => l.every(([r,c]) => board[r][c] === p));
+    }
+
+    function countLinesThroughCell(p, tr, tc) {
+      return ALL_LINES
+        .filter(l => l.some(([r,c]) => r === tr && c === tc))
+        .filter(l => l.every(([r,c]) => board[r][c] === p))
+        .length;
     }
 
     function evaluateScoring() {
