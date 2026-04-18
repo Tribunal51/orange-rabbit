@@ -358,6 +358,14 @@
       </div>
     </div>
 
+    <div id="goOrderSection" class="setupSection">
+      <div class="setupLabel">You Go</div>
+      <div id="goOrderToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGoOrder('first')">First</button>
+        <button class="modeBtn" onclick="setGoOrder('second')">Second</button>
+      </div>
+    </div>
+
     <button class="startBtn" onclick="launchGame()">Start Game</button>
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
@@ -478,6 +486,7 @@
 
     let mode = 'cpu';        // 'cpu' | 'local' | 'online'
     let cpuDifficulty = 'medium';
+    let goFirstSelected = true; // user wants to go first (vs CPU / online host)
 
     let board = [];          // length 21; null or { player: 1|2, value: 1..10 }
     let turnNumber = 1;      // 1..TOTAL_PLACEMENTS
@@ -488,7 +497,11 @@
 
     // Online
     let peer = null, conn = null, isHost = false;
-    let myPlayer = 0;        // 1 or 2 in online mode
+    // myPlayer = the player slot the local user controls
+    //   cpu mode:    1 if you go first, 2 if you go second (CPU is the other slot)
+    //   local mode:  0 (both controlled here)
+    //   online mode: 1 or 2 (set by host preference, propagated in 'start' message)
+    let myPlayer = 0;
 
     /* ═══════════════════ SETUP ═══════════════════ */
 
@@ -498,6 +511,10 @@
         b.classList.toggle('selected', (i === 0 && m === 'cpu') || (i === 1 && m === 'local') || (i === 2 && m === 'online'));
       });
       document.getElementById('cpuDifficultySection').classList.toggle('hidden', m !== 'cpu');
+      // "You Go" only meaningful when there's an "other" player automatically deciding the
+      // alternate slot — i.e. vs CPU or online. In 2P local both players share the screen
+      // so order is a labeling choice we hide.
+      document.getElementById('goOrderSection').classList.toggle('hidden', m === 'local');
     }
 
     function setCpuDiff(d) {
@@ -507,9 +524,19 @@
       });
     }
 
+    function setGoOrder(order) {
+      goFirstSelected = (order === 'first');
+      document.querySelectorAll('#goOrderToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && goFirstSelected) || (i === 1 && !goFirstSelected));
+      });
+    }
+
     function launchGame() {
       if (mode === 'online') {
         createRoom();
+      } else if (mode === 'cpu') {
+        myPlayer = goFirstSelected ? 1 : 2;
+        startGame();
       } else {
         myPlayer = 0; // local — both players controlled
         startGame();
@@ -553,8 +580,8 @@
 
       // Player names depending on mode
       if (mode === 'cpu') {
-        document.getElementById('p1Name').textContent = 'You';
-        document.getElementById('p2Name').textContent = 'CPU';
+        document.getElementById('p1Name').textContent = (myPlayer === 1 ? 'You' : 'CPU');
+        document.getElementById('p2Name').textContent = (myPlayer === 2 ? 'You' : 'CPU');
       } else if (mode === 'local') {
         document.getElementById('p1Name').textContent = 'Player 1';
         document.getElementById('p2Name').textContent = 'Player 2';
@@ -565,6 +592,8 @@
 
       buildPyramid();
       render();
+      // If the other side moves first, kick them off
+      maybeTriggerCpuTurn();
     }
 
     function buildPyramid() {
@@ -603,9 +632,8 @@
     function isMyTurn() {
       if (gameOver) return false;
       const p = whoseTurn();
-      if (mode === 'cpu') return p === 1;
       if (mode === 'local') return true;
-      // online
+      // cpu and online both use myPlayer to identify the local user's slot
       return p === myPlayer;
     }
 
@@ -639,7 +667,7 @@
 
     function maybeTriggerCpuTurn() {
       if (mode !== 'cpu' || gameOver) return;
-      if (whoseTurn() !== 2) return;
+      if (whoseTurn() === myPlayer) return; // human's turn
       setTimeout(cpuMove, 550);
     }
 
@@ -647,8 +675,9 @@
 
     function cpuMove() {
       if (gameOver) return;
-      if (whoseTurn() !== 2) return;
-      const player = 2;
+      const cpuSlot = (myPlayer === 1 ? 2 : 1);
+      if (whoseTurn() !== cpuSlot) return;
+      const player = cpuSlot;
       const value = nextValueFor(player);
 
       const empty = [];
@@ -744,12 +773,12 @@
       const area = document.getElementById('resultArea');
       area.classList.remove('hidden');
       const winner = p1 === p2 ? 0 : (p1 > p2 ? 1 : 2);
-      const youAre = (mode === 'online' ? myPlayer : (mode === 'cpu' ? 1 : 0));
+      const youAre = (mode === 'local' ? 0 : myPlayer);
       let title;
       if (winner === 0) title = "It's a tie!";
-      else if (mode === 'online') title = (winner === youAre ? 'You win!' : 'You lose');
-      else if (mode === 'cpu') title = (winner === 1 ? 'You win!' : 'CPU wins');
-      else title = `Player ${winner} wins!`;
+      else if (mode === 'local') title = `Player ${winner} wins!`;
+      else if (mode === 'cpu') title = (winner === youAre ? 'You win!' : 'CPU wins');
+      else title = (winner === youAre ? 'You win!' : 'You lose');
       const p1Label = document.getElementById('p1Name').textContent;
       const p2Label = document.getElementById('p2Name').textContent;
       area.innerHTML = `
@@ -849,8 +878,8 @@
         ti.className = 'turn-indicator ' + (p === 1 ? 'p1' : 'p2');
         ti.removeAttribute('style');
         let label;
-        if (mode === 'cpu') label = (p === 1 ? 'Your turn' : "CPU's turn");
-        else if (mode === 'local') label = `Player ${p}'s turn`;
+        if (mode === 'local') label = `Player ${p}'s turn`;
+        else if (mode === 'cpu') label = (p === myPlayer ? 'Your turn' : "CPU's turn");
         else label = (p === myPlayer ? 'Your turn' : "Opponent's turn");
         ti.textContent = label;
         nt.textContent = v;
@@ -910,7 +939,7 @@
 
     async function createRoom() {
       isHost = true;
-      myPlayer = 1;
+      myPlayer = goFirstSelected ? 1 : 2;
       showLobby('<h2>Creating room…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
       const ice = await fetchIceServers();
       const rid = generateRoomId();
@@ -933,8 +962,8 @@
       peer.on('connection', (cn) => {
         conn = cn;
         cn.on('open', () => {
-          // Tell guest the game is starting
-          conn.send({ type: 'start' });
+          // Guest takes the slot the host did NOT take
+          conn.send({ type: 'start', guestPlayer: (myPlayer === 1 ? 2 : 1) });
           startGame();
         });
         cn.on('data', handlePeerData);
@@ -952,7 +981,7 @@
         if (m) rid = m[1]; else return;
       }
       isHost = false;
-      myPlayer = 2;
+      myPlayer = 2; // default; will be overridden by host's 'start' message
       mode = 'online';
       showLobby('<h2>Joining…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
       const ice = await fetchIceServers();
@@ -973,6 +1002,7 @@
     function handlePeerData(d) {
       switch (d.type) {
         case 'start':
+          if (typeof d.guestPlayer === 'number') myPlayer = d.guestPlayer;
           startGame();
           break;
         case 'move':
