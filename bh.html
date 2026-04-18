@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Black Hole</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(ellipse at top, #1e1b4b 0%, #0b0a1f 60%, #050418 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { font-size: 32px; margin-bottom: 6px; letter-spacing: 1px; }
+    .setup-sub { opacity: .55; font-size: 14px; margin-bottom: 30px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: #fff; }
+
+    /* ── setup ── */
+    .setupSection { margin-bottom: 22px; width: 380px; max-width: 100%; }
+    .setupLabel {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 8px;
+    }
+    .modeToggle { display: flex; gap: 6px; }
+    .modeBtn {
+      flex: 1; padding: 10px 0;
+      border: 1px solid rgba(168,85,247,.25); border-radius: 10px;
+      background: rgba(168,85,247,.06); color: rgba(255,255,255,.7);
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .modeBtn.selected {
+      background: rgba(168,85,247,.25); color: #fff;
+      font-weight: bold; border-color: rgba(168,85,247,.6);
+    }
+
+    .startBtn {
+      margin-top: 18px; padding: 14px 50px; font-size: 17px;
+      font-weight: bold; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; cursor: pointer; transition: .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .startBtn:hover { transform: scale(1.04); }
+    .rulesLink {
+      margin-top: 16px; font-size: 13px; color: rgba(255,255,255,.5);
+      cursor: pointer; text-decoration: underline;
+    }
+    .rulesLink:hover { color: #fff; }
+
+    /* ── game header ── */
+    .game-header {
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .turn-indicator {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: .5px;
+    }
+    .turn-indicator.p1 {
+      background: rgba(56,189,248,.2); color: #7dd3fc;
+      border: 1px solid rgba(56,189,248,.4);
+    }
+    .turn-indicator.p2 {
+      background: rgba(244,114,182,.2); color: #f9a8d4;
+      border: 1px solid rgba(244,114,182,.4);
+    }
+    .next-token {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 14px; border-radius: 18px;
+      background: rgba(255,255,255,.07);
+      font-size: 13px; font-weight: 600;
+    }
+    .next-token .token-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      font-size: 12px; color: #fff; font-weight: 900;
+    }
+    .next-token .token-num.p1 { background: #38bdf8; }
+    .next-token .token-num.p2 { background: #f472b6; }
+
+    /* ── score panels ── */
+    .scores-row {
+      display: flex; gap: 12px; margin-bottom: 18px;
+      width: 100%; max-width: 520px; justify-content: center;
+    }
+    .score-card {
+      flex: 1; padding: 12px 16px;
+      background: rgba(255,255,255,.04); border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      text-align: center; transition: .2s;
+    }
+    .score-card.p1 { border-color: rgba(56,189,248,.4); }
+    .score-card.p2 { border-color: rgba(244,114,182,.4); }
+    .score-card.active {
+      background: rgba(255,255,255,.08);
+      box-shadow: 0 0 16px rgba(168,85,247,.3);
+    }
+    .score-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 4px;
+    }
+    .score-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .score-card.p1 .score-name { color: #7dd3fc; }
+    .score-card.p2 .score-name { color: #f9a8d4; }
+    .score-value { font-size: 24px; font-weight: 900; }
+
+    /* ── pyramid board ── */
+    .board-wrap {
+      width: 100%; max-width: 540px; margin: 0 auto;
+      padding: 16px;
+      background: radial-gradient(ellipse at center, rgba(168,85,247,.08), transparent 70%);
+      border-radius: 24px;
+    }
+    .pyramid {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px; padding: 8px;
+    }
+    .py-row {
+      display: flex; gap: 8px; justify-content: center;
+    }
+    .cell {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: rgba(255,255,255,.06);
+      border: 2px solid rgba(255,255,255,.12);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 20px; color: #fff;
+      cursor: pointer; transition: transform .15s, background .15s, box-shadow .2s;
+      user-select: none;
+      position: relative;
+    }
+    .cell.empty:hover {
+      background: rgba(168,85,247,.15);
+      border-color: rgba(168,85,247,.5);
+      transform: scale(1.06);
+    }
+    .cell.disabled { cursor: default; }
+    .cell.disabled:hover { transform: none; background: rgba(255,255,255,.06); }
+    .cell.p1 {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      border-color: #0284c7;
+      box-shadow: 0 4px 14px rgba(14,165,233,.4);
+    }
+    .cell.p2 {
+      background: linear-gradient(135deg, #f472b6, #ec4899);
+      border-color: #db2777;
+      box-shadow: 0 4px 14px rgba(236,72,153,.4);
+    }
+    .cell.hole {
+      background: radial-gradient(circle at 50% 50%, #000 35%, #1e1b4b 80%, #2e1065 100%);
+      border-color: #6d28d9;
+      color: transparent;
+      box-shadow:
+        0 0 24px rgba(168,85,247,.7),
+        inset 0 0 20px rgba(0,0,0,.95);
+      animation: holePulse 2.4s ease-in-out infinite;
+    }
+    @keyframes holePulse {
+      0%, 100% { box-shadow: 0 0 24px rgba(168,85,247,.7), inset 0 0 20px rgba(0,0,0,.95); }
+      50% { box-shadow: 0 0 36px rgba(168,85,247,1), inset 0 0 24px rgba(0,0,0,1); }
+    }
+    .cell.consumed {
+      animation: consume .6s forwards ease-in;
+    }
+    @keyframes consume {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0.18; transform: scale(0.7); filter: grayscale(1); }
+    }
+    .cell.consumed::after {
+      content: '✕'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,80,80,.85); font-size: 22px; font-weight: 900;
+      animation: fadeIn .8s ease-in;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .cell.lastPlaced {
+      box-shadow: 0 0 0 3px #fde68a, 0 4px 14px rgba(0,0,0,.4);
+    }
+
+    /* ── result ── */
+    .resultCard {
+      max-width: 420px; margin: 24px auto 0;
+      padding: 28px; text-align: center;
+      background: rgba(255,255,255,.05); border-radius: 20px;
+      border: 1px solid rgba(168,85,247,.3);
+    }
+    .resultCard h2 { font-size: 26px; margin-bottom: 6px; }
+    .resultCard p.sub { font-size: 14px; opacity: .65; margin-bottom: 18px; }
+    .resultRow {
+      display: flex; justify-content: space-around;
+      gap: 16px; margin-bottom: 18px;
+    }
+    .resultCol .label {
+      font-size: 12px; text-transform: uppercase; opacity: .55;
+      letter-spacing: 1px; margin-bottom: 4px;
+    }
+    .resultCol .name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .resultCol .val { font-size: 28px; font-weight: 900; }
+    .resultCol.p1 .name { color: #7dd3fc; }
+    .resultCol.p2 .name { color: #f9a8d4; }
+    .resultCol.winner { transform: scale(1.08); }
+    .resultCol.winner .val { color: #fde68a; }
+
+    .actionBtn {
+      padding: 10px 22px; border: none; border-radius: 10px;
+      background: rgba(168,85,247,.2); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+      border: 1px solid rgba(168,85,247,.3);
+      font-weight: 600;
+    }
+    .actionBtn:hover { background: rgba(168,85,247,.35); transform: translateY(-1px); }
+    .actionBtn.primary {
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      border-color: transparent;
+    }
+
+    /* ── lobby ── */
+    .lobbyOverlay, #setupScreen.lobbyState {}
+    .lobby-status {
+      font-size: 15px; margin: 14px 0;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: #a855f7; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lobby-link-wrap {
+      display: flex; gap: 6px; margin: 14px auto;
+      max-width: 380px;
+    }
+    .lobby-link-input {
+      flex: 1; padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      background: rgba(0,0,0,.3); color: #c4b5fd;
+      font-size: 12px; font-family: monospace; outline: none;
+    }
+    .lobby-copy-btn {
+      padding: 10px 16px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; font-weight: bold; font-size: 13px;
+      cursor: pointer; transition: .2s; white-space: nowrap;
+    }
+    .lobby-copy-btn:hover { transform: scale(1.04); }
+    .newGameBtn {
+      margin-top: 16px; padding: 10px 28px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.1); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .newGameBtn:hover { background: rgba(255,255,255,.2); }
+
+    .dc-notice {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10,5,30,.95); color: #f87171; padding: 24px 36px;
+      border-radius: 16px; font-size: 16px; z-index: 300;
+      border: 1px solid rgba(248,113,113,.3); text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .dc-notice button {
+      display: block; margin: 14px auto 0; padding: 8px 24px;
+      border: none; border-radius: 8px;
+      background: rgba(255,255,255,.15); color: #fff;
+      cursor: pointer; font-size: 14px;
+    }
+    .dc-notice button:hover { background: rgba(255,255,255,.25); }
+
+    /* ── rules overlay ── */
+    #rulesOverlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .rulesCard {
+      background: linear-gradient(135deg, #1e1b4b, #0b0a1f);
+      border: 1px solid rgba(168,85,247,.3); border-radius: 20px;
+      padding: 30px; max-width: 480px; width: 100%;
+      max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .rulesCard h2 { margin-bottom: 16px; }
+    .rulesCard h3 { margin-top: 16px; margin-bottom: 6px; color: #c4b5fd; font-size: 15px; }
+    .rulesCard p, .rulesCard ul { font-size: 14px; line-height: 1.55; opacity: .9; }
+    .rulesCard ul { padding-left: 22px; }
+    .rulesCard li { margin: 4px 0; }
+    .rulesCloseBtn {
+      display: block; margin: 20px auto 0; padding: 10px 30px;
+      border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; font-weight: bold; cursor: pointer;
+    }
+
+    .messageBar {
+      min-height: 22px; margin-top: 10px;
+      font-size: 14px; opacity: .8; text-align: center;
+    }
+    .messageBar.warn { color: #fbbf24; }
+    .messageBar.bad { color: #f87171; }
+
+    @media (max-width: 540px) {
+      .cell { width: 44px; height: 44px; font-size: 16px; }
+      .py-row { gap: 6px; }
+      .pyramid { gap: 4px; }
+      h1 { font-size: 26px; }
+    }
+    @media (max-width: 380px) {
+      .cell { width: 36px; height: 36px; font-size: 14px; border-width: 1.5px; }
+      .py-row { gap: 4px; }
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div id="setupScreen">
+    <h1>Black Hole</h1>
+    <p class="setup-sub">Place tokens, dodge the void</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Mode</div>
+      <div id="modeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setMode('cpu')">vs CPU</button>
+        <button class="modeBtn" onclick="setMode('local')">2P Local</button>
+        <button class="modeBtn" onclick="setMode('online')">2P Online</button>
+      </div>
+    </div>
+
+    <div id="cpuDifficultySection" class="setupSection">
+      <div class="setupLabel">CPU Difficulty</div>
+      <div id="cpuDiffToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setCpuDiff('easy')">Easy</button>
+        <button class="modeBtn selected" onclick="setCpuDiff('medium')">Medium</button>
+        <button class="modeBtn" onclick="setCpuDiff('hard')">Hard</button>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ LOBBY ═══════ -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Black Hole</h1>
+    <div id="lobbyContent"></div>
+    <button class="newGameBtn" onclick="backToSetup()">Cancel</button>
+  </div>
+
+  <!-- ═══════ GAME ═══════ -->
+  <div id="gameScreen" class="hidden">
+    <h1>Black Hole</h1>
+
+    <div class="game-header">
+      <div id="turnIndicator" class="turn-indicator p1">Your turn</div>
+      <div class="next-token">Next: <span id="nextTokenNum" class="token-num p1">1</span></div>
+    </div>
+
+    <div class="scores-row">
+      <div id="p1Card" class="score-card p1">
+        <div class="score-label">Player</div>
+        <div class="score-name" id="p1Name">You</div>
+        <div class="score-value" id="p1Score">0</div>
+      </div>
+      <div id="p2Card" class="score-card p2">
+        <div class="score-label">Player</div>
+        <div class="score-name" id="p2Name">CPU</div>
+        <div class="score-value" id="p2Score">0</div>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <div class="pyramid" id="pyramid"></div>
+    </div>
+
+    <div id="messageBar" class="messageBar"></div>
+
+    <div id="resultArea" class="hidden"></div>
+
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:18px;">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ RULES ═══════ -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard" onclick="event.stopPropagation()">
+      <h2>How to Play</h2>
+
+      <h3>Board</h3>
+      <p>A pyramid of 21 circles arranged in 6 rows (1, 2, 3, 4, 5, 6).</p>
+
+      <h3>Turns</h3>
+      <ul>
+        <li>Players alternate, each placing a numbered token onto an empty circle in their own color.</li>
+        <li>Each player has tokens numbered <strong>1 through 10</strong>, placed in order.</li>
+        <li>After 20 placements, exactly one circle remains empty.</li>
+      </ul>
+
+      <h3>The Black Hole</h3>
+      <ul>
+        <li>The remaining empty circle becomes a <strong>black hole</strong>.</li>
+        <li>It destroys every token in a circle directly touching it (the swallowed tokens score nothing).</li>
+      </ul>
+
+      <h3>Scoring</h3>
+      <ul>
+        <li>Each surviving token contributes its number to its owner's score.</li>
+        <li>The player with the <strong>higher score wins</strong>.</li>
+        <li>Strategy: keep your high-value tokens away from each other so a single black hole can't wipe them all out — and try to bait your opponent's high tokens into clusters.</li>
+      </ul>
+
+      <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════ CONSTANTS ═══════════════════ */
+
+    const ROWS = 6;
+    const TOTAL_CELLS = ROWS * (ROWS + 1) / 2; // 21
+    const TOTAL_PLACEMENTS = TOTAL_CELLS - 1;  // 20 (one cell becomes black hole)
+    const TOKENS_PER_PLAYER = TOTAL_PLACEMENTS / 2; // 10
+
+    // Build cell coordinate table once: cells[idx] = { row, col }
+    const CELLS = (() => {
+      const out = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c <= r; c++) out.push({ row: r, col: c });
+      }
+      return out;
+    })();
+
+    function cellIndex(r, c) {
+      if (r < 0 || r >= ROWS || c < 0 || c > r) return -1;
+      return r * (r + 1) / 2 + c;
+    }
+
+    function neighborIndices(idx) {
+      const { row, col } = CELLS[idx];
+      const candidates = [
+        [row, col - 1], [row, col + 1],
+        [row - 1, col - 1], [row - 1, col],
+        [row + 1, col], [row + 1, col + 1],
+      ];
+      const out = [];
+      for (const [r, c] of candidates) {
+        const i = cellIndex(r, c);
+        if (i >= 0) out.push(i);
+      }
+      return out;
+    }
+
+    /* ═══════════════════ STATE ═══════════════════ */
+
+    let mode = 'cpu';        // 'cpu' | 'local' | 'online'
+    let cpuDifficulty = 'medium';
+
+    let board = [];          // length 21; null or { player: 1|2, value: 1..10 }
+    let turnNumber = 1;      // 1..TOTAL_PLACEMENTS
+    let blackHoleIdx = -1;
+    let consumedSet = new Set();
+    let gameOver = false;
+    let lastPlacedIdx = -1;
+
+    // Online
+    let peer = null, conn = null, isHost = false;
+    let myPlayer = 0;        // 1 or 2 in online mode
+
+    /* ═══════════════════ SETUP ═══════════════════ */
+
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('#modeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && m === 'cpu') || (i === 1 && m === 'local') || (i === 2 && m === 'online'));
+      });
+      document.getElementById('cpuDifficultySection').classList.toggle('hidden', m !== 'cpu');
+    }
+
+    function setCpuDiff(d) {
+      cpuDifficulty = d;
+      document.querySelectorAll('#cpuDiffToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && d === 'easy') || (i === 1 && d === 'medium') || (i === 2 && d === 'hard'));
+      });
+    }
+
+    function launchGame() {
+      if (mode === 'online') {
+        createRoom();
+      } else {
+        myPlayer = 0; // local — both players controlled
+        startGame();
+      }
+    }
+
+    function backToSetup() {
+      if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
+      conn = null;
+      gameOver = true;
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('messageBar').textContent = '';
+      history.replaceState(null, '', location.pathname);
+    }
+
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn')) {
+        document.getElementById('rulesOverlay').classList.add('hidden');
+      }
+    }
+
+    /* ═══════════════════ GAME START ═══════════════════ */
+
+    function startGame() {
+      board = new Array(TOTAL_CELLS).fill(null);
+      turnNumber = 1;
+      blackHoleIdx = -1;
+      consumedSet = new Set();
+      gameOver = false;
+      lastPlacedIdx = -1;
+
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('messageBar').textContent = '';
+
+      // Player names depending on mode
+      if (mode === 'cpu') {
+        document.getElementById('p1Name').textContent = 'You';
+        document.getElementById('p2Name').textContent = 'CPU';
+      } else if (mode === 'local') {
+        document.getElementById('p1Name').textContent = 'Player 1';
+        document.getElementById('p2Name').textContent = 'Player 2';
+      } else {
+        document.getElementById('p1Name').textContent = (myPlayer === 1 ? 'You' : 'Opponent');
+        document.getElementById('p2Name').textContent = (myPlayer === 2 ? 'You' : 'Opponent');
+      }
+
+      buildPyramid();
+      render();
+    }
+
+    function buildPyramid() {
+      const py = document.getElementById('pyramid');
+      py.innerHTML = '';
+      let idx = 0;
+      for (let r = 0; r < ROWS; r++) {
+        const row = document.createElement('div');
+        row.className = 'py-row';
+        for (let c = 0; c <= r; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell empty';
+          cell.dataset.idx = idx;
+          cell.onclick = () => onCellClick(parseInt(cell.dataset.idx));
+          row.appendChild(cell);
+          idx++;
+        }
+        py.appendChild(row);
+      }
+    }
+
+    /* ═══════════════════ TURN HELPERS ═══════════════════ */
+
+    function whoseTurn() {
+      // P1 plays on odd turns (1,3,5,...), P2 on even turns (2,4,6,...)
+      return turnNumber % 2 === 1 ? 1 : 2;
+    }
+
+    function nextValueFor(player) {
+      // P1's k-th placement uses value k (turn 2k-1 → P1 places k)
+      // P2's k-th placement uses value k (turn 2k   → P2 places k)
+      if (player === 1) return Math.floor((turnNumber + 1) / 2);
+      return Math.floor(turnNumber / 2);
+    }
+
+    function isMyTurn() {
+      if (gameOver) return false;
+      const p = whoseTurn();
+      if (mode === 'cpu') return p === 1;
+      if (mode === 'local') return true;
+      // online
+      return p === myPlayer;
+    }
+
+    /* ═══════════════════ MOVE LOGIC ═══════════════════ */
+
+    function onCellClick(idx) {
+      if (gameOver) return;
+      if (board[idx] !== null) return;
+      if (!isMyTurn()) {
+        flashMessage(mode === 'online' ? "Opponent's turn" : "Other player's turn", 'warn');
+        return;
+      }
+      const player = whoseTurn();
+      const value = nextValueFor(player);
+      placeToken(idx, player, value);
+      if (mode === 'online' && conn && conn.open) {
+        conn.send({ type: 'move', idx, player, value, turn: turnNumber - 1 });
+      }
+      maybeTriggerCpuTurn();
+    }
+
+    function placeToken(idx, player, value) {
+      board[idx] = { player, value };
+      lastPlacedIdx = idx;
+      turnNumber++;
+      render();
+      if (turnNumber > TOTAL_PLACEMENTS) {
+        revealBlackHole();
+      }
+    }
+
+    function maybeTriggerCpuTurn() {
+      if (mode !== 'cpu' || gameOver) return;
+      if (whoseTurn() !== 2) return;
+      setTimeout(cpuMove, 550);
+    }
+
+    /* ═══════════════════ CPU AI ═══════════════════ */
+
+    function cpuMove() {
+      if (gameOver) return;
+      if (whoseTurn() !== 2) return;
+      const player = 2;
+      const value = nextValueFor(player);
+
+      const empty = [];
+      for (let i = 0; i < TOTAL_CELLS; i++) if (board[i] === null) empty.push(i);
+      if (empty.length === 0) return;
+
+      let chosen;
+      if (cpuDifficulty === 'easy') {
+        chosen = empty[Math.floor(Math.random() * empty.length)];
+      } else {
+        chosen = pickCpuCell(empty, player, value);
+      }
+
+      placeToken(chosen, player, value);
+      if (gameOver) return;
+      maybeTriggerCpuTurn();
+    }
+
+    /**
+     * Heuristic CPU: each candidate cell is scored. Lower score = better.
+     *
+     *   risk(cell) = number of currently-empty neighbors of cell
+     *
+     * For high-value tokens we want low-risk cells (few empty neighbors → less
+     * chance of being adjacent to the eventual black hole).
+     *
+     * "hard" difficulty also looks at *opponent damage*: how much it raises
+     * the chance the opponent's high-value tokens will be vulnerable, by
+     * preferring cells that neighbor the opponent's high tokens (so the chance
+     * those become adjacent to the future black hole goes up).
+     */
+    function pickCpuCell(empty, player, value) {
+      const totalEmpty = empty.length;
+      const opponent = player === 1 ? 2 : 1;
+      const scored = empty.map(idx => {
+        const ns = neighborIndices(idx);
+        let emptyNeighbors = 0;
+        let oppHighAdjacent = 0;
+        for (const n of ns) {
+          if (board[n] === null) emptyNeighbors++;
+          else if (board[n].player === opponent) oppHighAdjacent += board[n].value;
+        }
+        // Risk to my token: more empty neighbors = more likely the black hole lands next door.
+        let s = value * emptyNeighbors;
+        // Hard mode: prefer reducing the empty-neighbor count of opponent's high-value tokens.
+        // If this cell becomes the black hole later, opponent loses oppHighAdjacent worth — we
+        // can't force that, but we can avoid placing near opponent's high tokens (raising our
+        // own risk score there) and we mildly prefer cells that fill an opponent's neighbor slot
+        // (reducing their empty-neighbor count → marginally safer for us if we keep low values
+        // away from emptiness). For the "hard" tier we add a small reward for occupying cells
+        // adjacent to opponent's high tokens with our LOW values.
+        if (cpuDifficulty === 'hard') {
+          // Reward: low value placed next to opponent's high tokens reduces their effective
+          // exposure (we surround them with our cheap tokens; the opponent can't easily put a
+          // black hole there without sacrificing our cheap tokens too — fine for us).
+          s -= (TOKENS_PER_PLAYER + 1 - value) * oppHighAdjacent * 0.25;
+        }
+        return { idx, s };
+      });
+      scored.sort((a, b) => a.s - b.s);
+      // Random tie-break among top 2 candidates for variety
+      const top = scored.filter(x => x.s === scored[0].s);
+      const pool = top.length > 0 ? top : scored.slice(0, 2);
+      return pool[Math.floor(Math.random() * pool.length)].idx;
+    }
+
+    /* ═══════════════════ END OF GAME ═══════════════════ */
+
+    function revealBlackHole() {
+      gameOver = true;
+      for (let i = 0; i < TOTAL_CELLS; i++) {
+        if (board[i] === null) { blackHoleIdx = i; break; }
+      }
+      consumedSet = new Set(neighborIndices(blackHoleIdx));
+      render();
+      const { p1, p2 } = computeScores();
+      showResult(p1, p2);
+    }
+
+    function computeScores() {
+      let p1 = 0, p2 = 0;
+      for (let i = 0; i < TOTAL_CELLS; i++) {
+        const cell = board[i];
+        if (!cell) continue;
+        if (consumedSet.has(i)) continue;
+        if (cell.player === 1) p1 += cell.value;
+        else p2 += cell.value;
+      }
+      return { p1, p2 };
+    }
+
+    function showResult(p1, p2) {
+      const area = document.getElementById('resultArea');
+      area.classList.remove('hidden');
+      const winner = p1 === p2 ? 0 : (p1 > p2 ? 1 : 2);
+      const youAre = (mode === 'online' ? myPlayer : (mode === 'cpu' ? 1 : 0));
+      let title;
+      if (winner === 0) title = "It's a tie!";
+      else if (mode === 'online') title = (winner === youAre ? 'You win!' : 'You lose');
+      else if (mode === 'cpu') title = (winner === 1 ? 'You win!' : 'CPU wins');
+      else title = `Player ${winner} wins!`;
+      const p1Label = document.getElementById('p1Name').textContent;
+      const p2Label = document.getElementById('p2Name').textContent;
+      area.innerHTML = `
+        <div class="resultCard">
+          <h2>${title}</h2>
+          <p class="sub">The black hole consumed ${consumedSet.size} token${consumedSet.size === 1 ? '' : 's'}.</p>
+          <div class="resultRow">
+            <div class="resultCol p1 ${winner === 1 ? 'winner' : ''}">
+              <div class="label">Score</div>
+              <div class="name">${p1Label}</div>
+              <div class="val">${p1}</div>
+            </div>
+            <div class="resultCol p2 ${winner === 2 ? 'winner' : ''}">
+              <div class="label">Score</div>
+              <div class="name">${p2Label}</div>
+              <div class="val">${p2}</div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
+            <button class="actionBtn primary" onclick="rematch()">Play Again</button>
+            <button class="actionBtn" onclick="backToSetup()">Change Settings</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function rematch() {
+      if (mode === 'online') {
+        if (conn && conn.open) {
+          conn.send({ type: 'rematch' });
+          startGame();
+        } else {
+          backToSetup();
+        }
+        return;
+      }
+      startGame();
+    }
+
+    /* ═══════════════════ RENDER ═══════════════════ */
+
+    function render() {
+      const cells = document.querySelectorAll('#pyramid .cell');
+      cells.forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        const cell = board[idx];
+        el.className = 'cell';
+        if (gameOver && idx === blackHoleIdx) {
+          el.classList.add('hole');
+          el.textContent = '';
+        } else if (cell) {
+          el.classList.add(cell.player === 1 ? 'p1' : 'p2');
+          el.textContent = cell.value;
+          if (consumedSet.has(idx)) el.classList.add('consumed');
+          if (idx === lastPlacedIdx && !consumedSet.has(idx)) el.classList.add('lastPlaced');
+        } else {
+          el.classList.add('empty');
+          el.textContent = '';
+        }
+        if (gameOver || cell !== null) el.classList.add('disabled');
+        if (!isMyTurn() && !gameOver && cell === null) el.classList.add('disabled');
+      });
+
+      // Live scoring while game is in progress (no destroyed cells yet)
+      if (!gameOver) {
+        let p1 = 0, p2 = 0;
+        for (const c of board) {
+          if (!c) continue;
+          if (c.player === 1) p1 += c.value;
+          else p2 += c.value;
+        }
+        document.getElementById('p1Score').textContent = p1;
+        document.getElementById('p2Score').textContent = p2;
+      } else {
+        const { p1, p2 } = computeScores();
+        document.getElementById('p1Score').textContent = p1;
+        document.getElementById('p2Score').textContent = p2;
+      }
+
+      // Turn indicator + next token
+      const ti = document.getElementById('turnIndicator');
+      const nt = document.getElementById('nextTokenNum');
+      document.getElementById('p1Card').classList.toggle('active', !gameOver && whoseTurn() === 1);
+      document.getElementById('p2Card').classList.toggle('active', !gameOver && whoseTurn() === 2);
+      if (gameOver) {
+        ti.textContent = 'Game Over';
+        ti.className = 'turn-indicator';
+        ti.style.background = 'rgba(255,255,255,.1)';
+        ti.style.color = '#fff';
+        ti.style.borderColor = 'rgba(255,255,255,.2)';
+        nt.textContent = '–';
+        nt.className = 'token-num';
+        nt.style.background = 'rgba(255,255,255,.15)';
+      } else {
+        const p = whoseTurn();
+        const v = nextValueFor(p);
+        ti.className = 'turn-indicator ' + (p === 1 ? 'p1' : 'p2');
+        ti.removeAttribute('style');
+        let label;
+        if (mode === 'cpu') label = (p === 1 ? 'Your turn' : "CPU's turn");
+        else if (mode === 'local') label = `Player ${p}'s turn`;
+        else label = (p === myPlayer ? 'Your turn' : "Opponent's turn");
+        ti.textContent = label;
+        nt.textContent = v;
+        nt.className = 'token-num ' + (p === 1 ? 'p1' : 'p2');
+        nt.removeAttribute('style');
+      }
+    }
+
+    function flashMessage(text, kind) {
+      const bar = document.getElementById('messageBar');
+      bar.textContent = text;
+      bar.className = 'messageBar' + (kind ? ' ' + kind : '');
+      clearTimeout(flashMessage._t);
+      flashMessage._t = setTimeout(() => { bar.textContent = ''; bar.className = 'messageBar'; }, 1800);
+    }
+
+    /* ═══════════════════ ONLINE / TURN+STUN (PeerJS) ═══════════════════ */
+
+    async function fetchIceServers() {
+      try {
+        const r = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+        if (!r.ok) throw 0;
+        return { iceServers: await r.json() };
+      } catch (_) {
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
+    function generateRoomId() {
+      const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'bh-';
+      for (let i = 0; i < 8; i++) id += c[Math.floor(Math.random() * c.length)];
+      return id;
+    }
+
+    function showLobby(html) {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.add('hidden');
+      const lobby = document.getElementById('lobbyScreen');
+      lobby.classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = html;
+    }
+
+    function showDisconnectNotice() {
+      gameOver = true;
+      const d = document.createElement('div');
+      d.className = 'dc-notice';
+      d.innerHTML = 'Opponent disconnected<br><button onclick="this.parentElement.remove();backToSetup()">Back to Setup</button>';
+      document.body.appendChild(d);
+    }
+
+    async function createRoom() {
+      isHost = true;
+      myPlayer = 1;
+      showLobby('<h2>Creating room…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
+      const ice = await fetchIceServers();
+      const rid = generateRoomId();
+      peer = new Peer(rid, { config: ice });
+
+      peer.on('open', (id) => {
+        const link = location.origin + location.pathname + '#room=' + id;
+        showLobby(
+          '<h2>Room Created</h2>' +
+          '<p style="opacity:.6;font-size:14px;">Share this link with your opponent:</p>' +
+          '<div class="lobby-link-wrap">' +
+          '<input class="lobby-link-input" id="roomLink" value="' + link + '" readonly>' +
+          '<button class="lobby-copy-btn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<div class="lobby-status"><div class="spinner"></div><span>Waiting for opponent…</span></div>' +
+          '<button class="newGameBtn" onclick="backToSetup()">Cancel</button>'
+        );
+      });
+
+      peer.on('connection', (cn) => {
+        conn = cn;
+        cn.on('open', () => {
+          // Tell guest the game is starting
+          conn.send({ type: 'start' });
+          startGame();
+        });
+        cn.on('data', handlePeerData);
+        cn.on('close', () => { if (!gameOver) showDisconnectNotice(); });
+      });
+
+      peer.on('error', (e) => {
+        showLobby('<h2>Error</h2><p style="color:#f87171">' + e.message + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>');
+      });
+    }
+
+    async function joinRoom(rid) {
+      if (!rid) {
+        const m = location.hash.match(/room=([^&]+)/);
+        if (m) rid = m[1]; else return;
+      }
+      isHost = false;
+      myPlayer = 2;
+      mode = 'online';
+      showLobby('<h2>Joining…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
+      const ice = await fetchIceServers();
+      peer = new Peer({ config: ice });
+      peer.on('open', () => {
+        conn = peer.connect(rid, { reliable: true });
+        conn.on('open', () => {
+          showLobby('<h2>Connected</h2><div class="lobby-status"><div class="spinner"></div><span>Waiting for host…</span></div>');
+        });
+        conn.on('data', handlePeerData);
+        conn.on('close', () => { if (!gameOver) showDisconnectNotice(); });
+      });
+      peer.on('error', (e) => {
+        showLobby('<h2>Connection Failed</h2><p style="color:#f87171">' + e.message + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>');
+      });
+    }
+
+    function handlePeerData(d) {
+      switch (d.type) {
+        case 'start':
+          startGame();
+          break;
+        case 'move':
+          if (!gameOver && board[d.idx] === null) {
+            // Apply opponent move locally
+            placeToken(d.idx, d.player, d.value);
+          }
+          break;
+        case 'rematch':
+          startGame();
+          break;
+      }
+    }
+
+    function copyLink() {
+      const i = document.getElementById('roomLink');
+      i.select();
+      navigator.clipboard.writeText(i.value).then(() => {
+        const b = document.getElementById('copyBtn');
+        b.textContent = 'Copied!'; setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    /* ═══════════════════ INIT ═══════════════════ */
+
+    window.addEventListener('load', () => {
+      // Auto-join room from hash if present
+      const m = location.hash.match(/room=([^&]+)/);
+      if (m) joinRoom(m[1]);
+    });
+  </script>
+</body>
+
+</html>

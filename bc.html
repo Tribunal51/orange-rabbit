@@ -533,8 +533,21 @@
     }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="words_all.js"></script>
   <script src="words.js"></script>
+  <script>
+    /* dict.json — used to validate user guesses (NOT to pick secret words).
+       words.js (VALID_WORDS) is the source for picked words. */
+    const ALL_WORDS = {};
+    let DICT_READY = false;
+    const dictReady = fetch('dict.json')
+      .then(r => r.json())
+      .then(data => {
+        for (const [len, arr] of Object.entries(data)) ALL_WORDS[+len] = new Set(arr);
+        DICT_READY = true;
+      })
+      .catch(e => console.error('Failed to load dict.json', e));
+    function validityMessage() { return DICT_READY ? 'Not a valid word' : 'Loading dictionary…'; }
+  </script>
 </head>
 
 <body>
@@ -773,7 +786,7 @@
 
     function isValidWord(word) {
       const w = word.toLowerCase();
-      return ALL_WORDS[w.length] && ALL_WORDS[w.length].has(w);
+      return !!(ALL_WORDS[w.length] && ALL_WORDS[w.length].has(w));
     }
 
     /* ═══════════════════ state ═══════════════════ */
@@ -923,7 +936,7 @@
         return;
       }
       if (!isValidWord(word)) {
-        err.textContent = 'Not a valid English word';
+        err.textContent = validityMessage();
         inp.focus();
         return;
       }
@@ -1185,7 +1198,7 @@
         return;
       }
       if (!isValidWord(word)) {
-        err.textContent = 'Not a valid English word';
+        err.textContent = validityMessage();
         inp.focus();
         return;
       }
@@ -1364,7 +1377,7 @@
         return;
       }
       if (!isValidWord(word)) {
-        err.textContent = 'Not a valid English word';
+        err.textContent = validityMessage();
         inp.focus();
         return;
       }
@@ -1536,7 +1549,7 @@
 
       if (word.length !== wordLength) { err.textContent = 'Enter a ' + wordLength + '-letter word'; return; }
       if (!/^[A-Z]+$/.test(word)) { err.textContent = 'Letters only'; return; }
-      if (!isValidWord(word)) { err.textContent = 'Not a valid English word'; inp.focus(); return; }
+      if (!isValidWord(word)) { err.textContent = validityMessage(); inp.focus(); return; }
       err.textContent = '';
 
       coopMyGuess = word;

@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Word Tree</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0a1628, #0f2027, #162a3a);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { margin: 0 0 6px; font-size: 32px; }
+
+    .setup-sub { opacity: .55; font-size: 14px; margin-bottom: 30px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: #fff; }
+
+    /* ── setup ── */
+    .setupSection { margin-bottom: 22px; width: 380px; max-width: 100%; }
+    .setupLabel {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 8px;
+    }
+    .modeToggle { display: flex; gap: 6px; }
+    .modeBtn {
+      flex: 1; padding: 10px 0;
+      border: 1px solid rgba(255,255,255,.2); border-radius: 10px;
+      background: rgba(255,255,255,.06); color: rgba(255,255,255,.7);
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .modeBtn.selected {
+      background: rgba(45,212,191,.2); color: #fff;
+      font-weight: bold; border-color: rgba(45,212,191,.5);
+    }
+    .startBtn {
+      margin-top: 18px; padding: 14px 50px; font-size: 17px;
+      font-weight: bold; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      color: #fff; cursor: pointer; transition: .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+    }
+    .startBtn:hover { transform: scale(1.04); }
+
+    /* ── game screen ── */
+    .game-header {
+      display: flex; align-items: center; gap: 20px;
+      margin-bottom: 20px; flex-wrap: wrap; justify-content: center;
+    }
+    .game-header h2 { font-size: 24px; }
+    .stats {
+      display: flex; gap: 16px; font-size: 14px; opacity: .7;
+    }
+    .stats span { font-weight: bold; color: #5eead4; }
+    .turn-indicator {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: .5px;
+    }
+    .turn-indicator.p1 {
+      background: rgba(45,212,191,.2); color: #5eead4;
+      border: 1px solid rgba(45,212,191,.4);
+    }
+    .turn-indicator.p2 {
+      background: rgba(244,114,182,.2); color: #f9a8d4;
+      border: 1px solid rgba(244,114,182,.4);
+    }
+
+    /* ── game board ── */
+    .game-board {
+      display: flex; gap: 12px; width: 100%; max-width: 900px;
+      justify-content: center; align-items: flex-start; flex-wrap: wrap;
+    }
+    .tree-panel {
+      flex: 1; min-width: 280px; max-width: 420px;
+      background: rgba(255,255,255,.04); border-radius: 16px;
+      padding: 16px; border: 1px solid rgba(255,255,255,.08);
+    }
+    .panel-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .panel-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+      opacity: .5;
+    }
+    .panel-word {
+      font-size: 18px; font-weight: 900; letter-spacing: 3px;
+      font-family: 'Courier New', monospace;
+    }
+    .left-panel .panel-word { color: #5eead4; }
+    .right-panel .panel-word { color: #f9a8d4; }
+    .left-panel { border-color: rgba(45,212,191,.15); --tree-line: rgba(45,212,191,.25); }
+    .right-panel { border-color: rgba(244,114,182,.15); --tree-line: rgba(244,114,182,.25); }
+
+    .tree-container {
+      min-height: 60px; max-height: 400px;
+      overflow: auto; padding: 8px 4px;
+    }
+    .tree-container::-webkit-scrollbar { width: 4px; height: 4px; }
+    .tree-container::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.15); border-radius: 2px;
+    }
+
+    /* ── vertical tree ── */
+    .vtree, .vtree ul, .vtree li { list-style: none; margin: 0; padding: 0; }
+    .vtree { display: inline-flex; justify-content: center; width: 100%; }
+
+    .vtree ul {
+      display: flex; justify-content: center;
+      padding-top: 22px; position: relative;
+    }
+    .vtree ul::before {
+      content: ''; position: absolute;
+      top: 0; left: 50%; height: 22px;
+      border-left: 2px solid var(--tree-line);
+    }
+    .vtree li {
+      display: flex; flex-direction: column; align-items: center;
+      position: relative; padding: 22px 3px 0;
+    }
+    .vtree li::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; width: 50%;
+      border-top: 2px solid var(--tree-line);
+    }
+    .vtree li::after {
+      content: ''; position: absolute;
+      top: 0; right: 0; width: 50%; height: 22px;
+      border-top: 2px solid var(--tree-line);
+      border-left: 2px solid var(--tree-line);
+    }
+    .vtree li:first-child::before { border: none; }
+    .vtree li:last-child::after { border-top: none; }
+    .vtree li:only-child::before { border: none; }
+    .vtree li:only-child::after { border-top: none; }
+    .vtree > li { padding-top: 0; }
+    .vtree > li::before, .vtree > li::after { display: none; }
+
+    /* ── word chips ── */
+    .word-chip {
+      display: inline-flex; gap: 1px; padding: 3px 6px;
+      border-radius: 6px; border: 2px solid transparent;
+      transition: all .15s; user-select: none; cursor: pointer;
+      white-space: nowrap; background: none; color: inherit;
+      font: inherit; outline: none;
+    }
+    .word-chip:focus-visible {
+      outline: 2px solid rgba(45,212,191,.5); outline-offset: 2px;
+    }
+    .left-panel .word-chip { border-color: rgba(45,212,191,.15); }
+    .right-panel .word-chip { border-color: rgba(244,114,182,.15); }
+    .word-chip.selected { box-shadow: 0 0 12px rgba(45,212,191,.2); }
+    .left-panel .word-chip.selected {
+      border-color: rgba(45,212,191,.5); background: rgba(45,212,191,.1);
+    }
+    .right-panel .word-chip.selected {
+      border-color: rgba(244,114,182,.5); background: rgba(244,114,182,.1);
+      box-shadow: 0 0 12px rgba(244,114,182,.2);
+    }
+    .word-chip.root { font-weight: bold; }
+    .left-panel .word-chip.root {
+      background: rgba(45,212,191,.12); border-color: rgba(45,212,191,.3);
+    }
+    .right-panel .word-chip.root {
+      background: rgba(244,114,182,.12); border-color: rgba(244,114,182,.3);
+    }
+    .word-chip.disabled { opacity: .4; cursor: default; }
+    .word-chip:not(.disabled):hover { filter: brightness(1.15); }
+
+    .letter {
+      display: inline-block; width: 20px; height: 22px;
+      line-height: 22px; text-align: center; font-size: 12px;
+      font-weight: 700; font-family: 'Courier New', monospace;
+      border-radius: 3px; text-transform: uppercase;
+    }
+    .left-panel .letter { color: #99f6e4; }
+    .right-panel .letter { color: #fbcfe8; }
+    .letter.changed { background: rgba(250,204,21,.2); color: #fde68a !important; }
+
+    .word-chip .move-count {
+      font-size: 9px; color: rgba(255,255,255,.3);
+      margin-left: 3px; align-self: center;
+    }
+
+    .win-content.game-over h2 { color: #f87171; }
+
+    .stat-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 12px; font-size: 12px;
+      font-weight: 600;
+    }
+    .stat-badge span { font-weight: 900; }
+    .badge-hint { background: rgba(250,204,21,.12); color: #fde68a; }
+    .badge-double { background: rgba(139,92,246,.15); color: #c4b5fd; }
+    .badge-dim { opacity: .4; }
+
+    /* ── input area ── */
+    .input-area {
+      width: 100%; max-width: 500px; margin-top: 20px;
+      text-align: center;
+    }
+    .selected-info {
+      font-size: 13px; opacity: .6; margin-bottom: 10px;
+      min-height: 20px;
+    }
+    .selected-info strong { color: #5eead4; opacity: 1; }
+    .input-row {
+      display: flex; gap: 8px; justify-content: center;
+    }
+    #wordInput {
+      flex: 1; max-width: 300px; padding: 12px 16px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,.2);
+      background: rgba(0,0,0,.3); color: #fff; font-size: 16px;
+      font-family: 'Courier New', monospace; letter-spacing: 3px;
+      text-transform: uppercase; text-align: center;
+      outline: none; transition: border-color .2s;
+    }
+    #wordInput:focus { border-color: rgba(45,212,191,.5); }
+    #submitBtn {
+      padding: 12px 24px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      color: #fff; font-weight: bold; font-size: 15px;
+      cursor: pointer; transition: .2s;
+    }
+    #submitBtn:hover { transform: scale(1.04); }
+    #submitBtn:disabled { opacity: .4; cursor: default; transform: none; }
+
+    .input-feedback {
+      font-size: 13px; margin-top: 8px; min-height: 20px;
+      transition: color .2s;
+    }
+    .input-feedback.error { color: #f87171; }
+    .input-feedback.success { color: #34d399; }
+    .input-feedback.info { color: rgba(255,255,255,.5); }
+
+    /* ── action buttons ── */
+    .action-row {
+      display: flex; gap: 8px; margin-top: 16px;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .actionBtn {
+      padding: 10px 20px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.1); color: #fff;
+      font-size: 13px; cursor: pointer; transition: .2s;
+    }
+    .actionBtn:hover { background: rgba(255,255,255,.2); }
+    .hintBtn {
+      background: rgba(250,204,21,.15); color: #fde68a;
+    }
+    .hintBtn:hover { background: rgba(250,204,21,.25); }
+
+    /* ── hint panel ── */
+    .hint-panel {
+      position: fixed; bottom: 16px; right: 16px; z-index: 150;
+      background: linear-gradient(135deg, #1a2332, #1e293b);
+      border: 1px solid rgba(250,204,21,.25);
+      border-radius: 14px; padding: 14px 16px;
+      max-height: 50vh; min-width: 140px; max-width: 200px;
+      overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .hint-panel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hint-panel-title {
+      font-size: 12px; font-weight: 700; letter-spacing: .5px;
+      color: #fde68a; text-transform: uppercase;
+    }
+    .hint-panel-close {
+      background: none; border: none; color: rgba(255,255,255,.4);
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
+    }
+    .hint-panel-close:hover { color: #fff; }
+    .hint-word {
+      display: block; width: 100%; text-align: left;
+      background: none; border: none; color: #e2e8f0;
+      font-family: 'Courier New', monospace; font-size: 14px;
+      padding: 5px 8px; border-radius: 6px; cursor: pointer;
+      letter-spacing: 1px; transition: .15s;
+    }
+    .hint-word:hover { background: rgba(250,204,21,.12); color: #fde68a; }
+
+    .letter.inserted {
+      background: rgba(34,197,94,.2);
+      color: #86efac !important;
+    }
+    .len-badge {
+      font-size: 9px; color: #86efac; margin-left: 2px;
+      align-self: center; font-weight: bold;
+      font-family: 'Courier New', monospace;
+    }
+    .len-info {
+      font-size: 12px; margin-top: 10px; text-align: center;
+      min-height: 18px; color: rgba(255,255,255,.4);
+    }
+    .len-budget { font-size: 13px; }
+    .len-budget span { font-weight: bold; color: #86efac; }
+    .dual-len { display: flex; gap: 16px; }
+    .dual-len > div { flex: 1; }
+
+    /* ── win overlay ── */
+    .win-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn .3s;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .win-content {
+      background: linear-gradient(135deg, #0f2027, #162a3a);
+      border: 1px solid rgba(45,212,191,.3);
+      border-radius: 20px; padding: 40px; text-align: center;
+      max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .win-content h2 {
+      font-size: 28px; margin-bottom: 8px; color: #5eead4;
+    }
+    .win-subtitle {
+      font-size: 14px; opacity: .6; margin-bottom: 24px;
+    }
+
+    .win-path {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      justify-content: center; align-items: center;
+      margin-bottom: 24px;
+    }
+    .win-path-word {
+      padding: 6px 12px; border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-weight: bold; letter-spacing: 2px; font-size: 14px;
+      text-transform: uppercase;
+    }
+    .win-path-word.left-word {
+      background: rgba(45,212,191,.15); color: #5eead4;
+      border: 1px solid rgba(45,212,191,.3);
+    }
+    .win-path-word.right-word {
+      background: rgba(244,114,182,.15); color: #f9a8d4;
+      border: 1px solid rgba(244,114,182,.3);
+    }
+    .win-path-word.bridge-word {
+      background: rgba(250,204,21,.2); color: #fde68a;
+      border: 1px solid rgba(250,204,21,.4);
+    }
+    .win-path-arrow {
+      color: rgba(255,255,255,.3); font-size: 16px;
+    }
+
+    .win-stats {
+      font-size: 14px; opacity: .7; margin-bottom: 24px;
+    }
+    .win-stats span { font-weight: bold; color: #5eead4; }
+
+    .win-content button {
+      padding: 12px 36px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      color: #fff; font-weight: bold; font-size: 16px;
+      cursor: pointer; transition: .2s;
+    }
+    .win-content button:hover { transform: scale(1.04); }
+
+    /* ── online / lobby ── */
+    .online-section {
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    .onlineBtn {
+      padding: 10px 24px; font-size: 14px; font-weight: bold;
+      border: none; border-radius: 10px; cursor: pointer; transition: .2s;
+      color: #fff;
+    }
+    .onlineBtn.create {
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+    }
+    .onlineBtn.join {
+      background: rgba(255,255,255,.15);
+    }
+    .onlineBtn:hover { transform: scale(1.04); }
+
+    .lobby-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn .3s;
+    }
+    .lobby-content {
+      background: linear-gradient(135deg, #0f2027, #162a3a);
+      border: 1px solid rgba(45,212,191,.3); border-radius: 20px;
+      padding: 40px; text-align: center; max-width: 400px; width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .lobby-content h2 { font-size: 24px; margin-bottom: 8px; }
+    .lobby-sub { font-size: 14px; opacity: .5; margin-bottom: 16px; }
+    .lobby-status {
+      font-size: 15px; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: #5eead4; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lobby-link-wrap {
+      display: flex; gap: 6px; margin: 14px 0;
+    }
+    .lobby-link-input {
+      flex: 1; padding: 10px 12px; border: 1px solid rgba(255,255,255,.15);
+      border-radius: 8px; background: rgba(0,0,0,.3);
+      color: #5eead4; font-size: 12px; font-family: monospace;
+      outline: none;
+    }
+    .lobby-link-input:focus { border-color: rgba(45,212,191,.5); }
+    .lobby-copy-btn {
+      padding: 10px 16px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      color: #fff; font-weight: bold; font-size: 13px;
+      cursor: pointer; transition: .2s; white-space: nowrap;
+    }
+    .lobby-copy-btn:hover { transform: scale(1.04); }
+    .lobby-content .cancelBtn {
+      padding: 10px 28px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.1); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .lobby-content .cancelBtn:hover { background: rgba(255,255,255,.2); }
+    .dc-notice {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10,20,40,.95); color: #f87171; padding: 24px 36px;
+      border-radius: 16px; font-size: 16px; z-index: 300;
+      border: 1px solid rgba(248,113,113,.3); text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .dc-notice button {
+      display: block; margin: 14px auto 0; padding: 8px 24px;
+      border: none; border-radius: 8px;
+      background: rgba(255,255,255,.15); color: #fff;
+      cursor: pointer; font-size: 14px;
+    }
+    .dc-notice button:hover { background: rgba(255,255,255,.25); }
+
+    /* ── responsive ── */
+    @media (max-width: 640px) {
+      .game-board { flex-direction: column; align-items: center; }
+      .tree-panel { max-width: 100%; min-width: 0; width: 100%; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Home</a>
+
+  <!-- ── SETUP SCREEN ── -->
+  <div id="setupScreen">
+    <h1>Word Tree</h1>
+    <p class="setup-sub">Connect two words by changing one letter at a time</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div class="modeToggle" id="modeToggle">
+        <button class="modeBtn selected" data-val="1p">Solo</button>
+        <button class="modeBtn" data-val="2p">Online</button>
+      </div>
+    </div>
+
+    <div class="setupSection hidden" id="onlineSection">
+      <div class="setupLabel">Online Room</div>
+      <div class="online-section">
+        <button class="onlineBtn create" onclick="createRoom()">Create Room</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Word Lengths</div>
+      <div class="modeToggle" id="lenModeToggle">
+        <button class="modeBtn selected" data-val="same">Same</button>
+        <button class="modeBtn" data-val="mixed">Mixed</button>
+      </div>
+    </div>
+
+    <div class="setupSection" id="sameLenSection">
+      <div class="setupLabel">Word Length</div>
+      <div class="modeToggle" id="lenToggle">
+        <button class="modeBtn" data-val="4">4</button>
+        <button class="modeBtn selected" data-val="5">5</button>
+        <button class="modeBtn" data-val="6">6</button>
+        <button class="modeBtn" data-val="7">7</button>
+      </div>
+    </div>
+
+    <div class="setupSection hidden" id="mixedLenSection">
+      <div class="dual-len">
+        <div>
+          <div class="setupLabel">Left Word</div>
+          <div class="modeToggle" id="leftLenToggle">
+            <button class="modeBtn selected" data-val="4">4</button>
+            <button class="modeBtn" data-val="5">5</button>
+            <button class="modeBtn" data-val="6">6</button>
+            <button class="modeBtn" data-val="7">7</button>
+          </div>
+        </div>
+        <div>
+          <div class="setupLabel">Right Word</div>
+          <div class="modeToggle" id="rightLenToggle">
+            <button class="modeBtn" data-val="4">4</button>
+            <button class="modeBtn" data-val="5">5</button>
+            <button class="modeBtn selected" data-val="6">6</button>
+            <button class="modeBtn" data-val="7">7</button>
+          </div>
+        </div>
+      </div>
+      <div class="len-info" id="lenInfo">2 length changes available</div>
+    </div>
+
+    <button class="startBtn" id="soloStartBtn" onclick="startGame()">Start Game</button>
+  </div>
+
+  <!-- ── GAME SCREEN ── -->
+  <div id="gameScreen" class="hidden">
+    <div class="game-header">
+      <h2>Word Tree</h2>
+      <div class="stats">
+        Moves: <span id="moveCount">0</span>
+      </div>
+      <div id="lenBudgetEl" class="hidden stats len-budget"></div>
+      <div id="hintBadge" class="stat-badge badge-hint">💡 <span id="hintCount">10</span></div>
+      <div id="doubleBadge" class="stat-badge badge-double">×2 <span id="doubleCount">5</span></div>
+      <div id="turnBadge" class="hidden turn-indicator"></div>
+    </div>
+
+    <div class="game-board">
+      <div class="tree-panel left-panel" id="leftPanel">
+        <div class="panel-header">
+          <span class="panel-label">Start</span>
+          <span class="panel-word" id="leftWordLabel"></span>
+        </div>
+        <div class="tree-container" id="leftTreeEl"></div>
+      </div>
+
+      <div class="tree-panel right-panel" id="rightPanel">
+        <div class="panel-header">
+          <span class="panel-label">Target</span>
+          <span class="panel-word" id="rightWordLabel"></span>
+        </div>
+        <div class="tree-container" id="rightTreeEl"></div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="selected-info" id="selectedInfo">Click a word to select it, then type your next word</div>
+      <div class="input-row">
+        <input type="text" id="wordInput" placeholder="Type a word..." autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button id="submitBtn" onclick="submitWord()">Add</button>
+      </div>
+      <div class="input-feedback" id="feedback"></div>
+    </div>
+
+    <div class="action-row">
+      <button class="actionBtn hintBtn" id="hintBtn" onclick="showHint()">Hint</button>
+      <button class="actionBtn" onclick="newGame()">New Words</button>
+      <button class="actionBtn" onclick="backToSetup()">Settings</button>
+    </div>
+
+    <div id="hintPanel" class="hint-panel hidden"></div>
+
+    <!-- ── GAME OVER OVERLAY ── -->
+    <div id="gameOverOverlay" class="hidden win-overlay">
+      <div class="win-content game-over">
+        <h2>Game Over</h2>
+        <p class="win-subtitle" id="gameOverReason"></p>
+        <div class="win-stats">Total moves: <span id="gameOverMoves">0</span></div>
+        <button onclick="newGame()">Try Again</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── LOBBY OVERLAY ── -->
+  <div id="lobbyOverlay" class="hidden lobby-overlay">
+    <div class="lobby-content" id="lobbyContent">
+      <h2 id="lobbyTitle">Creating room…</h2>
+      <div class="lobby-status" id="lobbyStatus">
+        <div class="spinner"></div>
+        <span>Connecting…</span>
+      </div>
+      <button class="cancelBtn" onclick="cancelLobby()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ── WIN OVERLAY ── -->
+  <div id="winOverlay" class="hidden win-overlay">
+    <div class="win-content">
+      <h2 id="winTitle">Connected!</h2>
+      <p class="win-subtitle" id="winSubtitle">You bridged the gap</p>
+      <div class="win-path" id="winPath"></div>
+      <div class="win-stats" id="winStats"></div>
+      <button onclick="newGame()">Play Again</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="words.js"></script>
+  <script>
+    /* dict.json — used to validate user guesses (NOT to pick start/target words).
+       words.js (VALID_WORDS) is the source for picked words. */
+    const ALL_WORDS = {};
+    let DICT_READY = false;
+    const dictReady = fetch('dict.json')
+      .then(r => r.json())
+      .then(data => {
+        for (const [len, arr] of Object.entries(data)) ALL_WORDS[+len] = new Set(arr);
+        DICT_READY = true;
+      })
+      .catch(e => console.error('Failed to load dict.json', e));
+    function validityMessage() { return DICT_READY ? validityMessage() : 'Loading dictionary…'; }
+  </script>
+  <script>
+    let mode = '1p';
+    let isOnline = false;
+    let myPlayer = 0;   // 1 = host (left), 2 = guest (right)
+    let peer = null, conn = null;
+    let mixedLen = false;
+    let leftWordLen = 5, rightWordLen = 5;
+    let leftTree, rightTree, leftRoot, rightRoot;
+    let selectedWord = null, selectedSide = null;
+    let moves = 0, gameOver = false;
+    let lenChangesRemaining, hintsRemaining, doublesRemaining;
+    const MAX_HINTS = 10, MAX_DOUBLES = 5;
+
+    /* ── setup toggle wiring ── */
+    document.querySelectorAll('.modeToggle').forEach(toggle => {
+      toggle.addEventListener('click', e => {
+        const btn = e.target.closest('.modeBtn');
+        if (!btn) return;
+        toggle.querySelectorAll('.modeBtn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        if (toggle.id === 'modeToggle') {
+          const is2p = btn.dataset.val === '2p';
+          document.getElementById('onlineSection').classList.toggle('hidden', !is2p);
+          document.getElementById('soloStartBtn').classList.toggle('hidden', is2p);
+        }
+        if (toggle.id === 'lenModeToggle') {
+          const isMixed = btn.dataset.val === 'mixed';
+          document.getElementById('sameLenSection').classList.toggle('hidden', isMixed);
+          document.getElementById('mixedLenSection').classList.toggle('hidden', !isMixed);
+        }
+        if (toggle.id === 'leftLenToggle' || toggle.id === 'rightLenToggle') updateLenInfo();
+      });
+    });
+
+    function updateLenInfo() {
+      const lv = document.querySelector('#leftLenToggle .modeBtn.selected');
+      const rv = document.querySelector('#rightLenToggle .modeBtn.selected');
+      if (!lv || !rv) return;
+      const n = Math.abs(parseInt(lv.dataset.val) - parseInt(rv.dataset.val));
+      const el = document.getElementById('lenInfo');
+      if (n === 0) { el.textContent = 'Same length — no length changes needed'; el.style.color = 'rgba(255,255,255,.4)'; }
+      else { el.textContent = n + ' length change' + (n > 1 ? 's' : '') + ' available'; el.style.color = '#86efac'; }
+    }
+
+    function readSetup() {
+      mode = document.querySelector('#modeToggle .modeBtn.selected').dataset.val;
+      mixedLen = document.querySelector('#lenModeToggle .modeBtn.selected').dataset.val === 'mixed';
+      if (mixedLen) {
+        leftWordLen = parseInt(document.querySelector('#leftLenToggle .modeBtn.selected').dataset.val);
+        rightWordLen = parseInt(document.querySelector('#rightLenToggle .modeBtn.selected').dataset.val);
+      } else {
+        leftWordLen = rightWordLen = parseInt(document.querySelector('#lenToggle .modeBtn.selected').dataset.val);
+      }
+    }
+
+    /* ── tree helpers ── */
+    function initTree(word) { const t = new Map(); t.set(word, { parent: null, children: [] }); return t; }
+    function addToTree(tree, parentWord, newWord) {
+      tree.set(newWord, { parent: parentWord, children: [] });
+      tree.get(parentWord).children.push(newWord);
+    }
+    function getPathToRoot(tree, word) {
+      const path = []; let cur = word;
+      while (cur !== null) { path.unshift(cur); cur = tree.get(cur).parent; }
+      return path;
+    }
+    function letterDiffCount(a, b) {
+      if (a.length !== b.length) return -1;
+      let d = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) d++; } return d;
+    }
+    function isLenChangeMove(oldWord, newWord) {
+      if (Math.abs(oldWord.length - newWord.length) !== 1) return false;
+      const [shorter, longer] = oldWord.length < newWord.length ? [oldWord, newWord] : [newWord, oldWord];
+      for (let i = 0; i < longer.length; i++) {
+        if (longer.substring(0, i) + longer.substring(i + 1) === shorter) return true;
+      }
+      return false;
+    }
+    function isValidWord(word) {
+      const len = word.length;
+      return !!(ALL_WORDS[len] && ALL_WORDS[len].has(word));
+    }
+
+    /* ── budget helpers ── */
+    function getBudget(pool, side) {
+      if (mode === '1p') return pool;
+      return pool[side === 'left' ? 0 : 1];
+    }
+    function getLenBudget(side) { if (!mixedLen) return 0; return getBudget(lenChangesRemaining, side); }
+    function getDoubleBudget(side) { return getBudget(doublesRemaining, side); }
+    function getHintBudget(side) { return getBudget(hintsRemaining, side); }
+    function useBudget(field, side) {
+      if (mode === '1p') return field - 1;
+      const arr = [...field]; arr[side === 'left' ? 0 : 1]--; return arr;
+    }
+
+    function getValidMoves(word, tree, side) {
+      const result = new Set();
+      const len = word.length;
+      const dict = ALL_WORDS[len];
+      if (dict) {
+        for (let i = 0; i < len; i++) {
+          for (let c = 97; c <= 122; c++) {
+            const ch = String.fromCharCode(c);
+            if (ch === word[i]) continue;
+            const nw = word.substring(0, i) + ch + word.substring(i + 1);
+            if (dict.has(nw) && !tree.has(nw)) result.add(nw);
+          }
+        }
+      }
+      if (mixedLen && getLenBudget(side) > 0) {
+        const addDict = ALL_WORDS[len + 1];
+        if (addDict) {
+          for (let i = 0; i <= len; i++) {
+            for (let c = 97; c <= 122; c++) {
+              const nw = word.substring(0, i) + String.fromCharCode(c) + word.substring(i);
+              if (addDict.has(nw) && !tree.has(nw)) result.add(nw);
+            }
+          }
+        }
+        if (len > 2) {
+          const delDict = ALL_WORDS[len - 1];
+          if (delDict) {
+            for (let i = 0; i < len; i++) {
+              const nw = word.substring(0, i) + word.substring(i + 1);
+              if (delDict.has(nw) && !tree.has(nw)) result.add(nw);
+            }
+          }
+        }
+      }
+      return [...result];
+    }
+
+    function getLetterClasses(parentWord, childWord) {
+      if (!parentWord) return childWord.split('').map(() => '');
+      if (parentWord.length === childWord.length)
+        return childWord.split('').map((c, i) => c !== parentWord[i] ? 'changed' : '');
+      if (childWord.length === parentWord.length + 1) {
+        for (let i = 0; i < childWord.length; i++) {
+          const without = childWord.substring(0, i) + childWord.substring(i + 1);
+          if (without === parentWord) return childWord.split('').map((_, j) => j === i ? 'inserted' : '');
+        }
+      }
+      return childWord.split('').map(() => '');
+    }
+
+    function wordHasMoves(word) {
+      const tmpTree = new Map();
+      tmpTree.set(word, { parent: null, children: [] });
+      return getValidMoves(word, tmpTree, 'left').length > 0;
+    }
+
+    function pickWords() {
+      const ls = VALID_WORDS[leftWordLen], rs = VALID_WORDS[rightWordLen];
+      if (!ls || !rs) return ['word', 'game'];
+      const la = shuffle(Array.from(ls)), ra = shuffle(Array.from(rs));
+      let a = null, b = null;
+      for (const w of la) { if (wordHasMoves(w)) { a = w; break; } }
+      for (const w of ra) { if (w !== a && wordHasMoves(w)) { b = w; break; } }
+      if (!a) a = la[0];
+      if (!b) b = ra[0];
+      return [a, b];
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    /* ── PeerJS networking ── */
+    async function fetchIceServers() {
+      try {
+        const r = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+        if (!r.ok) throw 0;
+        return { iceServers: await r.json() };
+      } catch (_) {
+        return { iceServers: [
+          { urls: 'stun:stun.relay.metered.ca:80' },
+          { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+          { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+        ]};
+      }
+    }
+
+    function generateRoomId() {
+      const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'wt-';
+      for (let i = 0; i < 8; i++) id += c[Math.floor(Math.random() * c.length)];
+      return id;
+    }
+
+    function peerSend(data) {
+      if (conn && conn.open) conn.send(data);
+    }
+
+    function showDisconnectNotice() {
+      gameOver = true;
+      const d = document.createElement('div');
+      d.className = 'dc-notice';
+      d.innerHTML = 'Opponent disconnected<br><button onclick="this.parentElement.remove();backToSetup()">Back to Setup</button>';
+      document.body.appendChild(d);
+    }
+
+    function updateLobbyHTML(title, body) {
+      const el = document.getElementById('lobbyContent');
+      el.innerHTML = '<h2>' + title + '</h2>' + body + '<button class="cancelBtn" onclick="cancelLobby()">Cancel</button>';
+    }
+
+    async function createRoom() {
+      readSetup(); mode = '2p'; isOnline = true; myPlayer = 1;
+      document.getElementById('lobbyOverlay').classList.remove('hidden');
+      updateLobbyHTML('Creating room…', '<div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
+      await dictReady;
+
+      const rid = generateRoomId();
+      const ice = await fetchIceServers();
+      peer = new Peer(rid, { config: ice });
+
+      peer.on('open', function(id) {
+        const link = location.origin + location.pathname + '#room=' + id;
+        updateLobbyHTML('Room Created',
+          '<p class="lobby-sub">Share this link with your opponent:</p>' +
+          '<div class="lobby-link-wrap"><input class="lobby-link-input" id="roomLink" value="' + link + '" readonly>' +
+          '<button class="lobby-copy-btn" id="copyBtn" onclick="copyLink()">Copy</button></div>' +
+          '<div class="lobby-status"><div class="spinner"></div><span>Waiting for opponent…</span></div>');
+      });
+
+      peer.on('connection', function(cn) {
+        conn = cn;
+        cn.on('open', function() {
+          updateLobbyHTML('Opponent Connected!', '<div class="lobby-status"><span style="color:#34d399">Starting game…</span></div>');
+          setTimeout(function() {
+            const [a, b] = pickWords();
+            const payload = { type: 'start', leftWord: a, rightWord: b, settings: { mixedLen, leftWordLen, rightWordLen } };
+            peerSend(payload);
+            document.getElementById('lobbyOverlay').classList.add('hidden');
+            document.getElementById('setupScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            initRound([a, b]);
+          }, 800);
+        });
+        cn.on('data', handlePeerData);
+        cn.on('close', function() { if (!gameOver) showDisconnectNotice(); });
+      });
+
+      peer.on('error', function(e) {
+        updateLobbyHTML('Error', '<p class="lobby-sub" style="color:#f87171">' + e.message + '</p>');
+      });
+    }
+
+    async function joinRoom(rid) {
+      if (!rid) {
+        const h = location.hash;
+        const m = h.match(/room=([^&]+)/);
+        if (m) rid = m[1];
+        else return;
+      }
+      readSetup(); mode = '2p'; isOnline = true; myPlayer = 2;
+      document.getElementById('lobbyOverlay').classList.remove('hidden');
+      updateLobbyHTML('Joining…', '<div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div>');
+      await dictReady;
+
+      const ice = await fetchIceServers();
+      peer = new Peer({ config: ice });
+
+      peer.on('open', function() {
+        conn = peer.connect(rid, { reliable: true });
+        conn.on('open', function() {
+          updateLobbyHTML('Connected!', '<div class="lobby-status"><div class="spinner"></div><span>Waiting for host to start…</span></div>');
+        });
+        conn.on('data', handlePeerData);
+        conn.on('close', function() { if (!gameOver) showDisconnectNotice(); });
+      });
+
+      peer.on('error', function(e) {
+        updateLobbyHTML('Connection Failed', '<p class="lobby-sub" style="color:#f87171">' + e.message + '</p>');
+      });
+    }
+
+    function handlePeerData(d) {
+      switch (d.type) {
+        case 'start':
+          if (d.settings) {
+            mixedLen = d.settings.mixedLen;
+            leftWordLen = d.settings.leftWordLen;
+            rightWordLen = d.settings.rightWordLen;
+          }
+          document.getElementById('lobbyOverlay').classList.add('hidden');
+          document.getElementById('setupScreen').classList.add('hidden');
+          document.getElementById('gameScreen').classList.remove('hidden');
+          initRound([d.leftWord, d.rightWord]);
+          break;
+        case 'move':
+          receiveOpponentMove(d.word, d.parentWord);
+          break;
+        case 'win':
+          if (!gameOver) {
+            gameOver = true; render();
+            showWin(d.bridgeWord, myPlayer === 1 ? 'right' : 'left');
+          }
+          break;
+        case 'rematch':
+          if (myPlayer === 1) {
+            const [a, b] = pickWords();
+            const payload = { type: 'start', leftWord: a, rightWord: b, settings: { mixedLen, leftWordLen, rightWordLen } };
+            peerSend(payload);
+            initRound([a, b]);
+          }
+          break;
+      }
+    }
+
+    function receiveOpponentMove(word, parentWord) {
+      if (gameOver) return;
+      const oppTree = myPlayer === 1 ? rightTree : leftTree;
+      const myTree = myPlayer === 1 ? leftTree : rightTree;
+      if (!oppTree.has(parentWord)) return;
+      addToTree(oppTree, parentWord, word);
+      if (myTree.has(word)) {
+        gameOver = true; render();
+        showWin(word, myPlayer === 1 ? 'right' : 'left');
+        return;
+      }
+      render();
+    }
+
+    function copyLink() {
+      const i = document.getElementById('roomLink');
+      i.select();
+      navigator.clipboard.writeText(i.value).then(function() {
+        var b = document.getElementById('copyBtn');
+        b.textContent = 'Copied!'; setTimeout(function() { b.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    function cancelLobby() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null; isOnline = false; myPlayer = 0;
+      document.getElementById('lobbyOverlay').classList.add('hidden');
+      history.replaceState(null, '', location.pathname);
+    }
+
+    /* ── game lifecycle ── */
+    async function startGame() {
+      readSetup(); isOnline = false; myPlayer = 0;
+      await dictReady;
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+      hideOverlays();
+      initRound();
+    }
+
+    function initRound(forceWords) {
+      const [a, b] = forceWords || pickWords();
+      leftRoot = a; rightRoot = b;
+      leftTree = initTree(a); rightTree = initTree(b);
+      if (isOnline) {
+        selectedSide = myPlayer === 1 ? 'left' : 'right';
+        selectedWord = myPlayer === 1 ? a : b;
+      } else {
+        selectedWord = a; selectedSide = 'left';
+      }
+      moves = 0; gameOver = false;
+      const n = Math.abs(leftWordLen - rightWordLen);
+      if (mode === '1p') {
+        lenChangesRemaining = n; hintsRemaining = MAX_HINTS; doublesRemaining = MAX_DOUBLES;
+      } else {
+        lenChangesRemaining = [n, n]; hintsRemaining = [MAX_HINTS, MAX_HINTS]; doublesRemaining = [MAX_DOUBLES, MAX_DOUBLES];
+      }
+      document.getElementById('leftWordLabel').textContent = a.toUpperCase();
+      document.getElementById('rightWordLabel').textContent = b.toUpperCase();
+      hideOverlays();
+      document.getElementById('wordInput').value = '';
+      closeHintPanel(); clearFeedback(); render();
+      document.getElementById('wordInput').focus();
+    }
+
+    function newGame() {
+      if (isOnline && conn && conn.open) {
+        if (myPlayer === 1) {
+          const [a, b] = pickWords();
+          peerSend({ type: 'start', leftWord: a, rightWord: b, settings: { mixedLen, leftWordLen, rightWordLen } });
+          initRound([a, b]);
+        } else {
+          peerSend({ type: 'rematch' });
+          showFeedback('Requested new game…', 'info');
+        }
+        return;
+      }
+      document.getElementById('gameScreen').classList.remove('hidden');
+      document.getElementById('setupScreen').classList.add('hidden');
+      initRound();
+    }
+
+    function backToSetup() {
+      if (peer) { peer.destroy(); peer = null; }
+      conn = null; isOnline = false; myPlayer = 0;
+      document.getElementById('setupScreen').classList.remove('hidden');
+      document.getElementById('gameScreen').classList.add('hidden');
+      hideOverlays();
+      history.replaceState(null, '', location.pathname);
+    }
+
+    function hideOverlays() {
+      document.getElementById('winOverlay').classList.add('hidden');
+      document.getElementById('gameOverOverlay').classList.add('hidden');
+      document.getElementById('lobbyOverlay').classList.add('hidden');
+    }
+
+    /* ── vertical tree rendering ── */
+    function renderChipHTML(tree, word, side) {
+      const node = tree.get(word);
+      const isSel = selectedWord === word && selectedSide === side;
+      const canSel = canSelectSide(side);
+      const parentWord = node.parent;
+      const classes = getLetterClasses(parentWord, word);
+      let letters = '';
+      for (let i = 0; i < word.length; i++) {
+        const cls = classes[i] ? ' ' + classes[i] : '';
+        letters += '<span class="letter' + cls + '">' + word[i].toUpperCase() + '</span>';
+      }
+      let lenBadge = '';
+      if (parentWord && parentWord.length !== word.length) {
+        const diff = word.length - parentWord.length;
+        lenBadge = '<span class="len-badge">' + (diff > 0 ? '+1' : '−1') + '</span>';
+      }
+      const mc = getValidMoves(word, tree, side).length;
+      let html = '<button class="word-chip' + (isSel ? ' selected' : '') + (!canSel ? ' disabled' : '') + (!parentWord ? ' root' : '') + '"'
+        + ' onclick="selectNode(\'' + word + '\',\'' + side + '\')"' + (!canSel ? ' disabled' : '') + '>'
+        + letters + lenBadge + '<span class="move-count">' + mc + '</span></button>';
+      if (node.children.length > 0) {
+        html += '<ul>';
+        for (const child of node.children) html += '<li>' + renderChipHTML(tree, child, side) + '</li>';
+        html += '</ul>';
+      }
+      return html;
+    }
+
+    function renderTreePanel(elId, tree, rootWord, side) {
+      document.getElementById(elId).innerHTML =
+        '<ul class="vtree"><li>' + renderChipHTML(tree, rootWord, side) + '</li></ul>';
+    }
+
+    function canSelectSide(side) {
+      if (gameOver) return false;
+      if (mode === '1p') return true;
+      if (isOnline) return side === (myPlayer === 1 ? 'left' : 'right');
+      return false;
+    }
+
+    function selectNode(word, side) {
+      if (!canSelectSide(side)) return;
+      selectedWord = word; selectedSide = side;
+      closeHintPanel(); clearFeedback(); render();
+      document.getElementById('wordInput').focus();
+    }
+
+    /* ── render ── */
+    function render() {
+      renderTreePanel('leftTreeEl', leftTree, leftRoot, 'left');
+      renderTreePanel('rightTreeEl', rightTree, rightRoot, 'right');
+      document.getElementById('moveCount').textContent = moves;
+
+      const budgetEl = document.getElementById('lenBudgetEl');
+      if (mixedLen) {
+        budgetEl.classList.remove('hidden');
+        if (mode === '1p') budgetEl.innerHTML = '±<span>' + lenChangesRemaining + '</span>';
+        else {
+          const mySideIdx = isOnline ? (myPlayer === 1 ? 0 : 1) : 0;
+          budgetEl.innerHTML = '±<span>' + lenChangesRemaining[mySideIdx] + '</span> len';
+        }
+      } else budgetEl.classList.add('hidden');
+
+      const mySide = isOnline ? (myPlayer === 1 ? 'left' : 'right') : 'left';
+      const hc = getHintBudget(mySide);
+      const dc = getDoubleBudget(mySide);
+      document.getElementById('hintCount').textContent = hc;
+      document.getElementById('doubleCount').textContent = dc;
+      document.getElementById('hintBadge').classList.toggle('badge-dim', hc <= 0);
+      document.getElementById('doubleBadge').classList.toggle('badge-dim', dc <= 0);
+
+      const hintBtn = document.getElementById('hintBtn');
+      hintBtn.textContent = 'Hint (' + hc + ')';
+      hintBtn.disabled = hc <= 0 || gameOver;
+      hintBtn.classList.remove('hidden');
+
+      const turnBadge = document.getElementById('turnBadge');
+      if (isOnline) {
+        turnBadge.classList.remove('hidden', 'p1', 'p2');
+        turnBadge.classList.add(myPlayer === 1 ? 'p1' : 'p2');
+        turnBadge.textContent = 'You → ' + (myPlayer === 1 ? 'Left' : 'Right');
+      } else {
+        turnBadge.classList.add('hidden');
+      }
+      updateSelectedInfo();
+    }
+
+    function updateSelectedInfo() {
+      const el = document.getElementById('selectedInfo');
+      const input = document.getElementById('wordInput');
+      if (!selectedWord) { el.innerHTML = 'Click a word to select it'; input.placeholder = 'Select a word first'; return; }
+      const tree = selectedSide === 'left' ? leftTree : rightTree;
+      const mc = getValidMoves(selectedWord, tree, selectedSide).length;
+      const sideLabel = selectedSide === 'left' ? 'left' : 'right';
+      const lenB = getLenBudget(selectedSide), dblB = getDoubleBudget(selectedSide);
+      let info = 'Extending from <strong>' + selectedWord.toUpperCase() + '</strong> (' + sideLabel + ') · ' + mc + ' move' + (mc !== 1 ? 's' : '');
+      if (mixedLen && lenB > 0) info += ' · <span style="color:#86efac">±' + lenB + '</span>';
+      if (dblB > 0) info += ' · <span style="color:#c4b5fd">×2: ' + dblB + '</span>';
+      el.innerHTML = info;
+      if (mixedLen && lenB > 0) input.placeholder = 'Change / add / remove from ' + selectedWord.toUpperCase();
+      else input.placeholder = 'Change one letter of ' + selectedWord.toUpperCase();
+      input.removeAttribute('maxLength');
+    }
+
+    /* ── input handling ── */
+    function submitWord() {
+      const input = document.getElementById('wordInput');
+      const raw = input.value.trim().toLowerCase();
+      if (!raw || !selectedWord || gameOver) return;
+
+      const lenDiff = Math.abs(raw.length - selectedWord.length);
+      if (lenDiff > 1) { showFeedback('Length can differ by at most 1', 'error'); shakeInput(); return; }
+      if (!isValidWord(raw)) { showFeedback(validityMessage(), 'error'); shakeInput(); return; }
+
+      let isLenChange = false, isDoubleChange = false;
+      if (lenDiff === 0) {
+        const dc = letterDiffCount(raw, selectedWord);
+        if (dc === 0) { showFeedback('Same word — change at least one letter', 'error'); shakeInput(); return; }
+        if (dc === 1) { /* normal */ }
+        else if (dc === 2) {
+          if (getDoubleBudget(selectedSide) <= 0) { showFeedback('No double changes remaining!', 'error'); shakeInput(); return; }
+          isDoubleChange = true;
+        } else { showFeedback(dc + ' letters differ — max 2 with ×2 power', 'error'); shakeInput(); return; }
+      } else {
+        if (!mixedLen) { showFeedback('Length changes not allowed in same-length mode', 'error'); shakeInput(); return; }
+        if (getLenBudget(selectedSide) <= 0) { showFeedback('No length changes remaining!', 'error'); shakeInput(); return; }
+        if (!isLenChangeMove(selectedWord, raw)) { showFeedback('Invalid — add or remove exactly one letter', 'error'); shakeInput(); return; }
+        isLenChange = true;
+      }
+
+      const tree = selectedSide === 'left' ? leftTree : rightTree;
+      const otherTree = selectedSide === 'left' ? rightTree : leftTree;
+      if (tree.has(raw)) { showFeedback('Already in this tree', 'error'); shakeInput(); return; }
+
+      addToTree(tree, selectedWord, raw);
+      moves++;
+      if (isLenChange) lenChangesRemaining = useBudget(lenChangesRemaining, selectedSide);
+      if (isDoubleChange) doublesRemaining = useBudget(doublesRemaining, selectedSide);
+      input.value = '';
+
+      peerSend({ type: 'move', word: raw, parentWord: selectedWord });
+
+      if (otherTree.has(raw)) {
+        gameOver = true;
+        peerSend({ type: 'win', bridgeWord: raw });
+        render(); showWin(raw, selectedSide);
+        return;
+      }
+
+      selectedWord = raw;
+      closeHintPanel(); clearFeedback(); render(); input.focus();
+    }
+
+    function shakeInput() {
+      const input = document.getElementById('wordInput');
+      input.style.animation = 'none'; input.offsetHeight; input.style.animation = 'shake .35s';
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitWord(); }
+    });
+
+    /* ── hint ── */
+    function showHint() {
+      if (gameOver || !selectedWord) return;
+      const side = selectedSide;
+      if (getHintBudget(side) <= 0) return;
+      const tree = side === 'left' ? leftTree : rightTree;
+      const validMoves = getValidMoves(selectedWord, tree, side);
+      if (validMoves.length === 0) {
+        showFeedback('No moves from this word — try a different one', 'info');
+        return;
+      }
+      hintsRemaining = useBudget(hintsRemaining, side);
+      if (mode === '1p' && (typeof hintsRemaining === 'number' ? hintsRemaining : 0) <= 0) {
+        gameOver = true; render();
+        document.getElementById('gameOverReason').textContent = 'You ran out of hints!';
+        document.getElementById('gameOverMoves').textContent = moves;
+        document.getElementById('gameOverOverlay').classList.remove('hidden');
+        return;
+      }
+      renderHintPanel(validMoves);
+      render();
+    }
+
+    function renderHintPanel(words) {
+      const panel = document.getElementById('hintPanel');
+      let html = '<div class="hint-panel-head">'
+        + '<span class="hint-panel-title">Hint Words</span>'
+        + '<button class="hint-panel-close" onclick="closeHintPanel()">&times;</button></div>';
+      words.sort();
+      for (const w of words) {
+        html += '<button class="hint-word" onclick="fillHint(\'' + w + '\')">' + w.toUpperCase() + '</button>';
+      }
+      panel.innerHTML = html;
+      panel.classList.remove('hidden');
+    }
+
+    function fillHint(word) {
+      const input = document.getElementById('wordInput');
+      input.value = word;
+      input.focus();
+    }
+
+    function closeHintPanel() {
+      document.getElementById('hintPanel').classList.add('hidden');
+    }
+
+    /* ── feedback ── */
+    function showFeedback(msg, type) {
+      const el = document.getElementById('feedback');
+      el.textContent = msg; el.className = 'input-feedback ' + (type || '');
+    }
+    function clearFeedback() {
+      document.getElementById('feedback').textContent = '';
+      document.getElementById('feedback').className = 'input-feedback';
+    }
+
+    /* ── win ── */
+    function showWin(bridgeWord, sideAdded) {
+      const leftPath = getPathToRoot(leftTree, bridgeWord);
+      const rightPath = getPathToRoot(rightTree, bridgeWord);
+      const rightReversed = [...rightPath].reverse();
+      const fullPath = [...leftPath, ...rightReversed.slice(1)];
+      let pathHtml = '';
+      for (let i = 0; i < fullPath.length; i++) {
+        const w = fullPath[i];
+        let cls = 'left-word';
+        if (w === bridgeWord && i === leftPath.length - 1) cls = 'bridge-word';
+        else if (i >= leftPath.length) cls = 'right-word';
+        pathHtml += '<span class="win-path-word ' + cls + '">' + w.toUpperCase() + '</span>';
+        if (i < fullPath.length - 1) pathHtml += '<span class="win-path-arrow">→</span>';
+      }
+      document.getElementById('winPath').innerHTML = pathHtml;
+      document.getElementById('winStats').innerHTML = 'Chain length: <span>' + fullPath.length + '</span> · Total moves: <span>' + moves + '</span>';
+      const titleEl = document.getElementById('winTitle');
+      const subEl = document.getElementById('winSubtitle');
+      if (isOnline) {
+        const mySide = myPlayer === 1 ? 'left' : 'right';
+        if (sideAdded === mySide) { titleEl.textContent = 'You Win!'; subEl.textContent = 'You found the bridge'; }
+        else { titleEl.textContent = 'Opponent Wins!'; subEl.textContent = 'They found the bridge'; }
+      } else {
+        titleEl.textContent = 'Connected!'; subEl.textContent = 'You bridged the gap';
+      }
+      document.getElementById('winOverlay').classList.remove('hidden');
+    }
+
+    /* ── auto-join from URL hash ── */
+    (function() {
+      const h = location.hash;
+      const m = h.match(/room=([^&]+)/);
+      if (m) {
+        document.querySelector('#modeToggle .modeBtn[data-val="2p"]').click();
+        joinRoom(m[1]);
+      }
+    })();
+
+    const style = document.createElement('style');
+    style.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}';
+    document.head.appendChild(style);
+  </script>
+</body>
+
+</html>

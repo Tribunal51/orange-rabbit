@@ -105,6 +105,42 @@
       background: linear-gradient(135deg, #0a1628, #134e4a);
     }
 
+    .game-icon.black-hole {
+      background: radial-gradient(circle at 50% 55%, #1e1b4b 0%, #0b0a1f 70%);
+    }
+
+    .bh-pyramid {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .bh-row {
+      display: flex;
+      gap: 2px;
+    }
+
+    .bh-circle {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7px;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .bh-circle.p1 { background: #38bdf8; }
+    .bh-circle.p2 { background: #f472b6; }
+    .bh-circle.hole {
+      background: radial-gradient(circle, #000 40%, #1e1b4b 100%);
+      box-shadow: 0 0 6px rgba(168,85,247,.7), inset 0 0 4px rgba(0,0,0,.9);
+    }
+    .bh-circle.dimmed { opacity: 0.3; }
+
     .tw-chain {
       display: flex;
       flex-direction: column;
@@ -493,7 +529,7 @@
       <span class="game-badge badge-players">1–8 Players · Online</span>
     </a>
 
-    <a class="game-card" href="tw.html">
+    <a class="game-card" href="wt.html">
       <div class="game-icon transword">
         <div class="tw-chain">
           <div class="tw-row">
@@ -518,9 +554,23 @@
           </div>
         </div>
       </div>
-      <div class="game-title">Transword</div>
+      <div class="game-title">Word Tree</div>
       <div class="game-desc">Mutate words one letter at a time to bridge two words together.</div>
       <span class="game-badge badge-players">1–2 Players · Local</span>
+    </a>
+
+    <a class="game-card" href="bh.html">
+      <div class="game-icon black-hole">
+        <div class="bh-pyramid">
+          <div class="bh-row"><div class="bh-circle p1">1</div></div>
+          <div class="bh-row"><div class="bh-circle p2">3</div><div class="bh-circle p1 dimmed">2</div></div>
+          <div class="bh-row"><div class="bh-circle p1 dimmed">4</div><div class="bh-circle hole"></div><div class="bh-circle p2">5</div></div>
+          <div class="bh-row"><div class="bh-circle p2">7</div><div class="bh-circle p1 dimmed">6</div><div class="bh-circle p2 dimmed">8</div><div class="bh-circle p1">9</div></div>
+        </div>
+      </div>
+      <div class="game-title">Black Hole</div>
+      <div class="game-desc">Place numbers on a pyramid; the last empty cell becomes a black hole that swallows its neighbors.</div>
+      <span class="game-badge badge-players">1–2 Players · Online</span>
     </a>
 
     <a class="game-card" href="hm.html">
