@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Paper Soccer</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(ellipse at top, #064e3b 0%, #022c22 60%, #03110d 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { font-size: 32px; margin-bottom: 6px; letter-spacing: 1px; }
+    .setup-sub { opacity: .55; font-size: 14px; margin-bottom: 30px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: #fff; }
+
+    /* ── setup ── */
+    .setupSection { margin-bottom: 22px; width: 380px; max-width: 100%; }
+    .setupLabel {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 8px;
+    }
+    .modeToggle { display: flex; gap: 6px; }
+    .modeBtn {
+      flex: 1; padding: 10px 0;
+      border: 1px solid rgba(34,197,94,.3); border-radius: 10px;
+      background: rgba(34,197,94,.08); color: rgba(255,255,255,.75);
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .modeBtn.selected {
+      background: rgba(34,197,94,.3); color: #fff;
+      font-weight: bold; border-color: rgba(34,197,94,.7);
+    }
+
+    .startBtn {
+      margin-top: 18px; padding: 14px 50px; font-size: 17px;
+      font-weight: bold; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #22c55e, #15803d);
+      color: #fff; cursor: pointer; transition: .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .startBtn:hover { transform: scale(1.04); }
+    .rulesLink {
+      margin-top: 16px; font-size: 13px; color: rgba(255,255,255,.5);
+      cursor: pointer; text-decoration: underline;
+    }
+    .rulesLink:hover { color: #fff; }
+
+    /* ── game header ── */
+    .game-header {
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .turn-indicator {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: .5px;
+    }
+    .turn-indicator.p1 {
+      background: rgba(56,189,248,.2); color: #7dd3fc;
+      border: 1px solid rgba(56,189,248,.4);
+    }
+    .turn-indicator.p2 {
+      background: rgba(244,114,182,.2); color: #f9a8d4;
+      border: 1px solid rgba(244,114,182,.4);
+    }
+    .turn-indicator.bouncing {
+      animation: pulseBounce 1.2s ease-in-out infinite;
+    }
+    @keyframes pulseBounce {
+      0%,100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    /* ── score panels ── */
+    .scores-row {
+      display: flex; gap: 12px; margin-bottom: 18px;
+      width: 100%; max-width: 520px; justify-content: center;
+    }
+    .score-card {
+      flex: 1; padding: 12px 16px;
+      background: rgba(255,255,255,.04); border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      text-align: center; transition: .2s;
+    }
+    .score-card.p1 { border-color: rgba(56,189,248,.4); }
+    .score-card.p2 { border-color: rgba(244,114,182,.4); }
+    .score-card.active {
+      background: rgba(255,255,255,.08);
+      box-shadow: 0 0 16px rgba(34,197,94,.3);
+    }
+    .score-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 4px;
+    }
+    .score-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .score-card.p1 .score-name { color: #7dd3fc; }
+    .score-card.p2 .score-name { color: #f9a8d4; }
+    .arrow { font-size: 18px; opacity: .8; }
+
+    /* ── board ── */
+    .board-wrap {
+      width: 100%; max-width: 540px; margin: 0 auto;
+      padding: 12px;
+      background: radial-gradient(ellipse at center, rgba(34,197,94,.08), transparent 70%);
+      border-radius: 24px;
+      display: flex; justify-content: center;
+    }
+    svg#board {
+      width: 100%; max-width: 480px; height: auto;
+      display: block;
+    }
+    .targetDot {
+      animation: targetPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes targetPulse {
+      0%,100% { opacity: .85; }
+      50% { opacity: 1; }
+    }
+    .ball-glow {
+      animation: ballGlow 1.6s ease-in-out infinite;
+    }
+    @keyframes ballGlow {
+      0%,100% { stroke-width: 2; }
+      50% { stroke-width: 3.5; }
+    }
+
+    /* ── result ── */
+    .resultCard {
+      max-width: 420px; margin: 24px auto 0;
+      padding: 28px; text-align: center;
+      background: rgba(255,255,255,.05); border-radius: 20px;
+      border: 1px solid rgba(34,197,94,.3);
+    }
+    .resultCard h2 { font-size: 26px; margin-bottom: 6px; }
+    .resultCard p.sub { font-size: 14px; opacity: .65; margin-bottom: 18px; }
+
+    .actionBtn {
+      padding: 10px 22px; border: none; border-radius: 10px;
+      background: rgba(34,197,94,.2); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+      border: 1px solid rgba(34,197,94,.3);
+      font-weight: 600;
+    }
+    .actionBtn:hover { background: rgba(34,197,94,.35); transform: translateY(-1px); }
+    .actionBtn.primary {
+      background: linear-gradient(135deg, #22c55e, #15803d);
+      border-color: transparent;
+    }
+
+    /* ── lobby ── */
+    .lobby-status {
+      font-size: 15px; margin: 14px 0;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: #22c55e; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lobby-link-wrap {
+      display: flex; gap: 6px; margin: 14px auto;
+      max-width: 380px;
+    }
+    .lobby-link-input {
+      flex: 1; padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      background: rgba(0,0,0,.3); color: #86efac;
+      font-size: 12px; font-family: monospace; outline: none;
+    }
+    .lobby-copy-btn {
+      padding: 10px 16px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #22c55e, #15803d);
+      color: #fff; font-weight: bold; font-size: 13px;
+      cursor: pointer; transition: .2s; white-space: nowrap;
+    }
+    .lobby-copy-btn:hover { transform: scale(1.04); }
+    .newGameBtn {
+      margin-top: 16px; padding: 10px 28px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.1); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .newGameBtn:hover { background: rgba(255,255,255,.2); }
+
+    .dc-notice {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(5,20,12,.95); color: #f87171; padding: 24px 36px;
+      border-radius: 16px; font-size: 16px; z-index: 300;
+      border: 1px solid rgba(248,113,113,.3); text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .dc-notice button {
+      display: block; margin: 14px auto 0; padding: 8px 24px;
+      border: none; border-radius: 8px;
+      background: rgba(255,255,255,.15); color: #fff;
+      cursor: pointer; font-size: 14px;
+    }
+    .dc-notice button:hover { background: rgba(255,255,255,.25); }
+
+    /* ── rules overlay ── */
+    #rulesOverlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .rulesCard {
+      background: linear-gradient(135deg, #064e3b, #03110d);
+      border: 1px solid rgba(34,197,94,.3); border-radius: 20px;
+      padding: 30px; max-width: 480px; width: 100%;
+      max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .rulesCard h2 { margin-bottom: 16px; }
+    .rulesCard h3 { margin-top: 16px; margin-bottom: 6px; color: #86efac; font-size: 15px; }
+    .rulesCard p, .rulesCard ul { font-size: 14px; line-height: 1.55; opacity: .9; }
+    .rulesCard ul { padding-left: 22px; }
+    .rulesCard li { margin: 4px 0; }
+    .rulesCloseBtn {
+      display: block; margin: 20px auto 0; padding: 10px 30px;
+      border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #22c55e, #15803d);
+      color: #fff; font-weight: bold; cursor: pointer;
+    }
+
+    .messageBar {
+      min-height: 22px; margin-top: 10px;
+      font-size: 14px; opacity: .8; text-align: center;
+    }
+    .messageBar.warn { color: #fbbf24; }
+    .messageBar.bad { color: #f87171; }
+    .messageBar.good { color: #86efac; }
+
+    .undoBtn {
+      padding: 8px 18px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.85);
+      font-size: 13px; cursor: pointer; transition: .2s;
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .undoBtn:hover { background: rgba(255,255,255,.18); }
+    .undoBtn:disabled { opacity: .3; cursor: not-allowed; }
+
+    @media (max-width: 540px) {
+      h1 { font-size: 26px; }
+      .scores-row { max-width: 100%; }
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div id="setupScreen">
+    <h1>Paper Soccer</h1>
+    <p class="setup-sub">Bounce off walls, score in their net</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Mode</div>
+      <div id="modeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setMode('local')">2P Local</button>
+        <button class="modeBtn" onclick="setMode('online')">2P Online</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Field Size</div>
+      <div id="sizeToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setSize('s')">Small 6×8</button>
+        <button class="modeBtn selected" onclick="setSize('m')">Medium 8×10</button>
+        <button class="modeBtn" onclick="setSize('l')">Large 10×12</button>
+      </div>
+    </div>
+
+    <div id="goOrderSection" class="setupSection">
+      <div class="setupLabel" id="goOrderLabel">Who Plays First</div>
+      <div id="goOrderToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGoOrder('first')" id="goFirstBtn">Player 1 (top → bottom)</button>
+        <button class="modeBtn" onclick="setGoOrder('second')" id="goSecondBtn">Player 2 (bottom → top)</button>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ LOBBY ═══════ -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Paper Soccer</h1>
+    <div id="lobbyContent"></div>
+  </div>
+
+  <!-- ═══════ GAME ═══════ -->
+  <div id="gameScreen" class="hidden">
+    <h1>Paper Soccer</h1>
+
+    <div class="game-header">
+      <div id="turnIndicator" class="turn-indicator p1">Your turn</div>
+    </div>
+
+    <div class="scores-row">
+      <div id="p1Card" class="score-card p1">
+        <div class="score-label">Attacks <span class="arrow">↓</span></div>
+        <div class="score-name" id="p1Name">Player 1</div>
+      </div>
+      <div id="p2Card" class="score-card p2">
+        <div class="score-label">Attacks <span class="arrow">↑</span></div>
+        <div class="score-name" id="p2Name">Player 2</div>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <div id="messageBar" class="messageBar"></div>
+
+    <div id="resultArea" class="hidden"></div>
+
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:18px;flex-wrap:wrap;">
+      <button class="undoBtn" id="undoBtn" onclick="undoBounce()">Undo Bounce</button>
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- ═══════ RULES ═══════ -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard" onclick="event.stopPropagation()">
+      <h2>How to Play</h2>
+
+      <h3>The Field</h3>
+      <p>A rectangular grid of intersections with a 2-square wide goal at each end. The ball starts at the center.</p>
+
+      <h3>Goals</h3>
+      <ul>
+        <li><span style="color:#7dd3fc;font-weight:bold">Player 1</span> attacks the bottom goal.</li>
+        <li><span style="color:#f9a8d4;font-weight:bold">Player 2</span> attacks the top goal.</li>
+      </ul>
+
+      <h3>Moving</h3>
+      <ul>
+        <li>On your turn, draw a line from the ball to one of the 8 adjacent intersections (horizontal, vertical, or diagonal).</li>
+        <li>You can never reuse an edge that's already been drawn (yours, opponent's, or the pitch boundary).</li>
+      </ul>
+
+      <h3>Bounce Rule</h3>
+      <ul>
+        <li>If you land on an intersection that already has any line touching it (boundary, your trail, or opponent's trail), the ball <strong>bounces</strong> and you immediately move again.</li>
+        <li>A turn can chain multiple bounces until the ball lands on a fresh, untouched intersection — then play passes to the opponent.</li>
+      </ul>
+
+      <h3>Winning &amp; Losing</h3>
+      <ul>
+        <li><strong>Win:</strong> Land the ball inside the opponent's goal.</li>
+        <li><strong>Own goal:</strong> If you put it into your own goal, you lose.</li>
+        <li><strong>Trapped:</strong> If you have no legal moves on your turn (corner with all edges used, etc.), you lose.</li>
+      </ul>
+
+      <h3>Tip</h3>
+      <p>Bouncing off your opponent's lines is a great way to chain long, surprise attacks — but watch out for traps near the corners!</p>
+
+      <button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════ CONSTANTS ═══════════════════ */
+
+    const SIZES = {
+      s: { W: 6, H: 8, label: 'Small 6×8' },
+      m: { W: 8, H: 10, label: 'Medium 8×10' },
+      l: { W: 10, H: 12, label: 'Large 10×12' },
+    };
+
+    const CELL = 40;
+    const PAD = 22;
+
+    /* ═══════════════════ STATE ═══════════════════ */
+
+    let mode = 'local';                 // 'local' | 'online'
+    let sizeKey = 'm';
+    let goFirstSelected = true;          // online: I want to be P1 (true) or P2 (false)
+    let currentPlayerInitial = 1;        // local-mode starting player (1 or 2)
+
+    let W = 8, H = 10, midX = 4;
+    let edges = new Set();               // canonical edge keys
+    let degree = new Map();              // node -> degree count
+    let ball = [4, 5];
+    let currentPlayer = 1;
+    let path = [];                       // [{ from:[x,y], to:[x,y], player, bounce }]
+    let isOver = false;
+    let winner = 0;
+    let loseReason = '';                 // 'goal' | 'own-goal' | 'self-trap' | 'trapped'
+
+    let bounceTurnStart = -1;            // path-length snapshot when current bounce-chain began (for undo)
+
+    // online
+    let peer = null, conn = null, isHost = false, myPlayer = 0;
+
+    /* ═══════════════════ SETUP UI ═══════════════════ */
+
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('#modeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && m === 'local') || (i === 1 && m === 'online'));
+      });
+      document.getElementById('goOrderLabel').textContent = m === 'online' ? 'You Play' : 'Who Plays First';
+      document.getElementById('goFirstBtn').textContent = m === 'online' ? 'First (top → bottom)' : 'Player 1 (top → bottom)';
+      document.getElementById('goSecondBtn').textContent = m === 'online' ? 'Second (bottom → top)' : 'Player 2 (bottom → top)';
+    }
+
+    function setSize(k) {
+      sizeKey = k;
+      document.querySelectorAll('#sizeToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && k === 's') || (i === 1 && k === 'm') || (i === 2 && k === 'l'));
+      });
+    }
+
+    function setGoOrder(o) {
+      goFirstSelected = (o === 'first');
+      document.querySelectorAll('#goOrderToggle .modeBtn').forEach((b, i) => {
+        b.classList.toggle('selected', (i === 0 && goFirstSelected) || (i === 1 && !goFirstSelected));
+      });
+    }
+
+    function launchGame() {
+      if (mode === 'online') {
+        createRoom();
+      } else {
+        myPlayer = 0;
+        // In local mode, "Who plays first" toggle controls which player starts.
+        currentPlayerInitial = goFirstSelected ? 1 : 2;
+        startGame();
+      }
+    }
+
+    function backToSetup() {
+      if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
+      conn = null;
+      isOver = true;
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('setupScreen').classList.remove('hidden');
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('messageBar').textContent = '';
+      document.querySelectorAll('.dc-notice').forEach(n => n.remove());
+      history.replaceState(null, '', location.pathname);
+    }
+
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (!e || e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn')) {
+        document.getElementById('rulesOverlay').classList.add('hidden');
+      }
+    }
+
+    /* ═══════════════════ BOARD INIT ═══════════════════ */
+
+    function nodeKey(x, y) { return x + ',' + y; }
+
+    function edgeKey(x1, y1, x2, y2) {
+      if (x1 < x2 || (x1 === x2 && y1 < y2)) return x1 + ',' + y1 + '-' + x2 + ',' + y2;
+      return x2 + ',' + y2 + '-' + x1 + ',' + y1;
+    }
+
+    function bumpDegree(x, y, delta = 1) {
+      const k = nodeKey(x, y);
+      const v = (degree.get(k) || 0) + delta;
+      if (v <= 0) degree.delete(k); else degree.set(k, v);
+    }
+
+    function addPreEdge(x1, y1, x2, y2) {
+      edges.add(edgeKey(x1, y1, x2, y2));
+      bumpDegree(x1, y1);
+      bumpDegree(x2, y2);
+    }
+
+    function initBoard() {
+      const sz = SIZES[sizeKey];
+      W = sz.W; H = sz.H; midX = W / 2;
+      edges = new Set();
+      degree = new Map();
+      // Top boundary (skip the 2 goal-mouth edges at midX-1..midX..midX+1)
+      for (let x = 0; x < W; x++) {
+        if (x === midX - 1 || x === midX) continue;
+        addPreEdge(x, 0, x + 1, 0);
+      }
+      // Bottom boundary
+      for (let x = 0; x < W; x++) {
+        if (x === midX - 1 || x === midX) continue;
+        addPreEdge(x, H, x + 1, H);
+      }
+      // Left & right boundary
+      for (let y = 0; y < H; y++) {
+        addPreEdge(0, y, 0, y + 1);
+        addPreEdge(W, y, W, y + 1);
+      }
+      // Top goal box (y = -1)
+      addPreEdge(midX - 1, 0, midX - 1, -1);
+      addPreEdge(midX + 1, 0, midX + 1, -1);
+      addPreEdge(midX - 1, -1, midX, -1);
+      addPreEdge(midX, -1, midX + 1, -1);
+      // Bottom goal box (y = H+1)
+      addPreEdge(midX - 1, H, midX - 1, H + 1);
+      addPreEdge(midX + 1, H, midX + 1, H + 1);
+      addPreEdge(midX - 1, H + 1, midX, H + 1);
+      addPreEdge(midX, H + 1, midX + 1, H + 1);
+    }
+
+    /* ═══════════════════ GAME START ═══════════════════ */
+
+    function startGame() {
+      initBoard();
+      ball = [W / 2, H / 2];
+      currentPlayer = (mode === 'local') ? currentPlayerInitial : 1; // online always starts P1; myPlayer determines who that is
+      path = [];
+      isOver = false;
+      winner = 0;
+      loseReason = '';
+      bounceTurnStart = 0;
+
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('messageBar').textContent = '';
+
+      if (mode === 'local') {
+        document.getElementById('p1Name').textContent = 'Player 1';
+        document.getElementById('p2Name').textContent = 'Player 2';
+      } else {
+        document.getElementById('p1Name').textContent = (myPlayer === 1 ? 'You' : 'Opponent');
+        document.getElementById('p2Name').textContent = (myPlayer === 2 ? 'You' : 'Opponent');
+      }
+
+      render();
+    }
+
+    /* ═══════════════════ MOVE LOGIC ═══════════════════ */
+
+    function isGoalNode(x, y) {
+      if (y === -1 && x >= midX - 1 && x <= midX + 1) return 'top';
+      if (y === H + 1 && x >= midX - 1 && x <= midX + 1) return 'bottom';
+      return null;
+    }
+
+    function isValidNode(x, y) {
+      if (x >= 0 && x <= W && y >= 0 && y <= H) return true;
+      return isGoalNode(x, y) !== null;
+    }
+
+    function canMoveTo(tx, ty) {
+      const [bx, by] = ball;
+      if (tx === bx && ty === by) return false;
+      const dx = tx - bx, dy = ty - by;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
+      if (!isValidNode(tx, ty)) return false;
+      return !edges.has(edgeKey(bx, by, tx, ty));
+    }
+
+    function getValidMoves() {
+      const out = [];
+      const [bx, by] = ball;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          if (dx === 0 && dy === 0) continue;
+          if (canMoveTo(bx + dx, by + dy)) out.push([bx + dx, by + dy]);
+        }
+      }
+      return out;
+    }
+
+    function isMyTurn() {
+      if (isOver) return false;
+      if (mode === 'local') return true;
+      return currentPlayer === myPlayer;
+    }
+
+    function attemptMove(tx, ty, fromNetwork = false) {
+      if (isOver) return false;
+      if (!fromNetwork && !isMyTurn()) {
+        flashMessage("Opponent's turn", 'warn');
+        return false;
+      }
+      if (!canMoveTo(tx, ty)) return false;
+
+      const [bx, by] = ball;
+      const k = edgeKey(bx, by, tx, ty);
+      const destHadEdge = (degree.get(nodeKey(tx, ty)) || 0) > 0;
+
+      edges.add(k);
+      bumpDegree(bx, by);
+      bumpDegree(tx, ty);
+      ball = [tx, ty];
+      path.push({ from: [bx, by], to: [tx, ty], player: currentPlayer, bounce: destHadEdge });
+
+      if (!fromNetwork && mode === 'online' && conn && conn.open) {
+        conn.send({ type: 'move', x: tx, y: ty });
+      }
+
+      // Goal?
+      const g = isGoalNode(tx, ty);
+      if (g) {
+        isOver = true;
+        const scoredOnTop = (g === 'top'); // ball entered top goal
+        // P1 attacks bottom; P2 attacks top.
+        // Goal credited to whoever was supposed to score there.
+        const intendedScorer = scoredOnTop ? 2 : 1;
+        if (currentPlayer === intendedScorer) {
+          winner = currentPlayer;
+          loseReason = 'goal';
+        } else {
+          // Own goal — current player put the ball in their own net
+          winner = (currentPlayer === 1 ? 2 : 1);
+          loseReason = 'own-goal';
+        }
+        render();
+        showResult();
+        return true;
+      }
+
+      // Switch turn if no bounce
+      if (!destHadEdge) {
+        currentPlayer = (currentPlayer === 1 ? 2 : 1);
+        bounceTurnStart = path.length; // next turn starts here
+      }
+
+      // Stalemate check — current player has no legal moves
+      if (getValidMoves().length === 0) {
+        isOver = true;
+        winner = (currentPlayer === 1 ? 2 : 1);
+        loseReason = destHadEdge ? 'self-trap' : 'trapped';
+        render();
+        showResult();
+        return true;
+      }
+
+      render();
+      return true;
+    }
+
+    /* ═══════════════════ UNDO (local-only convenience) ═══════════════════ */
+
+    function undoBounce() {
+      // Allow undo only in local mode, and only steps within the current player's
+      // ongoing bounce chain (not after the turn has been committed).
+      if (mode !== 'local' || isOver) return;
+      if (path.length <= bounceTurnStart) return;
+      const last = path[path.length - 1];
+      if (!last.bounce) return; // can only rewind bounces; first step of a turn is irreversible
+      path.pop();
+      // Roll back edge & degrees
+      edges.delete(edgeKey(last.from[0], last.from[1], last.to[0], last.to[1]));
+      bumpDegree(last.from[0], last.from[1], -1);
+      bumpDegree(last.to[0], last.to[1], -1);
+      ball = [last.from[0], last.from[1]];
+      render();
+    }
+
+    /* ═══════════════════ RENDER ═══════════════════ */
+
+    function sx(x) { return PAD + x * CELL; }
+    function sy(y) { return PAD + (y + 1) * CELL; }
+
+    function render() {
+      const svg = document.getElementById('board');
+      const totalW = W * CELL + PAD * 2;
+      const totalH = (H + 2) * CELL + PAD * 2;
+      svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + totalH);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      const parts = [];
+
+      // Pitch fill
+      parts.push('<rect x="' + sx(0) + '" y="' + sy(0) + '" width="' + (W * CELL) + '" height="' + (H * CELL) + '" fill="rgba(34,197,94,0.07)"/>');
+
+      // Goal area fills
+      parts.push('<rect x="' + sx(midX - 1) + '" y="' + sy(-1) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="rgba(244,114,182,0.12)"/>');
+      parts.push('<rect x="' + sx(midX - 1) + '" y="' + sy(H) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="rgba(56,189,248,0.12)"/>');
+
+      // Faint reference grid
+      for (let y = 0; y <= H; y++) {
+        parts.push('<line x1="' + sx(0) + '" y1="' + sy(y) + '" x2="' + sx(W) + '" y2="' + sy(y) + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>');
+      }
+      for (let x = 0; x <= W; x++) {
+        parts.push('<line x1="' + sx(x) + '" y1="' + sy(0) + '" x2="' + sx(x) + '" y2="' + sy(H) + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>');
+      }
+
+      // Half-line
+      parts.push('<line x1="' + sx(0) + '" y1="' + sy(H / 2) + '" x2="' + sx(W) + '" y2="' + sy(H / 2) + '" stroke="rgba(255,255,255,0.18)" stroke-width="1" stroke-dasharray="4 4"/>');
+
+      // Boundary lines (the pre-drawn pitch outline + goal boxes)
+      const boundaryEdges = [];
+      for (let x = 0; x < W; x++) {
+        if (x !== midX - 1 && x !== midX) boundaryEdges.push([x, 0, x + 1, 0]);
+        if (x !== midX - 1 && x !== midX) boundaryEdges.push([x, H, x + 1, H]);
+      }
+      for (let y = 0; y < H; y++) {
+        boundaryEdges.push([0, y, 0, y + 1]);
+        boundaryEdges.push([W, y, W, y + 1]);
+      }
+      boundaryEdges.push([midX - 1, 0, midX - 1, -1]);
+      boundaryEdges.push([midX + 1, 0, midX + 1, -1]);
+      boundaryEdges.push([midX - 1, -1, midX, -1]);
+      boundaryEdges.push([midX, -1, midX + 1, -1]);
+      boundaryEdges.push([midX - 1, H, midX - 1, H + 1]);
+      boundaryEdges.push([midX + 1, H, midX + 1, H + 1]);
+      boundaryEdges.push([midX - 1, H + 1, midX, H + 1]);
+      boundaryEdges.push([midX, H + 1, midX + 1, H + 1]);
+      for (const e of boundaryEdges) {
+        parts.push('<line x1="' + sx(e[0]) + '" y1="' + sy(e[1]) + '" x2="' + sx(e[2]) + '" y2="' + sy(e[3]) + '" stroke="rgba(255,255,255,0.7)" stroke-width="2.5" stroke-linecap="round"/>');
+      }
+
+      // Drawn path (player trails)
+      for (let i = 0; i < path.length; i++) {
+        const m = path[i];
+        const color = m.player === 1 ? '#38bdf8' : '#f472b6';
+        const isCurrentChain = (i >= bounceTurnStart && !isOver);
+        const w = isCurrentChain ? 3.5 : 2.5;
+        const opacity = isCurrentChain ? 1 : 0.85;
+        parts.push('<line x1="' + sx(m.from[0]) + '" y1="' + sy(m.from[1]) + '" x2="' + sx(m.to[0]) + '" y2="' + sy(m.to[1]) + '" stroke="' + color + '" stroke-width="' + w + '" stroke-linecap="round" opacity="' + opacity + '"/>');
+      }
+
+      // Intersection dots
+      for (let y = 0; y <= H; y++) {
+        for (let x = 0; x <= W; x++) {
+          parts.push('<circle cx="' + sx(x) + '" cy="' + sy(y) + '" r="2" fill="rgba(255,255,255,0.35)"/>');
+        }
+      }
+      for (let x = midX - 1; x <= midX + 1; x++) {
+        parts.push('<circle cx="' + sx(x) + '" cy="' + sy(-1) + '" r="2" fill="rgba(255,255,255,0.35)"/>');
+        parts.push('<circle cx="' + sx(x) + '" cy="' + sy(H + 1) + '" r="2" fill="rgba(255,255,255,0.35)"/>');
+      }
+
+      // Center mark
+      parts.push('<circle cx="' + sx(W / 2) + '" cy="' + sy(H / 2) + '" r="5" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>');
+
+      // Goal labels
+      parts.push('<text x="' + sx(midX) + '" y="' + (sy(-1) - 8) + '" text-anchor="middle" font-size="10" fill="rgba(244,114,182,0.7)" font-family="Segoe UI, sans-serif" letter-spacing="2">P2 GOAL</text>');
+      parts.push('<text x="' + sx(midX) + '" y="' + (sy(H + 1) + 18) + '" text-anchor="middle" font-size="10" fill="rgba(56,189,248,0.7)" font-family="Segoe UI, sans-serif" letter-spacing="2">P1 GOAL</text>');
+
+      // Valid move targets (clickable)
+      if (isMyTurn()) {
+        const targets = getValidMoves();
+        for (const [tx, ty] of targets) {
+          parts.push('<circle class="targetDot" cx="' + sx(tx) + '" cy="' + sy(ty) + '" r="11" fill="rgba(250,204,21,0.18)" stroke="rgba(250,204,21,0.85)" stroke-width="1.5" data-x="' + tx + '" data-y="' + ty + '" style="cursor:pointer"/>');
+        }
+      }
+
+      // Ball
+      const ballColor = currentPlayer === 1 ? '#38bdf8' : '#f472b6';
+      parts.push('<circle class="ball-glow" cx="' + sx(ball[0]) + '" cy="' + sy(ball[1]) + '" r="7" fill="' + ballColor + '" stroke="#fff" stroke-width="2"/>');
+
+      svg.innerHTML = parts.join('');
+
+      // Hook click handlers
+      svg.querySelectorAll('.targetDot').forEach(el => {
+        el.addEventListener('click', () => {
+          const tx = parseInt(el.getAttribute('data-x'));
+          const ty = parseInt(el.getAttribute('data-y'));
+          attemptMove(tx, ty);
+        });
+      });
+
+      updateHeader();
+    }
+
+    function updateHeader() {
+      const ti = document.getElementById('turnIndicator');
+      const lastWasBounce = path.length > 0 && path[path.length - 1].bounce && path[path.length - 1].player === currentPlayer && !isOver;
+
+      if (isOver) {
+        ti.className = 'turn-indicator';
+        ti.style.background = 'rgba(255,255,255,.1)';
+        ti.style.color = '#fff';
+        ti.style.borderColor = 'rgba(255,255,255,.2)';
+        ti.textContent = 'Game Over';
+      } else {
+        ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2') + (lastWasBounce ? ' bouncing' : '');
+        ti.removeAttribute('style');
+        let label;
+        if (mode === 'local') label = 'Player ' + currentPlayer + "'s turn";
+        else label = (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
+        if (lastWasBounce) label += ' — BOUNCE!';
+        ti.textContent = label;
+      }
+
+      document.getElementById('p1Card').classList.toggle('active', !isOver && currentPlayer === 1);
+      document.getElementById('p2Card').classList.toggle('active', !isOver && currentPlayer === 2);
+
+      // Undo button: enabled only in local mode, when current player has bounced this turn
+      const undoBtn = document.getElementById('undoBtn');
+      if (mode === 'local' && !isOver && path.length > bounceTurnStart && path[path.length - 1].bounce) {
+        undoBtn.disabled = false;
+        undoBtn.style.display = '';
+      } else {
+        undoBtn.disabled = true;
+        if (mode !== 'local') undoBtn.style.display = 'none';
+        else undoBtn.style.display = '';
+      }
+    }
+
+    function showResult() {
+      const area = document.getElementById('resultArea');
+      area.classList.remove('hidden');
+      let title;
+      if (mode === 'local') {
+        title = 'Player ' + winner + ' wins!';
+      } else {
+        title = (winner === myPlayer) ? 'You win!' : 'You lose';
+      }
+      let sub;
+      if (loseReason === 'goal') sub = 'Goal scored!';
+      else if (loseReason === 'own-goal') sub = 'Own goal — ball ended up in the wrong net.';
+      else if (loseReason === 'self-trap') sub = 'Bounced into a dead end with no moves left.';
+      else sub = 'Trapped — no legal moves.';
+      area.innerHTML =
+        '<div class="resultCard">' +
+          '<h2>' + title + '</h2>' +
+          '<p class="sub">' + sub + '</p>' +
+          '<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">' +
+            '<button class="actionBtn primary" onclick="rematch()">Play Again</button>' +
+            '<button class="actionBtn" onclick="backToSetup()">Change Settings</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function rematch() {
+      if (mode === 'online') {
+        if (conn && conn.open) {
+          conn.send({ type: 'rematch' });
+          startGame();
+        } else {
+          backToSetup();
+        }
+        return;
+      }
+      startGame();
+    }
+
+    function flashMessage(text, kind) {
+      const bar = document.getElementById('messageBar');
+      bar.textContent = text;
+      bar.className = 'messageBar' + (kind ? ' ' + kind : '');
+      clearTimeout(flashMessage._t);
+      flashMessage._t = setTimeout(() => { bar.textContent = ''; bar.className = 'messageBar'; }, 1800);
+    }
+
+    /* ═══════════════════ ONLINE / TURN+STUN (PeerJS) ═══════════════════ */
+
+    async function fetchIceServers() {
+      try {
+        const r = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+        if (!r.ok) throw 0;
+        return { iceServers: await r.json() };
+      } catch (_) {
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
+    function generateRoomId() {
+      const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'ps-';
+      for (let i = 0; i < 8; i++) id += c[Math.floor(Math.random() * c.length)];
+      return id;
+    }
+
+    function showLobby(html) {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.add('hidden');
+      const lobby = document.getElementById('lobbyScreen');
+      lobby.classList.remove('hidden');
+      document.getElementById('lobbyContent').innerHTML = html;
+    }
+
+    function showDisconnectNotice() {
+      isOver = true;
+      const d = document.createElement('div');
+      d.className = 'dc-notice';
+      d.innerHTML = 'Opponent disconnected<br><button onclick="this.parentElement.remove();backToSetup()">Back to Setup</button>';
+      document.body.appendChild(d);
+    }
+
+    async function createRoom() {
+      isHost = true;
+      myPlayer = goFirstSelected ? 1 : 2;
+      showLobby('<h2>Creating room…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>');
+      const ice = await fetchIceServers();
+      const rid = generateRoomId();
+      peer = new Peer(rid, { config: ice });
+
+      peer.on('open', (id) => {
+        const link = location.origin + location.pathname + '#room=' + id;
+        showLobby(
+          '<h2>Room Created</h2>' +
+          '<p style="opacity:.6;font-size:14px;">Share this link with your opponent:</p>' +
+          '<div class="lobby-link-wrap">' +
+          '<input class="lobby-link-input" id="roomLink" value="' + link + '" readonly>' +
+          '<button class="lobby-copy-btn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' +
+          '<p style="opacity:.55;font-size:13px;">Field: <strong>' + SIZES[sizeKey].label + '</strong> · You play <strong>' + (myPlayer === 1 ? 'first' : 'second') + '</strong></p>' +
+          '<div class="lobby-status"><div class="spinner"></div><span>Waiting for opponent…</span></div>' +
+          '<button class="newGameBtn" onclick="backToSetup()">Cancel</button>'
+        );
+      });
+
+      peer.on('connection', (cn) => {
+        conn = cn;
+        cn.on('open', () => {
+          conn.send({ type: 'start', size: sizeKey, guestPlayer: (myPlayer === 1 ? 2 : 1) });
+          startGame();
+        });
+        cn.on('data', handlePeerData);
+        cn.on('close', () => { if (!isOver) showDisconnectNotice(); });
+      });
+
+      peer.on('error', (e) => {
+        showLobby('<h2>Error</h2><p style="color:#f87171">' + (e.message || e) + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>');
+      });
+    }
+
+    async function joinRoom(rid) {
+      if (!rid) {
+        const m = location.hash.match(/room=([^&]+)/);
+        if (m) rid = m[1]; else return;
+      }
+      isHost = false;
+      myPlayer = 2;
+      mode = 'online';
+      showLobby('<h2>Joining…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>');
+      const ice = await fetchIceServers();
+      peer = new Peer({ config: ice });
+      peer.on('open', () => {
+        conn = peer.connect(rid, { reliable: true });
+        conn.on('open', () => {
+          showLobby('<h2>Connected</h2><div class="lobby-status"><div class="spinner"></div><span>Waiting for host…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>');
+        });
+        conn.on('data', handlePeerData);
+        conn.on('close', () => { if (!isOver) showDisconnectNotice(); });
+      });
+      peer.on('error', (e) => {
+        showLobby('<h2>Connection Failed</h2><p style="color:#f87171">' + (e.message || e) + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>');
+      });
+    }
+
+    function handlePeerData(d) {
+      switch (d.type) {
+        case 'start':
+          if (d.size && SIZES[d.size]) sizeKey = d.size;
+          if (typeof d.guestPlayer === 'number') myPlayer = d.guestPlayer;
+          startGame();
+          break;
+        case 'move':
+          attemptMove(d.x, d.y, true);
+          break;
+        case 'rematch':
+          startGame();
+          break;
+      }
+    }
+
+    function copyLink() {
+      const i = document.getElementById('roomLink');
+      i.select();
+      navigator.clipboard.writeText(i.value).then(() => {
+        const b = document.getElementById('copyBtn');
+        b.textContent = 'Copied!'; setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    /* ═══════════════════ INIT ═══════════════════ */
+
+    window.addEventListener('load', () => {
+      const m = location.hash.match(/room=([^&]+)/);
+      if (m) joinRoom(m[1]);
+    });
+  </script>
+</body>
+
+</html>
