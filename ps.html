@@ -144,6 +144,32 @@
       50% { stroke-width: 3.5; }
     }
 
+    /* Target-goal highlight: pulses to show which net the current player must score in */
+    .targetGoalGlow {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: targetGoalPulse 1.3s ease-in-out infinite;
+    }
+    @keyframes targetGoalPulse {
+      0%,100% { opacity: .55; }
+      50%     { opacity: 1; }
+    }
+    .targetGoalLabel {
+      animation: targetLabelPulse 1.3s ease-in-out infinite;
+      font-weight: bold;
+    }
+    @keyframes targetLabelPulse {
+      0%,100% { opacity: .75; }
+      50%     { opacity: 1; }
+    }
+    .targetGoalArrow {
+      animation: targetArrowBlink 1.3s ease-in-out infinite;
+    }
+    @keyframes targetArrowBlink {
+      0%,100% { opacity: .55; }
+      50%     { opacity: 1; }
+    }
+
     /* ── result ── */
     .resultCard {
       max-width: 420px; margin: 24px auto 0;
@@ -694,12 +720,39 @@
 
       const parts = [];
 
+      // P1 attacks bottom; P2 attacks top. Highlight the goal the *current* player must score in.
+      const targetIsBottom = !isOver && currentPlayer === 1;
+      const targetIsTop    = !isOver && currentPlayer === 2;
+
+      // SVG glow filters for the active target goal
+      parts.push(
+        '<defs>' +
+          '<filter id="goalGlowPink" x="-50%" y="-50%" width="200%" height="200%">' +
+            '<feGaussianBlur stdDeviation="6" result="b"/>' +
+            '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+          '</filter>' +
+          '<filter id="goalGlowBlue" x="-50%" y="-50%" width="200%" height="200%">' +
+            '<feGaussianBlur stdDeviation="6" result="b"/>' +
+            '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+          '</filter>' +
+        '</defs>'
+      );
+
       // Pitch fill
       parts.push('<rect x="' + sx(0) + '" y="' + sy(0) + '" width="' + (W * CELL) + '" height="' + (H * CELL) + '" fill="rgba(34,197,94,0.07)"/>');
 
-      // Goal area fills
-      parts.push('<rect x="' + sx(midX - 1) + '" y="' + sy(-1) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="rgba(244,114,182,0.12)"/>');
-      parts.push('<rect x="' + sx(midX - 1) + '" y="' + sy(H) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="rgba(56,189,248,0.12)"/>');
+      // Goal area fills — brighten + glow + pulse the goal the current player must hit
+      // Top goal (P2's target)
+      const topFill   = targetIsTop ? 'rgba(244,114,182,0.45)'  : 'rgba(244,114,182,0.10)';
+      const topStroke = targetIsTop ? 'stroke="#f472b6" stroke-width="2.5" filter="url(#goalGlowPink)"' : '';
+      const topClass  = targetIsTop ? ' class="targetGoalGlow"' : '';
+      parts.push('<rect' + topClass + ' x="' + sx(midX - 1) + '" y="' + sy(-1) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="' + topFill + '" ' + topStroke + '/>');
+
+      // Bottom goal (P1's target)
+      const botFill   = targetIsBottom ? 'rgba(56,189,248,0.45)' : 'rgba(56,189,248,0.10)';
+      const botStroke = targetIsBottom ? 'stroke="#38bdf8" stroke-width="2.5" filter="url(#goalGlowBlue)"' : '';
+      const botClass  = targetIsBottom ? ' class="targetGoalGlow"' : '';
+      parts.push('<rect' + botClass + ' x="' + sx(midX - 1) + '" y="' + sy(H) + '" width="' + (2 * CELL) + '" height="' + CELL + '" fill="' + botFill + '" ' + botStroke + '/>');
 
       // Faint reference grid
       for (let y = 0; y <= H; y++) {
@@ -758,9 +811,16 @@
       // Center mark
       parts.push('<circle cx="' + sx(W / 2) + '" cy="' + sy(H / 2) + '" r="5" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>');
 
-      // Goal labels
-      parts.push('<text x="' + sx(midX) + '" y="' + (sy(-1) - 8) + '" text-anchor="middle" font-size="10" fill="rgba(244,114,182,0.7)" font-family="Segoe UI, sans-serif" letter-spacing="2">P2 GOAL</text>');
-      parts.push('<text x="' + sx(midX) + '" y="' + (sy(H + 1) + 18) + '" text-anchor="middle" font-size="10" fill="rgba(56,189,248,0.7)" font-family="Segoe UI, sans-serif" letter-spacing="2">P1 GOAL</text>');
+      // Goal labels — emphasize the active target with brighter color, larger size, "SCORE HERE" tag
+      const topLabelFill  = targetIsTop    ? '#f9a8d4' : 'rgba(244,114,182,0.55)';
+      const topLabelSize  = targetIsTop    ? 12 : 10;
+      const topLabelClass = targetIsTop    ? ' class="targetGoalLabel"' : '';
+      parts.push('<text' + topLabelClass + ' x="' + sx(midX) + '" y="' + (sy(-1) - 8) + '" text-anchor="middle" font-size="' + topLabelSize + '" fill="' + topLabelFill + '" font-family="Segoe UI, sans-serif" letter-spacing="2">' + (targetIsTop ? '▲ SCORE HERE ▲' : 'P2 GOAL') + '</text>');
+
+      const botLabelFill  = targetIsBottom ? '#7dd3fc' : 'rgba(56,189,248,0.55)';
+      const botLabelSize  = targetIsBottom ? 12 : 10;
+      const botLabelClass = targetIsBottom ? ' class="targetGoalLabel"' : '';
+      parts.push('<text' + botLabelClass + ' x="' + sx(midX) + '" y="' + (sy(H + 1) + 18) + '" text-anchor="middle" font-size="' + botLabelSize + '" fill="' + botLabelFill + '" font-family="Segoe UI, sans-serif" letter-spacing="2">' + (targetIsBottom ? '▼ SCORE HERE ▼' : 'P1 GOAL') + '</text>');
 
       // Valid move targets (clickable)
       if (isMyTurn()) {
