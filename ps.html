@@ -598,13 +598,33 @@
       return isGoalNode(x, y) !== null;
     }
 
+    // A "wide-diagonal" goal entry is a move from one square outside a goalpost
+    // straight into the back corner of the goal — geometrically the move-line
+    // crosses the pre-drawn side wall of the goal box, so it shouldn't be legal.
+    // We block those four specific moves explicitly.
+    function isWallCrossingGoalEntry(fx, fy, tx, ty) {
+      // Top goal
+      if (fy === 0 && ty === -1) {
+        if (fx === midX - 2 && tx === midX - 1) return true;
+        if (fx === midX + 2 && tx === midX + 1) return true;
+      }
+      // Bottom goal
+      if (fy === H && ty === H + 1) {
+        if (fx === midX - 2 && tx === midX - 1) return true;
+        if (fx === midX + 2 && tx === midX + 1) return true;
+      }
+      return false;
+    }
+
     function canMoveTo(tx, ty) {
       const [bx, by] = ball;
       if (tx === bx && ty === by) return false;
       const dx = tx - bx, dy = ty - by;
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
       if (!isValidNode(tx, ty)) return false;
-      return !edges.has(edgeKey(bx, by, tx, ty));
+      if (edges.has(edgeKey(bx, by, tx, ty))) return false;
+      if (isWallCrossingGoalEntry(bx, by, tx, ty)) return false;
+      return true;
     }
 
     function getValidMoves() {
