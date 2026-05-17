@@ -1,0 +1,3857 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com https://*.metered.live https://*.metered.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com;">
+  <title>Aggression</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(ellipse at top, #1e1b4b 0%, #0b0a1f 60%, #050418 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { font-size: 32px; margin-bottom: 6px; letter-spacing: 1px; }
+    .setup-sub { opacity: .55; font-size: 14px; margin-bottom: 30px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: #fff; }
+
+    /* setup */
+    .setupSection { margin-bottom: 18px; width: 420px; max-width: 100%; }
+    .setupLabel {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 8px;
+    }
+    .modeToggle { display: flex; gap: 6px; flex-wrap: wrap; }
+    .modeBtn {
+      flex: 1 1 0; min-width: 80px; padding: 10px 8px;
+      border: 1px solid rgba(168,85,247,.25); border-radius: 10px;
+      background: rgba(168,85,247,.06); color: rgba(255,255,255,.7);
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .modeBtn.selected {
+      background: rgba(168,85,247,.25); color: #fff;
+      font-weight: bold; border-color: rgba(168,85,247,.6);
+    }
+    .modeBtn:disabled, .modeBtn.disabled { cursor: not-allowed; opacity: .4; }
+    .modeBtn.disabled:hover { background: rgba(168,85,247,.06); }
+
+    .numRow { display: flex; gap: 6px; align-items: center; }
+    .numInput {
+      width: 96px; padding: 9px 10px;
+      border: 1px solid rgba(168,85,247,.25); border-radius: 10px;
+      background: rgba(0,0,0,.25); color: #fff;
+      font-size: 14px; outline: none; font-family: inherit;
+      text-align: center;
+    }
+    .numInput:focus { border-color: rgba(168,85,247,.6); }
+    .helpText { font-size: 12px; opacity: .55; margin-top: 6px; line-height: 1.4; }
+
+    .startBtn {
+      margin-top: 18px; padding: 14px 50px; font-size: 17px;
+      font-weight: bold; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; cursor: pointer; transition: .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .startBtn:hover { transform: scale(1.04); }
+    .rulesLink {
+      margin-top: 16px; font-size: 13px; color: rgba(255,255,255,.5);
+      cursor: pointer; text-decoration: underline; text-align: center;
+    }
+    .rulesLink:hover { color: #fff; }
+
+    /* game header */
+    .game-header {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .turn-indicator {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: .5px;
+    }
+    .turn-indicator.p1 { background: rgba(56,189,248,.2); color: #7dd3fc; border: 1px solid rgba(56,189,248,.4); }
+    .turn-indicator.p2 { background: rgba(244,114,182,.2); color: #f9a8d4; border: 1px solid rgba(244,114,182,.4); }
+    .turn-indicator.both { background: rgba(168,85,247,.2); color: #c4b5fd; border: 1px solid rgba(168,85,247,.4); }
+    .phase-badge {
+      padding: 4px 12px; border-radius: 18px;
+      background: rgba(255,255,255,.07);
+      font-size: 12px; font-weight: 600;
+      letter-spacing: .5px; text-transform: uppercase;
+    }
+
+    /* score panels */
+    .scores-row {
+      display: flex; gap: 12px; margin-bottom: 14px;
+      width: 100%; max-width: 640px; justify-content: center;
+      flex-wrap: wrap;
+    }
+    .score-card {
+      flex: 1 1 220px; padding: 10px 14px;
+      background: rgba(255,255,255,.04); border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      text-align: center; transition: .2s;
+    }
+    .score-card.p1 { border-color: rgba(56,189,248,.4); }
+    .score-card.p2 { border-color: rgba(244,114,182,.4); }
+    .score-card.active {
+      background: rgba(255,255,255,.08);
+      box-shadow: 0 0 16px rgba(168,85,247,.3);
+    }
+    .score-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .score-card.p1 .score-name { color: #7dd3fc; }
+    .score-card.p2 .score-name { color: #f9a8d4; }
+    .score-stats {
+      display: flex; gap: 14px; justify-content: center;
+      font-size: 12px;
+    }
+    .score-stat { display: flex; flex-direction: column; align-items: center; }
+    .score-stat .lbl { font-size: 10px; text-transform: uppercase; opacity: .55; letter-spacing: .5px; }
+    .score-stat .val { font-size: 18px; font-weight: 900; }
+    .score-card .submitted-tag {
+      margin-top: 4px; font-size: 11px;
+      color: #86efac; letter-spacing: .5px;
+    }
+    .score-card .planning-tag {
+      margin-top: 4px; font-size: 11px;
+      color: #fde68a; letter-spacing: .5px;
+    }
+
+    /* deploy bar */
+    .deploy-bar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; border-radius: 12px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      margin-bottom: 14px; flex-wrap: wrap; justify-content: center;
+      max-width: 100%;
+    }
+    .deploy-bar .dlabel { font-size: 12px; opacity: .65; text-transform: uppercase; letter-spacing: .5px; }
+    .deploy-bar input[type=range] { width: 220px; max-width: 60vw; accent-color: #a855f7; }
+    .deploy-bar .amt {
+      font-size: 22px; font-weight: 900; min-width: 44px; text-align: center; color: #fde68a;
+    }
+    .deploy-bar .max-btn {
+      padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(168,85,247,.4);
+      background: rgba(168,85,247,.15); color: #fff; font-size: 12px; cursor: pointer;
+    }
+    .deploy-bar .max-btn:hover { background: rgba(168,85,247,.3); }
+
+    /* map */
+    .board-wrap { width: 100%; display: flex; justify-content: center; margin: 0 auto; }
+    .map-container {
+      position: relative;
+      width: min(620px, calc(100vw - 40px));
+      aspect-ratio: 1 / 1;
+      background: rgba(255,255,255,.03);
+      border-radius: 16px;
+      border: 1px solid rgba(168,85,247,.2);
+      box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    }
+    .region {
+      position: absolute;
+      border: 2px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      border-radius: 6px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: transform .15s, background .2s, box-shadow .2s, opacity .3s, border-color .2s;
+      overflow: hidden;
+      user-select: none;
+    }
+    .region.clickable { cursor: pointer; }
+    .region.clickable:hover {
+      transform: scale(1.02);
+      background: rgba(168,85,247,.18);
+      border-color: rgba(168,85,247,.6);
+      z-index: 4;
+    }
+    .region.p1 {
+      background: linear-gradient(135deg, rgba(56,189,248,.55), rgba(14,165,233,.7));
+      border-color: #0284c7;
+      box-shadow: 0 4px 14px rgba(14,165,233,.3);
+    }
+    .region.p2 {
+      background: linear-gradient(135deg, rgba(244,114,182,.55), rgba(236,72,153,.7));
+      border-color: #db2777;
+      box-shadow: 0 4px 14px rgba(236,72,153,.3);
+    }
+    .region.eliminated {
+      background: rgba(20,10,30,.55);
+      border-color: rgba(255,80,80,.35);
+      border-style: dashed; opacity: .35;
+      cursor: default; box-shadow: none;
+    }
+    .region.eliminated::after {
+      content: '✕';
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,80,80,.85);
+      font-size: 38px; font-weight: 900;
+    }
+    .region.eliminated .region-troops, .region.eliminated .region-label { opacity: .25; }
+    .region.target { outline: 2px dashed #fde68a; outline-offset: -4px; cursor: crosshair; z-index: 5; }
+    .region.target:hover { background: rgba(253,230,138,.18) !important; transform: scale(1.02); }
+    .region.lastMove { box-shadow: 0 0 0 2px #fde68a, 0 4px 14px rgba(0,0,0,.4); }
+
+    /* AoE/unoccupied (gray) */
+    .region.unoccupied {
+      background: rgba(120,120,140,.18);
+      border-color: rgba(255,255,255,.18);
+      border-style: dashed;
+    }
+    .region.unoccupied .region-troops { display: none; }
+
+    /* AoE planner highlights */
+    .region.attackerSel {
+      outline: 3px solid #fde68a; outline-offset: -4px; transform: translateY(-1px); z-index: 6;
+      box-shadow: inset 0 0 22px rgba(253,230,138,.35), 0 0 0 0 rgba(253,230,138,.55), 0 4px 14px rgba(0,0,0,.3);
+      animation: attackerPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes attackerPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(253,230,138,.55), 0 4px 14px rgba(0,0,0,.3); }
+      50% { box-shadow: 0 0 0 6px rgba(253,230,138,.0), 0 4px 14px rgba(0,0,0,.3); }
+    }
+    .region.beatable { outline: 2px dashed #86efac; outline-offset: -4px; cursor: crosshair; z-index: 5; }
+    .region.beatable .region-troops { color: #86efac; }
+    .region.unbeatable { outline: 2px dashed rgba(248,113,113,.7); outline-offset: -4px; opacity: .55; }
+    .region.unbeatable .region-troops { color: #f87171; }
+
+    .region.adjustSource {
+      outline: 3px solid #fde68a; outline-offset: -4px; z-index: 6;
+      animation: attackerPulse 1.4s ease-in-out infinite;
+    }
+    .region.adjustDest { outline: 2px dashed #86efac; outline-offset: -4px; cursor: crosshair; z-index: 5; }
+    .region.adjustAssignedSrc, .region.adjustAssignedDst {
+      box-shadow: 0 0 0 2px #c4b5fd, 0 4px 14px rgba(0,0,0,.4);
+    }
+
+    .region.hunkerSel {
+      outline: 3px solid #93c5fd; outline-offset: -4px; z-index: 6;
+      box-shadow: inset 0 0 22px rgba(147,197,253,.35), 0 4px 14px rgba(0,0,0,.3);
+    }
+
+    .region.claimSource {
+      outline: 3px solid #fde68a; outline-offset: -4px; z-index: 6;
+      animation: attackerPulse 1.4s ease-in-out infinite;
+    }
+    .region.claimTargetCand {
+      outline: 2px dashed #86efac; outline-offset: -4px; cursor: crosshair; z-index: 5;
+    }
+
+    /* hunkered marker */
+    .region.hunkered::before {
+      content: '🛡';
+      position: absolute; top: 4px; right: 4px;
+      font-size: 13px; opacity: .9;
+      pointer-events: none;
+    }
+
+    /* Fog of War */
+    .region.fogged {
+      background: rgba(15,12,30,.85) !important;
+      border-color: rgba(168,85,247,.18) !important;
+      box-shadow: none !important;
+    }
+    .region.fogged::after {
+      content: '?';
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(168,85,247,.55);
+      font-size: 30px; font-weight: 900;
+      pointer-events: none;
+    }
+    .region.fogged .region-troops, .region.fogged .region-label { opacity: 0; }
+
+    /* AoE action bar + banners */
+    .aoe-action-bar {
+      display: flex; gap: 8px; justify-content: center;
+      flex-wrap: wrap; margin-bottom: 10px; max-width: 620px;
+    }
+    .aoe-action-bar .actionBtn { padding: 9px 16px; font-size: 13px; }
+    .aoe-action-bar .actionBtn.active {
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      border-color: transparent;
+      box-shadow: 0 0 14px rgba(168,85,247,.4);
+    }
+    .aoe-banner {
+      max-width: 580px; margin: 0 auto 10px; padding: 8px 14px;
+      border-radius: 10px; background: rgba(168,85,247,.12);
+      border: 1px solid rgba(168,85,247,.25);
+      font-size: 13px; text-align: center; line-height: 1.5;
+    }
+    .aoe-banner .pwr { font-weight: 900; color: #fde68a; font-size: 15px; }
+    .aoe-banner .pwr.weak { color: #f87171; }
+    .aoe-banner .sub { opacity: .7; font-size: 12px; }
+    .aoe-banner .p1c { color: #7dd3fc; font-weight: 700; }
+    .aoe-banner .p2c { color: #f9a8d4; font-weight: 700; }
+    .aoe-banner .ok { color: #86efac; }
+    .aoe-banner .bad { color: #f87171; }
+    .aoe-modal .weak { color: #f87171; }
+
+    .submit-bar {
+      display: flex; gap: 8px; justify-content: center;
+      margin-bottom: 10px; flex-wrap: wrap;
+    }
+
+    /* AoE modal */
+    .aoe-modal {
+      position: fixed; inset: 0; z-index: 250;
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .aoe-modal-card {
+      background: linear-gradient(135deg, #1e1b4b, #0b0a1f);
+      border: 1px solid rgba(168,85,247,.3); border-radius: 18px;
+      padding: 24px; max-width: 480px; width: 100%;
+      max-height: 86vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .aoe-modal-card h3 { margin-bottom: 12px; font-size: 18px; }
+    .aoe-modal-card .row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,.08);
+      font-size: 13px;
+    }
+    .aoe-modal-card .row:last-child { border-bottom: 0; }
+    .aoe-modal-card .row .lbl { flex: 1; }
+    .aoe-modal-card .row input[type=number] {
+      width: 64px; padding: 6px 8px; text-align: center;
+      background: rgba(0,0,0,.3); color: #fff;
+      border: 1px solid rgba(168,85,247,.3); border-radius: 6px;
+      font-family: inherit; font-size: 13px; outline: none;
+    }
+    .aoe-modal-card .row input[type=number]:disabled { opacity: .55; }
+    .aoe-modal-card .row .arrow { opacity: .55; }
+    .aoe-modal-card .modal-foot {
+      display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center;
+    }
+    .aoe-modal-card .modal-info {
+      font-size: 12px; opacity: .8; margin-top: 10px; line-height: 1.5;
+    }
+    .aoe-modal-card .checkbox-row {
+      display: flex; align-items: center; gap: 8px;
+      margin: 12px 0; font-size: 13px;
+    }
+    .aoe-modal-card input[type=range] { flex: 1; accent-color: #a855f7; }
+    .aoe-modal-card .err {
+      color: #f87171; font-size: 12px; margin-top: 6px; min-height: 16px;
+    }
+    .aoe-modal-card .section-head {
+      margin-top: 14px; margin-bottom: 4px;
+      font-size: 12px; text-transform: uppercase;
+      letter-spacing: .5px; opacity: .65;
+    }
+    .aoe-pass-confirm-card { max-width: 380px; }
+
+    .region-label {
+      font-size: 11px; font-weight: 700;
+      color: rgba(255,255,255,.55);
+      text-transform: uppercase; letter-spacing: 1px;
+      pointer-events: none;
+    }
+    .region.p1 .region-label, .region.p2 .region-label { color: rgba(255,255,255,.85); }
+    .region-troops {
+      font-size: 26px;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,.6);
+      pointer-events: none;
+    }
+    .region.empty .region-troops { display: none; }
+    .region.dim { opacity: .55; }
+    .region.tiny .region-troops { font-size: 16px; }
+    .region.tiny .region-label { font-size: 9px; letter-spacing: .5px; }
+
+    /* arrows overlay (AoE intent reveal) */
+    .aoe-arrows-overlay {
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 12;
+    }
+    .aoe-arrows-overlay svg { width: 100%; height: 100%; overflow: visible; }
+
+    /* controls */
+    .controls-row {
+      display: flex; gap: 10px; justify-content: center;
+      margin-top: 16px; flex-wrap: wrap;
+    }
+    .actionBtn {
+      padding: 10px 22px; border: none; border-radius: 10px;
+      background: rgba(168,85,247,.2); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+      border: 1px solid rgba(168,85,247,.3);
+      font-weight: 600;
+    }
+    .actionBtn:hover { background: rgba(168,85,247,.35); transform: translateY(-1px); }
+    .actionBtn.primary {
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      border-color: transparent;
+    }
+    .actionBtn.danger {
+      background: rgba(248,113,113,.15);
+      border-color: rgba(248,113,113,.3);
+    }
+    .actionBtn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    /* result */
+    .resultCard {
+      max-width: 460px; margin: 24px auto 0;
+      padding: 28px; text-align: center;
+      background: rgba(255,255,255,.05); border-radius: 20px;
+      border: 1px solid rgba(168,85,247,.3);
+    }
+    .resultCard h2 { font-size: 26px; margin-bottom: 6px; }
+    .resultCard p.sub { font-size: 14px; opacity: .65; margin-bottom: 18px; }
+    .resultRow {
+      display: flex; justify-content: space-around;
+      gap: 16px; margin-bottom: 18px;
+    }
+    .resultCol .label {
+      font-size: 12px; text-transform: uppercase; opacity: .55;
+      letter-spacing: 1px; margin-bottom: 4px;
+    }
+    .resultCol .name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .resultCol .val { font-size: 26px; font-weight: 900; }
+    .resultCol .sub-val { font-size: 12px; opacity: .65; margin-top: 2px; }
+    .resultCol.p1 .name { color: #7dd3fc; }
+    .resultCol.p2 .name { color: #f9a8d4; }
+    .resultCol.winner { transform: scale(1.08); }
+    .resultCol.winner .val { color: #fde68a; }
+
+    /* lobby */
+    .lobby-status {
+      font-size: 15px; margin: 14px 0;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: #a855f7; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lobby-link-wrap {
+      display: flex; gap: 6px; margin: 14px auto;
+      max-width: 380px;
+    }
+    .lobby-link-input {
+      flex: 1; padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      background: rgba(0,0,0,.3); color: #c4b5fd;
+      font-size: 12px; font-family: monospace; outline: none;
+    }
+    .lobby-copy-btn {
+      padding: 10px 16px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; font-weight: bold; font-size: 13px;
+      cursor: pointer; transition: .2s; white-space: nowrap;
+    }
+    .lobby-copy-btn:hover { transform: scale(1.04); }
+    .newGameBtn {
+      margin-top: 16px; padding: 10px 28px; border: none; border-radius: 10px;
+      background: rgba(255,255,255,.1); color: #fff;
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .newGameBtn:hover { background: rgba(255,255,255,.2); }
+
+    .dc-notice {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10,5,30,.95); color: #f87171; padding: 24px 36px;
+      border-radius: 16px; font-size: 16px; z-index: 300;
+      border: 1px solid rgba(248,113,113,.3); text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .dc-notice button {
+      display: block; margin: 14px auto 0; padding: 8px 24px;
+      border: none; border-radius: 8px;
+      background: rgba(255,255,255,.15); color: #fff;
+      cursor: pointer; font-size: 14px;
+    }
+    .dc-notice button:hover { background: rgba(255,255,255,.25); }
+
+    /* rules overlay */
+    #rulesOverlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .rulesCard {
+      background: linear-gradient(135deg, #1e1b4b, #0b0a1f);
+      border: 1px solid rgba(168,85,247,.3); border-radius: 20px;
+      padding: 30px; max-width: 540px; width: 100%;
+      max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .rulesCard h2 { margin-bottom: 16px; }
+    .rulesCard h3 { margin-top: 16px; margin-bottom: 6px; color: #c4b5fd; font-size: 15px; }
+    .rulesCard p, .rulesCard ul { font-size: 14px; line-height: 1.55; opacity: .9; }
+    .rulesCard ul { padding-left: 22px; }
+    .rulesCard li { margin: 4px 0; }
+    .rulesCloseBtn {
+      display: block; margin: 20px auto 0; padding: 10px 30px;
+      border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; font-weight: bold; cursor: pointer;
+    }
+
+    .battle-log-panel {
+      width: 100%;
+      max-width: 720px;
+      margin: 18px auto 0;
+      border: 1px solid rgba(168, 85, 247, .25);
+      border-radius: 12px;
+      background: rgba(20, 14, 40, .6);
+      overflow: hidden;
+    }
+    .battle-log-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(168, 85, 247, .2);
+      background: rgba(168, 85, 247, .08);
+    }
+    .battle-log-title {
+      font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: .8;
+    }
+    .battle-log-toggle {
+      background: transparent; color: rgba(255,255,255,.7);
+      border: 1px solid rgba(255,255,255,.2); border-radius: 6px;
+      padding: 3px 10px; font-size: 12px; cursor: pointer;
+    }
+    .battle-log-toggle:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+    .battle-log-body {
+      max-height: 260px; overflow-y: auto;
+      padding: 8px 14px;
+      font-size: 13px; line-height: 1.5;
+    }
+    .battle-log-body.collapsed { display: none; }
+    .battle-log-round {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(255,255,255,.08);
+    }
+    .battle-log-round:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .battle-log-roundTitle {
+      font-weight: bold; color: rgba(168, 85, 247, .9);
+      font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+      margin-bottom: 4px;
+    }
+    .battle-log-line { padding: 2px 0; }
+    .battle-log-line.p1 { color: #93c5fd; }
+    .battle-log-line.p2 { color: #fca5a5; }
+    .battle-log-line.system { color: rgba(255,255,255,.55); font-style: italic; }
+    .battle-log-line.outcome { color: rgba(255,255,255,.85); margin-left: 10px; font-size: 12px; opacity: .9; }
+    .battle-log-line strong { color: #fde68a; }
+    .battle-log-line .neutral { color: rgba(255,255,255,.7); }
+
+    .messageBar {
+      min-height: 22px; margin-top: 10px;
+      font-size: 14px; opacity: .85; text-align: center;
+      max-width: 540px;
+    }
+    .messageBar.warn { color: #fbbf24; }
+    .messageBar.bad { color: #f87171; }
+    .messageBar.good { color: #86efac; }
+
+    /* hand-off overlay (2P-local) */
+    .plan-handoff {
+      position: fixed; inset: 0; z-index: 400;
+      background: rgba(2,1,15,.96);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 18px;
+      padding: 30px; text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .plan-handoff h2 { font-size: 26px; }
+    .plan-handoff p { font-size: 14px; opacity: .75; max-width: 420px; line-height: 1.5; }
+    .plan-handoff button {
+      padding: 14px 36px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff; font-weight: bold; font-size: 16px; cursor: pointer;
+      transition: .2s;
+    }
+    .plan-handoff button:hover { transform: scale(1.04); }
+
+    /* flash animations (used for AoE reveal) */
+    .region.flash-success { animation: flashSuccess 1.4s ease; }
+    .region.flash-fail    { animation: flashFail 1.4s ease; }
+    .region.flash-claim   { animation: flashClaim 1.4s ease; }
+    @keyframes flashSuccess {
+      0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+      30%, 70% { box-shadow: 0 0 0 5px #22c55e, 0 0 28px rgba(34,197,94,.7); }
+    }
+    @keyframes flashFail {
+      0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+      30%, 70% { box-shadow: 0 0 0 5px #ef4444, 0 0 28px rgba(239,68,68,.7); }
+    }
+    @keyframes flashClaim {
+      0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+      30%, 70% { box-shadow: 0 0 0 5px #fde68a, 0 0 28px rgba(253,230,138,.7); }
+    }
+
+    @media (max-width: 540px) {
+      h1 { font-size: 26px; }
+      .region-troops { font-size: 20px; }
+      .region.tiny .region-troops { font-size: 13px; }
+      .deploy-bar input[type=range] { width: 160px; }
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Game Hub</a>
+
+  <!-- SETUP -->
+  <div id="setupScreen">
+    <h1>Aggression</h1>
+    <p class="setup-sub">Deploy, conquer, dominate the map</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Game Mode</div>
+      <div id="gameModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGameMode('classic')">Classic</button>
+        <button class="modeBtn" onclick="setGameMode('aoe')">Age of Empires</button>
+      </div>
+      <div class="helpText" id="gameModeHint">
+        <strong>Classic</strong> — sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
+        <strong>Age of Empires</strong> — parallel turns; attack, hunker, adjust troops, or claim a gray ruin. Strategy &amp; bluff over many rounds.
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Mode</div>
+      <div id="modeToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setMode('cpu')">vs CPU</button>
+        <button class="modeBtn selected" onclick="setMode('local')">2P Local</button>
+        <button class="modeBtn" onclick="setMode('online')">2P Online</button>
+      </div>
+    </div>
+
+    <div id="cpuDifficultySection" class="setupSection hidden">
+      <div class="setupLabel">CPU Difficulty</div>
+      <div id="cpuDiffToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setCpuDiff('easy')">Easy</button>
+        <button class="modeBtn selected" onclick="setCpuDiff('medium')">Medium</button>
+        <button class="modeBtn" onclick="setCpuDiff('hard')">Hard</button>
+      </div>
+    </div>
+
+    <div id="goOrderSection" class="setupSection hidden">
+      <div class="setupLabel">You Go</div>
+      <div id="goOrderToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setGoOrder('first')">First</button>
+        <button class="modeBtn" onclick="setGoOrder('second')">Second</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Total Troops (each side)</div>
+      <div id="troopsToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setTroopsPreset(10)">10</button>
+        <button class="modeBtn" onclick="setTroopsPreset(50)">50</button>
+        <button class="modeBtn selected" onclick="setTroopsPreset(100)">100</button>
+        <button class="modeBtn" onclick="setTroopsPreset(200)">200</button>
+      </div>
+      <div class="numRow" style="margin-top:10px;">
+        <input type="number" id="troopsCustom" class="numInput" min="6" max="999" value="100"
+          oninput="onTroopsCustomInput()">
+        <span class="helpText" style="margin-top:0;">custom amount</span>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Map Type</div>
+      <div id="mapTypeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setMapType('matrix')">Matrix</button>
+        <button class="modeBtn disabled" onclick="setMapType('geo')" title="Coming soon">Geographical (soon)</button>
+      </div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Number of Regions</div>
+      <div id="regionsModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setRegionsMode('auto')">Auto</button>
+        <button class="modeBtn" onclick="setRegionsMode('custom')">Custom</button>
+      </div>
+      <div id="regionsCustomRow" class="numRow hidden" style="margin-top:10px;">
+        <input type="number" id="regionsCustom" class="numInput" min="4" max="50" value="20">
+        <span class="helpText" style="margin-top:0;">4 – 50 regions</span>
+      </div>
+      <div id="regionsAutoHint" class="helpText">Auto: ~<span id="autoRegionsPreview">20</span> regions for current troop count</div>
+    </div>
+
+    <div class="setupSection" id="fogSection">
+      <div class="setupLabel">Fog of War (Age of Empires only)</div>
+      <div id="fogToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setFog(false)">Off</button>
+        <button class="modeBtn" onclick="setFog(true)">On</button>
+      </div>
+      <div class="helpText">When on, you only see opponent territories that touch your own. Otherwise the whole map is visible.</div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start Game</button>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="lobbyScreen" class="hidden">
+    <h1>Aggression</h1>
+    <div id="lobbyContent"></div>
+  </div>
+
+  <!-- GAME -->
+  <div id="gameScreen" class="hidden">
+    <h1 style="font-size:26px; margin-bottom:10px;">Aggression</h1>
+
+    <div class="game-header">
+      <div id="turnIndicator" class="turn-indicator p1">P1's turn</div>
+      <div id="phaseLabel" class="phase-badge">Phase 1 · Deployment</div>
+    </div>
+
+    <div class="scores-row">
+      <div id="p1Card" class="score-card p1">
+        <div class="score-name" id="p1Name">Player 1</div>
+        <div class="score-stats">
+          <div class="score-stat"><div class="lbl">Regions</div><div class="val" id="p1Regions">0</div></div>
+          <div class="score-stat"><div class="lbl">Troops</div><div class="val" id="p1Troops">0</div></div>
+          <div class="score-stat"><div class="lbl">To Deploy</div><div class="val" id="p1Remaining">0</div></div>
+        </div>
+        <div class="submitted-tag hidden" id="p1Submitted">✓ Plan submitted</div>
+        <div class="planning-tag hidden" id="p1Planning">… planning</div>
+      </div>
+      <div id="p2Card" class="score-card p2">
+        <div class="score-name" id="p2Name">Player 2</div>
+        <div class="score-stats">
+          <div class="score-stat"><div class="lbl">Regions</div><div class="val" id="p2Regions">0</div></div>
+          <div class="score-stat"><div class="lbl">Troops</div><div class="val" id="p2Troops">0</div></div>
+          <div class="score-stat"><div class="lbl">To Deploy</div><div class="val" id="p2Remaining">0</div></div>
+        </div>
+        <div class="submitted-tag hidden" id="p2Submitted">✓ Plan submitted</div>
+        <div class="planning-tag hidden" id="p2Planning">… planning</div>
+      </div>
+    </div>
+
+    <div id="deployBar" class="deploy-bar hidden">
+      <span class="dlabel">Place</span>
+      <input type="range" id="deployRange" min="1" max="100" value="10" oninput="onDeployRangeInput()">
+      <span id="deployAmount" class="amt">10</span>
+      <span class="dlabel">troop(s)</span>
+      <button class="max-btn" onclick="setDeployAmount(getCurrentRemaining())">All</button>
+      <button class="max-btn" onclick="setDeployAmount(1)">1</button>
+    </div>
+
+    <div id="aoeActionBar" class="aoe-action-bar hidden">
+      <button class="actionBtn" id="aoeAttackBtn" onclick="setAoeUiAction('attack')">⚔ Attack</button>
+      <button class="actionBtn" id="aoeHunkerBtn" onclick="setAoeUiAction('hunker')">🛡 Hunker</button>
+      <button class="actionBtn" id="aoeAdjustBtn" onclick="setAoeUiAction('adjust')">↔ Adjust</button>
+      <button class="actionBtn" id="aoeClaimBtn" onclick="setAoeUiAction('claim')">▣ Claim</button>
+      <button class="actionBtn" id="aoePassBtn" onclick="setAoeUiAction('pass')">⏭ Pass</button>
+    </div>
+
+    <div id="aoeBanner" class="aoe-banner hidden"></div>
+
+    <div id="aoeSubmitBar" class="submit-bar hidden">
+      <button class="actionBtn primary" id="aoeSubmitBtn" onclick="aoeSubmitPlan()">Submit Plan</button>
+      <button class="actionBtn" id="aoeClearBtn" onclick="aoeClearWorking()">Clear</button>
+    </div>
+
+    <div class="board-wrap">
+      <div id="mapContainer" class="map-container">
+        <div id="aoeArrowsOverlay" class="aoe-arrows-overlay hidden">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <marker id="arrowhead-yellow" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L4,2 L0,4 z" fill="#fde68a"/>
+              </marker>
+              <marker id="arrowhead-cyan" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L4,2 L0,4 z" fill="#7dd3fc"/>
+              </marker>
+              <marker id="arrowhead-pink" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L4,2 L0,4 z" fill="#f9a8d4"/>
+              </marker>
+              <marker id="arrowhead-red" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L4,2 L0,4 z" fill="#ef4444"/>
+              </marker>
+              <marker id="arrowhead-green" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L4,2 L0,4 z" fill="#86efac"/>
+              </marker>
+            </defs>
+            <g id="aoeArrowsG"></g>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div id="aoeModalHost"></div>
+
+    <div id="messageBar" class="messageBar"></div>
+
+    <div id="resultArea" class="hidden"></div>
+
+    <div id="battleLogPanel" class="battle-log-panel hidden">
+      <div class="battle-log-head">
+        <span class="battle-log-title">Battle Log</span>
+        <button class="battle-log-toggle" id="battleLogToggleBtn" onclick="toggleBattleLog()">Hide</button>
+      </div>
+      <div id="battleLogBody" class="battle-log-body"></div>
+    </div>
+
+    <div class="controls-row">
+      <button class="actionBtn" onclick="backToSetup()">New Game</button>
+    </div>
+    <div class="rulesLink" onclick="showRules()">How to Play</div>
+  </div>
+
+  <!-- HAND-OFF -->
+  <div id="planHandoffOverlay" class="plan-handoff hidden">
+    <h2 id="planHandoffTitle">Pass device to Player 2</h2>
+    <p id="planHandoffSub">Make sure the other player isn't watching, then tap to start your plan step.</p>
+    <button id="planHandoffBtn" onclick="dismissPlanHandoff()">I'm ready</button>
+  </div>
+
+  <!-- RULES -->
+  <div id="rulesOverlay" class="hidden" onclick="hideRules(event)">
+    <div class="rulesCard" onclick="event.stopPropagation()" id="rulesCard"></div>
+  </div>
+
+  <script>
+/* ════════════════════════════════ STATE ════════════════════════════════ */
+let mode = 'local';            // 'cpu' | 'local' | 'online'
+let cpuDifficulty = 'medium';
+let goFirstSelected = true;
+let totalTroops = 100;
+let mapType = 'matrix';
+let regionsMode = 'auto';
+let regionsCustomVal = 20;
+let gameMode = 'classic';      // 'classic' | 'aoe'
+let fogOfWar = false;
+
+let regions = [];
+let gridSize = 8;
+let phase = 'setup';           // 'setup' | 'deploy' | 'attack' | 'battle' | 'over'
+let currentPlayer = 1;
+let firstPlayer = 1;
+let p1Remaining = 0;
+let p2Remaining = 0;
+let lastMoveRegion = -1;
+
+/* AoE / parallel-turn runtime */
+let aoeRound = 0;
+let aoePlans = { 1: null, 2: null };
+let aoeSubmitted = { 1: false, 2: false };
+let aoePassFlags = { 1: false, 2: false };
+let aoePlanningPlayer = 1;     // whose plan UI is currently shown (local/cpu/online-self)
+let aoeRevealing = false;
+let aoeHandoffPending = false;
+
+/* Battle log: array of round entries.
+   Each entry: { round, kind?, lines: [{ player, text, kind? }] }
+   kind: 'classic' | 'aoe' | 'system'
+*/
+let battleLog = [];
+let battleLogCollapsed = false;
+
+/* Working plan currently being built by the active planner */
+let aoeWorking = makeEmptyWorking();
+function makeEmptyWorking() {
+  return {
+    action: null,           // 'attack' | 'hunker' | 'adjust' | 'claim' | 'pass' | null
+    attackGroup: new Set(),
+    attackDefender: -1,
+    attackAutoBleed: true,
+    attackFailManual: null,    // map idx->loss
+    attackSuccessManual: null, // map idx->loss
+    hunkerTarget: -1,
+    adjustTransfers: [],
+    adjustSourceSel: -1,
+    claimSource: -1,
+    claimTarget: -1,
+    claimAmount: 1
+  };
+}
+
+/* Online */
+let peer = null, conn = null, isHost = false;
+let myPlayer = 0;
+
+/* ═══════════════════════════ HELPERS ═══════════════════════════ */
+function autoRegionsForTroops(troops) {
+  const r = Math.round(troops / 5);
+  return Math.max(6, Math.min(30, r));
+}
+function effectiveNumRegions() {
+  if (regionsMode === 'auto') return autoRegionsForTroops(totalTroops);
+  return Math.max(4, Math.min(50, regionsCustomVal | 0));
+}
+function playerLabel(p) {
+  if (mode === 'local') return 'Player ' + p;
+  if (mode === 'cpu')   return p === myPlayer ? 'You' : 'CPU';
+  return p === myPlayer ? 'You' : 'Opponent';
+}
+function otherPlayer(p) { return p === 1 ? 2 : 1; }
+
+/* Deterministic PRNG (mulberry32) */
+function mulberry32(seed) {
+  return function() {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ═══════════════════════════ SETUP UI ═══════════════════════════ */
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('#modeToggle .modeBtn').forEach((b, i) => {
+    const which = ['cpu', 'local', 'online'][i];
+    b.classList.toggle('selected', which === m);
+  });
+  document.getElementById('cpuDifficultySection').classList.toggle('hidden', m !== 'cpu');
+  document.getElementById('goOrderSection').classList.toggle('hidden', m === 'local');
+}
+
+function setGameMode(g) {
+  gameMode = g;
+  document.querySelectorAll('#gameModeToggle .modeBtn').forEach((b, i) => {
+    const which = ['classic', 'aoe'][i];
+    b.classList.toggle('selected', which === g);
+  });
+  document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
+}
+
+function setCpuDiff(d) {
+  cpuDifficulty = d;
+  document.querySelectorAll('#cpuDiffToggle .modeBtn').forEach((b, i) => {
+    const which = ['easy', 'medium', 'hard'][i];
+    b.classList.toggle('selected', which === d);
+  });
+}
+
+function setGoOrder(order) {
+  goFirstSelected = (order === 'first');
+  document.querySelectorAll('#goOrderToggle .modeBtn').forEach((b, i) => {
+    const which = ['first', 'second'][i];
+    b.classList.toggle('selected', (which === 'first') === goFirstSelected);
+  });
+}
+
+function setTroopsPreset(n) {
+  totalTroops = n;
+  document.getElementById('troopsCustom').value = n;
+  const presets = [10, 50, 100, 200];
+  document.querySelectorAll('#troopsToggle .modeBtn').forEach((b, i) => {
+    b.classList.toggle('selected', presets[i] === n);
+  });
+  updateAutoRegionsPreview();
+}
+
+function onTroopsCustomInput() {
+  const v = parseInt(document.getElementById('troopsCustom').value, 10);
+  if (Number.isFinite(v) && v >= 6) {
+    totalTroops = Math.min(999, v);
+    const presets = [10, 50, 100, 200];
+    document.querySelectorAll('#troopsToggle .modeBtn').forEach((b, i) => {
+      b.classList.toggle('selected', presets[i] === totalTroops);
+    });
+    updateAutoRegionsPreview();
+  }
+}
+
+function setMapType(t) {
+  if (t === 'geo') return;
+  mapType = t;
+  document.querySelectorAll('#mapTypeToggle .modeBtn').forEach((b, i) => {
+    const which = ['matrix', 'geo'][i];
+    b.classList.toggle('selected', which === t && !b.classList.contains('disabled'));
+  });
+}
+
+function setRegionsMode(m) {
+  regionsMode = m;
+  document.querySelectorAll('#regionsModeToggle .modeBtn').forEach((b, i) => {
+    const which = ['auto', 'custom'][i];
+    b.classList.toggle('selected', which === m);
+  });
+  document.getElementById('regionsCustomRow').classList.toggle('hidden', m !== 'custom');
+  document.getElementById('regionsAutoHint').classList.toggle('hidden', m !== 'auto');
+}
+
+function setFog(on) {
+  fogOfWar = !!on;
+  document.querySelectorAll('#fogToggle .modeBtn').forEach((b, i) => {
+    const which = [false, true][i];
+    b.classList.toggle('selected', which === fogOfWar);
+  });
+}
+
+function updateAutoRegionsPreview() {
+  document.getElementById('autoRegionsPreview').textContent = autoRegionsForTroops(totalTroops);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('regionsCustom').addEventListener('input', (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (Number.isFinite(v)) regionsCustomVal = v;
+  });
+  updateAutoRegionsPreview();
+});
+
+function launchGame() {
+  const tv = parseInt(document.getElementById('troopsCustom').value, 10);
+  if (!Number.isFinite(tv) || tv < 6) { alert('Total troops must be at least 6.'); return; }
+  totalTroops = Math.min(999, tv);
+  if (regionsMode === 'custom') {
+    const rv = parseInt(document.getElementById('regionsCustom').value, 10);
+    if (!Number.isFinite(rv) || rv < 4 || rv > 50) { alert('Number of regions must be 4-50.'); return; }
+    regionsCustomVal = rv;
+  }
+  if (gameMode !== 'aoe') fogOfWar = false;
+  if (mode === 'online') {
+    createRoom();
+  } else if (mode === 'cpu') {
+    myPlayer = goFirstSelected ? 1 : 2;
+    firstPlayer = 1;
+    startGame(generateMatrixMap(effectiveNumRegions()));
+  } else {
+    myPlayer = 0;
+    firstPlayer = 1;
+    startGame(generateMatrixMap(effectiveNumRegions()));
+  }
+}
+
+function backToSetup() {
+  if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
+  conn = null;
+  phase = 'setup';
+  aoeResetAll();
+  closeAoeModal();
+  document.getElementById('gameScreen').classList.add('hidden');
+  document.getElementById('lobbyScreen').classList.add('hidden');
+  document.getElementById('setupScreen').classList.remove('hidden');
+  document.getElementById('resultArea').classList.add('hidden');
+  document.getElementById('messageBar').textContent = '';
+  document.getElementById('aoeActionBar').classList.add('hidden');
+  document.getElementById('aoeBanner').classList.add('hidden');
+  document.getElementById('aoeSubmitBar').classList.add('hidden');
+  document.getElementById('aoeArrowsOverlay').classList.add('hidden');
+  document.getElementById('planHandoffOverlay').classList.add('hidden');
+  clearBattleLog();
+  history.replaceState(null, '', location.pathname);
+}
+
+function aoeResetAll() {
+  aoeRound = 0;
+  aoePlans = { 1: null, 2: null };
+  aoeSubmitted = { 1: false, 2: false };
+  aoePassFlags = { 1: false, 2: false };
+  aoeRevealing = false;
+  aoeHandoffPending = false;
+  aoeWorking = makeEmptyWorking();
+}
+
+function showRules() {
+  renderRulesCard();
+  document.getElementById('rulesOverlay').classList.remove('hidden');
+}
+function hideRules(e) {
+  if (!e || e.target === document.getElementById('rulesOverlay') || e.target.classList.contains('rulesCloseBtn')) {
+    document.getElementById('rulesOverlay').classList.add('hidden');
+  }
+}
+
+/* ═══════════════════════════ MAP GENERATOR ═══════════════════════════ */
+function generateMatrixMap(numRegions) {
+  const gs = Math.max(6, Math.ceil(Math.sqrt(numRegions * 3)));
+  let rects = [{ x: 0, y: 0, w: gs, h: gs }];
+  let safety = 0;
+  while (rects.length < numRegions && safety++ < 500) {
+    let bestIdx = -1, bestScore = -1;
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (r.w < 2 && r.h < 2) continue;
+      const area = r.w * r.h;
+      const score = area + Math.random() * 0.5;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    if (bestIdx < 0) break;
+    const r = rects.splice(bestIdx, 1)[0];
+    let splitVertical;
+    if (r.w >= 2 && r.h >= 2) {
+      if (r.w === r.h) splitVertical = Math.random() < 0.5;
+      else splitVertical = r.w > r.h;
+    } else splitVertical = (r.w >= 2);
+    if (splitVertical) {
+      const cut = pickCut(r.w);
+      rects.push({ x: r.x, y: r.y, w: cut, h: r.h });
+      rects.push({ x: r.x + cut, y: r.y, w: r.w - cut, h: r.h });
+    } else {
+      const cut = pickCut(r.h);
+      rects.push({ x: r.x, y: r.y, w: r.w, h: cut });
+      rects.push({ x: r.x, y: r.y + cut, w: r.w, h: r.h - cut });
+    }
+  }
+  for (let i = 0; i < rects.length; i++) {
+    rects[i].id = i; rects[i].neighbors = []; rects[i].owner = 0; rects[i].troops = 0;
+  }
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      if (rectanglesShareEdge(rects[i], rects[j])) {
+        rects[i].neighbors.push(j); rects[j].neighbors.push(i);
+      }
+    }
+  }
+  return { gridSize: gs, regions: rects };
+}
+function pickCut(len) {
+  if (len <= 2) return 1;
+  const min = Math.max(1, Math.floor(len * 0.25));
+  const max = Math.min(len - 1, Math.ceil(len * 0.75));
+  if (min > max) return 1 + Math.floor(Math.random() * (len - 1));
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+function rectanglesShareEdge(a, b) {
+  if (a.x + a.w === b.x || b.x + b.w === a.x) {
+    const yOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return yOverlap > 0;
+  }
+  if (a.y + a.h === b.y || b.y + b.h === a.y) {
+    const xOverlap = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    return xOverlap > 0;
+  }
+  return false;
+}
+
+/* ═══════════════════════════ GAME LIFECYCLE ═══════════════════════════ */
+function startGame(mapData) {
+  gridSize = mapData.gridSize;
+  regions = mapData.regions.map(r => ({
+    id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
+    neighbors: r.neighbors.slice(),
+    owner: 0, troops: 0
+  }));
+  phase = 'deploy';
+  currentPlayer = firstPlayer;
+  p1Remaining = totalTroops;
+  p2Remaining = totalTroops;
+  lastMoveRegion = -1;
+  aoeResetAll();
+  closeAoeModal();
+  clearBattleLog();
+  appendLogEntry({
+    title: 'Game started',
+    lines: [{
+      kind: 'system',
+      html: gameMode === 'aoe'
+        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions' + (fogOfWar ? ' · Fog of War on' : '')
+        : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
+    }]
+  });
+
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('lobbyScreen').classList.add('hidden');
+  document.getElementById('gameScreen').classList.remove('hidden');
+  document.getElementById('resultArea').classList.add('hidden');
+  document.getElementById('messageBar').textContent = '';
+
+  if (mode === 'cpu') {
+    document.getElementById('p1Name').textContent = (myPlayer === 1 ? 'You' : 'CPU');
+    document.getElementById('p2Name').textContent = (myPlayer === 2 ? 'You' : 'CPU');
+  } else if (mode === 'local') {
+    document.getElementById('p1Name').textContent = 'Player 1';
+    document.getElementById('p2Name').textContent = 'Player 2';
+  } else {
+    document.getElementById('p1Name').textContent = (myPlayer === 1 ? 'You' : 'Opponent');
+    document.getElementById('p2Name').textContent = (myPlayer === 2 ? 'You' : 'Opponent');
+  }
+
+  buildMapDom();
+  updateDeployBar();
+  render();
+  maybeTriggerCpuTurn();
+}
+
+function buildMapDom() {
+  const container = document.getElementById('mapContainer');
+  const overlay = document.getElementById('aoeArrowsOverlay');
+  container.innerHTML = '';
+  if (overlay) container.appendChild(overlay);
+  const cellPct = 100 / gridSize;
+  for (const r of regions) {
+    const div = document.createElement('div');
+    div.className = 'region empty';
+    div.dataset.idx = r.id;
+    div.style.left = (r.x * cellPct) + '%';
+    div.style.top  = (r.y * cellPct) + '%';
+    div.style.width  = (r.w * cellPct) + '%';
+    div.style.height = (r.h * cellPct) + '%';
+    if (r.w * r.h <= 2) div.classList.add('tiny');
+    div.innerHTML = '<div class="region-label">' + (r.id + 1) + '</div>' +
+                    '<div class="region-troops"></div>';
+    div.onclick = () => onRegionClick(r.id);
+    container.appendChild(div);
+  }
+}
+
+/* ═══════════════════════════ DEPLOY ═══════════════════════════ */
+function getCurrentRemaining() { return currentPlayer === 1 ? p1Remaining : p2Remaining; }
+
+function updateDeployBar() {
+  const bar = document.getElementById('deployBar');
+  if (phase !== 'deploy' || !canIControlCurrentTurn()) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  const remaining = getCurrentRemaining();
+  const range = document.getElementById('deployRange');
+  range.min = 1; range.max = Math.max(1, remaining);
+  const empties = regions.filter(r => r.owner === 0).length || 1;
+  const expected = Math.max(1, Math.round(remaining * 2 / empties));
+  const cur = parseInt(range.value, 10);
+  const target = Math.min(remaining, Math.max(1, cur > 0 ? Math.min(cur, remaining) : expected));
+  range.value = target;
+  document.getElementById('deployAmount').textContent = target;
+}
+function onDeployRangeInput() {
+  const r = document.getElementById('deployRange');
+  const remaining = getCurrentRemaining();
+  let v = parseInt(r.value, 10);
+  if (!Number.isFinite(v) || v < 1) v = 1;
+  if (v > remaining) v = remaining;
+  r.value = v;
+  document.getElementById('deployAmount').textContent = v;
+}
+function setDeployAmount(n) {
+  const r = document.getElementById('deployRange');
+  const remaining = getCurrentRemaining();
+  const v = Math.max(1, Math.min(remaining, n | 0));
+  r.value = v; document.getElementById('deployAmount').textContent = v;
+}
+
+function canIControlCurrentTurn() {
+  if (phase === 'over') return false;
+  if (mode === 'local') return true;
+  return currentPlayer === myPlayer;
+}
+
+function applyDeploy(idx, player, amount) {
+  const r = regions[idx];
+  r.owner = player; r.troops += amount;
+  if (player === 1) p1Remaining = Math.max(0, p1Remaining - amount);
+  else              p2Remaining = Math.max(0, p2Remaining - amount);
+  lastMoveRegion = idx;
+}
+
+/* ═══════════════════════════ CLICK ROUTER ═══════════════════════════ */
+function onRegionClick(idx) {
+  if (phase === 'over') return;
+  const region = regions[idx];
+  if (!region) return;
+
+  if (phase === 'deploy') {
+    if (!canIControlCurrentTurn()) { flashMessage(mode === 'online' ? "Opponent's turn" : "Other player's turn", 'warn'); return; }
+    if (region.owner !== 0) { flashMessage('Region already occupied', 'warn'); return; }
+    const remaining = getCurrentRemaining();
+    if (remaining <= 0) return;
+    let amt = parseInt(document.getElementById('deployRange').value, 10) || 1;
+    if (amt > remaining) amt = remaining;
+    if (amt < 1) amt = 1;
+    applyDeploy(idx, currentPlayer, amt);
+    if (mode === 'online' && conn && conn.open) {
+      conn.send({ type: 'deploy', idx, player: currentPlayer, amount: amt });
+    }
+    afterDeployMove();
+    return;
+  }
+
+  if (phase === 'attack') {
+    // Classic
+    if (!canIControlCurrentTurn()) { flashMessage(mode === 'online' ? "Opponent's turn" : "Other player's turn", 'warn'); return; }
+    const opp = otherPlayer(currentPlayer);
+    if (region.owner !== opp) { flashMessage('Click an enemy region to attack', 'warn'); return; }
+    if (!isLegalAttackTarget(currentPlayer, idx)) {
+      flashMessage('Your surrounding troops are not enough to take that region', 'warn'); return;
+    }
+    applyClassicAttack(idx, currentPlayer);
+    if (mode === 'online' && conn && conn.open) {
+      conn.send({ type: 'attack', defender: idx, player: currentPlayer });
+    }
+    afterClassicMove();
+    return;
+  }
+
+  if (phase === 'battle') {
+    onRegionClickAoe(idx);
+    return;
+  }
+}
+
+function afterDeployMove() {
+  // End of deploy phase?
+  const empties = regions.some(r => r.owner === 0);
+  if ((p1Remaining === 0 && p2Remaining === 0) || !empties) {
+    if (gameMode === 'aoe') {
+      phase = 'battle';
+      aoeRound = 0;
+      flashMessage('Deployment done. Battle begins!', 'good');
+      render();
+      aoeStartRound();
+    } else {
+      phase = 'attack';
+      currentPlayer = firstPlayer;
+      flashMessage('Deployment done. Aggression begins!', 'good');
+      updateDeployBar(); render();
+      checkClassicProgress();
+    }
+    return;
+  }
+  // Continue deploy
+  const next = otherPlayer(currentPlayer);
+  const nextRem = next === 1 ? p1Remaining : p2Remaining;
+  const curRem  = currentPlayer === 1 ? p1Remaining : p2Remaining;
+  if (nextRem > 0) currentPlayer = next;
+  else if (curRem === 0) currentPlayer = next;
+  updateDeployBar(); render();
+  maybeTriggerCpuTurn();
+}
+
+/* ═══════════════════════════ CLASSIC ENGINE ═══════════════════════════ */
+function adjacentFriendlyTroopSum(player, defenderIdx) {
+  const def = regions[defenderIdx];
+  if (!def || def.owner === -1) return 0;
+  let sum = 0;
+  for (const nid of def.neighbors) {
+    const nb = regions[nid];
+    if (!nb || nb.owner !== player) continue;
+    sum += nb.troops;
+  }
+  return sum;
+}
+function isLegalAttackTarget(player, defenderIdx) {
+  const def = regions[defenderIdx];
+  if (!def || def.owner === -1 || def.owner === 0) return false;
+  const opp = otherPlayer(player);
+  if (def.owner !== opp) return false;
+  return adjacentFriendlyTroopSum(player, defenderIdx) > def.troops;
+}
+function validTargetsForPlayer(player) {
+  const opp = otherPlayer(player);
+  const out = [];
+  for (const r of regions) {
+    if (r.owner !== opp) continue;
+    if (adjacentFriendlyTroopSum(player, r.id) > r.troops) out.push(r.id);
+  }
+  return out;
+}
+function playerHasAnyAttack(p) { return validTargetsForPlayer(p).length > 0; }
+
+function applyClassicAttack(defenderIdx, player) {
+  const def = regions[defenderIdx];
+  const defOwner = def.owner;
+  const defTroops = def.troops;
+  const sum = adjacentFriendlyTroopSum(player, defenderIdx);
+  def.owner = -1; def.troops = 0;
+  for (const id of def.neighbors.slice()) {
+    const nb = regions[id];
+    nb.neighbors = nb.neighbors.filter(n => n !== defenderIdx);
+  }
+  def.neighbors = [];
+  lastMoveRegion = defenderIdx;
+  appendLogEntry({
+    title: null,
+    lines: [{
+      kind: classOfPlayer(player),
+      html: '<strong>' + playerName(player) + '</strong> conquered ' + regionRef(defenderIdx) +
+            ' (had ' + defTroops + ' troops, owner ' + (defOwner === 1 ? 'P1' : defOwner === 2 ? 'P2' : 'Neutral') +
+            '; surrounding force ' + sum + ' &gt; ' + defTroops + ').'
+    }]
+  });
+}
+function afterClassicMove() {
+  currentPlayer = otherPlayer(currentPlayer);
+  render();
+  checkClassicProgress();
+}
+function checkClassicProgress() {
+  if (phase !== 'attack') { maybeTriggerCpuTurn(); return; }
+  let attempts = 0;
+  while (!playerHasAnyAttack(currentPlayer)) {
+    const other = otherPlayer(currentPlayer);
+    if (!playerHasAnyAttack(other)) { endGame(); return; }
+    flashMessage(playerLabel(currentPlayer) + ' has no legal attacks — turn skipped.', 'warn');
+    currentPlayer = other;
+    attempts++;
+    if (attempts > 2) break;
+  }
+  render(); maybeTriggerCpuTurn();
+}
+
+/* ═══════════════════════════ AoE — UTILITIES ═══════════════════════════ */
+
+/* Attack power formula: sum + Σ_{i<j} (troops_i/10)*(troops_j/10) */
+function aoePowerFromState(group, state) {
+  let sum = 0;
+  for (const idx of group) sum += state[idx].troops;
+  let coop = 0;
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      coop += (state[group[i]].troops / 10) * (state[group[j]].troops / 10);
+    }
+  }
+  return { sum, coop, total: sum + coop };
+}
+function aoePower(group) { return aoePowerFromState(group, regions); }
+
+/* BFS hop distance through same-owner friendly graph. Returns Map<idx, hop>. */
+function bfsFriendlyHops(startIdx, owner, state, maxHop) {
+  const dist = new Map();
+  dist.set(startIdx, 0);
+  let frontier = [startIdx];
+  for (let h = 1; h <= maxHop; h++) {
+    const next = [];
+    for (const cur of frontier) {
+      for (const nid of state[cur].neighbors) {
+        if (dist.has(nid)) continue;
+        if (state[nid].owner !== owner) continue;
+        dist.set(nid, h);
+        next.push(nid);
+      }
+    }
+    frontier = next;
+    if (frontier.length === 0) break;
+  }
+  return dist;
+}
+
+/* Compute the hunker bonus sum for region D in given state.
+   hunker_sum = ceil(D.troops * 1.1)
+              + Σ(1-hop friendlies)/2
+              + Σ(2-hop friendlies)/3
+              + …
+              + Σ(5-hop friendlies)/6
+   Each region counts at its FIRST hop distance (BFS already enforces). */
+function hunkerSum(defenderIdx, state) {
+  const def = state[defenderIdx];
+  if (!def || def.owner !== 1 && def.owner !== 2) return 0;
+  const owner = def.owner;
+  const MAX_HOP = 5;
+  const dist = bfsFriendlyHops(defenderIdx, owner, state, MAX_HOP);
+  let sum = Math.ceil(def.troops * 1.1);
+  // sum contributions by hop
+  const byHop = {};
+  for (const [idx, h] of dist.entries()) {
+    if (h === 0) continue;
+    byHop[h] = (byHop[h] || 0) + state[idx].troops;
+  }
+  for (let h = 1; h <= MAX_HOP; h++) {
+    const t = byHop[h] || 0;
+    sum += t / (h + 1);
+  }
+  return sum;
+}
+
+function hunkerDefenseValue(defenderIdx, state) {
+  // final_defense = ceil((D + hunker_sum) / 2)
+  const def = state[defenderIdx];
+  return Math.ceil((def.troops + hunkerSum(defenderIdx, state)) / 2);
+}
+
+/* Auto-bleed: distribute integer total L across attackers in G evenly,
+   respecting each attacker's available troops. Returns map idx->loss.
+   If overflowAllowed, losses can exceed a region's troops (cap-and-wipe);
+   surplus is absorbed (lost). */
+function autoBleedDist(group, L, state, overflowAllowed) {
+  const losses = {};
+  for (const g of group) losses[g] = 0;
+  if (group.length === 0 || L <= 0) return losses;
+  // Even split with rotation
+  const base = Math.floor(L / group.length);
+  const rem  = L % group.length;
+  // Sort by troops desc for stable big-first rem distribution
+  const sorted = group.slice().sort((a, b) => state[b].troops - state[a].troops);
+  for (let i = 0; i < sorted.length; i++) {
+    losses[sorted[i]] = base + (i < rem ? 1 : 0);
+  }
+  if (!overflowAllowed) {
+    // Redistribute overflow to remaining capacity
+    let safety = 0;
+    while (safety++ < 500) {
+      let surplus = 0;
+      for (const g of sorted) {
+        if (losses[g] > state[g].troops) { surplus += losses[g] - state[g].troops; losses[g] = state[g].troops; }
+      }
+      if (surplus === 0) break;
+      const candidates = sorted.filter(g => losses[g] < state[g].troops);
+      if (candidates.length === 0) {
+        // can't absorb — drop any extra (shouldn't happen in success-attrition; caller validates)
+        break;
+      }
+      let i = 0;
+      while (surplus > 0 && candidates.length > 0) {
+        const c = candidates[i % candidates.length];
+        if (losses[c] < state[c].troops) { losses[c]++; surplus--; }
+        i++;
+        if (i > candidates.length * 4) {
+          const fresh = candidates.filter(g => losses[g] < state[g].troops);
+          if (fresh.length === 0) break;
+          candidates.length = 0;
+          for (const f of fresh) candidates.push(f);
+          i = 0;
+        }
+      }
+    }
+  }
+  return losses;
+}
+
+/* ═══════════════════════════ AoE — PLAN HELPERS ═══════════════════════════ */
+function aoePlayerOwnedCount(p) {
+  let c = 0;
+  for (const r of regions) if (r.owner === p) c++;
+  return c;
+}
+
+/* True when `player` owns ≥ 1 territory and every owned territory has ≤ 1 troop.
+   Gray (owner === 0) regions don't count toward the player's tally. */
+function allTerritoriesAtOrBelowOne(player) {
+  let owned = 0;
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    owned++;
+    if (r.troops > 1) return false;
+  }
+  return owned > 0;
+}
+
+/* True when BOTH players have all owned territories reduced to ≤ 1 troop.
+   In that state neither side can attack productively, hunker meaningfully,
+   adjust (cap=⌊1/2⌋=0), or threaten anything — so we terminate the game. */
+function bothPlayersStuckAtOnes() {
+  return allTerritoriesAtOrBelowOne(1) && allTerritoriesAtOrBelowOne(2);
+}
+
+function isAdjacent(aIdx, bIdx) { return regions[aIdx].neighbors.includes(bIdx); }
+
+/* Validity of an Attack plan against current (live) state.
+   `attackers` = array of region indices. `defender` = index. */
+function attackPlanValid(player, attackers, defender) {
+  if (!Array.isArray(attackers) || attackers.length === 0) return false;
+  const def = regions[defender];
+  if (!def) return false;
+  const opp = otherPlayer(player);
+  if (def.owner !== opp) return false;
+  const seen = new Set();
+  for (const g of attackers) {
+    if (seen.has(g)) return false;
+    seen.add(g);
+    const r = regions[g];
+    if (!r || r.owner !== player) return false;
+    if (!isAdjacent(g, defender)) return false;
+  }
+  // AoE rule: trivial 1v1 (single 1-troop attacker vs 1-troop defender) is forbidden.
+  // Coop bonus is impossible with |G|=1 and a 1-troop solo attacker on a 1-troop
+  // defender just produces a coin-flip stalemate (or fail) — gameplay-dead, so disallow.
+  if (isTrivialOneVsOne(player, attackers, defender)) return false;
+  return true;
+}
+
+/* Returns true if `attackers` is a single region with 1 troop and `defender`
+   has 1 troop. Used to forbid gameplay-dead 1v1 attacks in AoE. We can't
+   inspect the defender's plan at validation time (planning is private), so
+   we just rely on public state. */
+function isTrivialOneVsOne(player, attackers, defender) {
+  if (!Array.isArray(attackers) || attackers.length !== 1) return false;
+  const a = regions[attackers[0]];
+  const d = regions[defender];
+  if (!a || !d) return false;
+  return a.troops === 1 && d.troops === 1;
+}
+
+/* Validity of Hunker plan. */
+function hunkerPlanValid(player, targetIdx) {
+  const r = regions[targetIdx];
+  return !!r && r.owner === player;
+}
+
+/* Validity of Adjust plan against pre-round state. Each transfer must:
+   - source/dest owned by player
+   - adjacent
+   - amount >= 1
+   - amount <= floor(source.troops_pre / 2)
+   - each source appears in <= 1 transfer
+   - dest may receive multiple */
+function adjustPlanValid(player, transfers) {
+  if (!Array.isArray(transfers) || transfers.length === 0) return false;
+  const sourcesSeen = new Set();
+  for (const t of transfers) {
+    if (!t || typeof t.source !== 'number' || typeof t.dest !== 'number' || typeof t.amount !== 'number') return false;
+    if (sourcesSeen.has(t.source)) return false;
+    sourcesSeen.add(t.source);
+    const s = regions[t.source], d = regions[t.dest];
+    if (!s || !d) return false;
+    if (s.owner !== player || d.owner !== player) return false;
+    if (!isAdjacent(t.source, t.dest)) return false;
+    if (!Number.isFinite(t.amount) || t.amount < 1) return false;
+    const cap = Math.floor(s.troops / 2);
+    if (t.amount > cap) return false;
+  }
+  return true;
+}
+
+/* Validity of Claim plan. amount <= floor(source.troops/2). */
+function claimPlanValid(player, sourceIdx, targetIdx, amount) {
+  const s = regions[sourceIdx], t = regions[targetIdx];
+  if (!s || !t) return false;
+  if (s.owner !== player) return false;
+  if (s.troops < 2) return false;
+  if (t.owner !== 0) return false;
+  if (!isAdjacent(sourceIdx, targetIdx)) return false;
+  if (!Number.isFinite(amount) || amount < 1) return false;
+  if (amount > Math.floor(s.troops / 2)) return false;
+  return true;
+}
+
+/* ═══════════════════════════ AoE — RESOLUTION ═══════════════════════════ */
+
+/* Apply Step 1: adjustments. Mutates state-in-place. State is array of plain {owner,troops,neighbors,...}. */
+function applyAdjustmentsToState(plan, state) {
+  if (!plan || plan.type !== 'adjust') return;
+  // Deltas computed from pre-state (state), applied as one delta.
+  const deltas = {};
+  for (const t of plan.transfers) {
+    deltas[t.source] = (deltas[t.source] || 0) - t.amount;
+    deltas[t.dest]   = (deltas[t.dest]   || 0) + t.amount;
+  }
+  for (const idx in deltas) {
+    state[idx].troops = Math.max(0, state[idx].troops + deltas[idx]);
+  }
+}
+
+/* Resolve a single attack against `post` snapshot, using hunkered set.
+   Returns array of effects: { kind, idx, newOwner?, newTroops? }. */
+function resolveSingleAttack(plan, post, hunkered, rng) {
+  const player = plan.player;
+  const G = plan.group;
+  const D = plan.defender;
+  const def = post[D];
+
+  const isHunk = hunkered.has(D);
+  const hSum = isHunk ? hunkerSum(D, post) : 0;
+  const defenseValue = isHunk ? Math.ceil((def.troops + hSum) / 2) : def.troops;
+  const pwr = aoePowerFromState(G, post);
+  const effects = [];
+
+  const attLog = { player, group: G.slice(), defender: D, power: pwr.total, defense: defenseValue,
+                   hunkered: isHunk, hunkerSum: hSum, outcome: null };
+
+  if (pwr.total > defenseValue) {
+    // Branch 1: success → defender wiped.
+    // Attackers pay ceil(hunker_sum / 2) if defender was hunkered (cost of digging
+    // through fortifications), otherwise normal attrition ceil(D.troops / 2).
+    const L = isHunk ? Math.ceil(hSum / 2) : Math.ceil(def.troops / 2);
+    let dist;
+    // Honour player's manual distribution only if it actually sums to the real
+    // attrition. The dialog targets the no-hunker total; if defender hunkered
+    // (player couldn't predict that), auto-bleed the scaled-up damage.
+    if (plan.successDist) {
+      let sum = 0; for (const g of G) sum += (plan.successDist[g] | 0);
+      dist = (sum === L) ? plan.successDist : autoBleedDist(G, L, post, true);
+    } else {
+      dist = autoBleedDist(G, L, post, true);
+    }
+    effects.push({ kind: 'wipeDef', idx: D, newOwner: 0, newTroops: 0 });
+    for (const g of G) {
+      const loss = (dist[g] | 0);
+      const cur = post[g].troops;
+      const remaining = Math.max(0, cur - loss);
+      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+    }
+    attLog.outcome = 'win';
+    attLog.attackerLosses = dist;
+    return { effects, log: attLog };
+  }
+
+  // Branch 2: 1v1 coin-flip (G.length===1 && !hunkered && attacker.troops === def.troops)
+  if (G.length === 1 && !isHunk && post[G[0]].troops === def.troops) {
+    const coin = rng() < 0.5;
+    attLog.outcome = coin ? 'coinWin' : 'coinLose';
+    attLog.coin = coin;
+    if (coin) {
+      const L = Math.ceil(def.troops / 2);
+      effects.push({ kind: 'wipeDef', idx: D, newOwner: 0, newTroops: 0 });
+      const cur = post[G[0]].troops;
+      const rem = Math.max(0, cur - L);
+      if (rem <= 0) effects.push({ kind: 'wipeAtt', idx: G[0], newOwner: 0, newTroops: 0 });
+      else effects.push({ kind: 'attLoss', idx: G[0], newOwner: post[G[0]].owner, newTroops: rem });
+    } else {
+      const attCur = post[G[0]].troops;
+      const defLoss = Math.ceil(attCur / 2);
+      effects.push({ kind: 'wipeAtt', idx: G[0], newOwner: 0, newTroops: 0 });
+      const defRem = Math.max(0, def.troops - defLoss);
+      effects.push({ kind: 'defDamage', idx: D, newOwner: post[D].owner, newTroops: defRem });
+    }
+    return { effects, log: attLog };
+  }
+
+  // Branch 3: fail
+  const attackerDmg = isHunk ? Math.ceil(hSum / 2) : Math.ceil(def.troops / 2);
+  const defenderDmg = isHunk ? Math.floor(def.troops / 4) : Math.floor(def.troops / 2);
+  let dist;
+  // Honour manual fail distribution only if it sums to the real damage.
+  // (Player set it for the no-hunker total; if defender hunkered, scale via auto-bleed.)
+  if (plan.failDist) {
+    let sum = 0; for (const g of G) sum += (plan.failDist[g] | 0);
+    dist = (sum === attackerDmg) ? plan.failDist : autoBleedDist(G, attackerDmg, post, true);
+  } else {
+    dist = autoBleedDist(G, attackerDmg, post, true);
+  }
+  for (const g of G) {
+    const loss = (dist[g] | 0);
+    const cur = post[g].troops;
+    const remaining = Math.max(0, cur - loss);
+    if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+    else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+  }
+  const defRem = Math.max(0, def.troops - defenderDmg);
+  effects.push({ kind: 'defDamage', idx: D, newOwner: post[D].owner, newTroops: defRem });
+  attLog.outcome = 'fail';
+  attLog.attackerLosses = dist;
+  attLog.attackerDmg = attackerDmg;
+  attLog.defenderDmg = defenderDmg;
+  return { effects, log: attLog };
+}
+
+/* Resolve simultaneous claims (both players may claim same gray).
+   Returns { effects: [{...}], logs: [{...}] }. */
+function resolveClaims(planA, planB, post) {
+  const effects = [];
+  const logs = [];
+  const cA = (planA && planA.type === 'claim') ? planA : null;
+  const cB = (planB && planB.type === 'claim') ? planB : null;
+  if (!cA && !cB) return { effects, logs };
+  // Group by target
+  const byTarget = {};
+  if (cA) { byTarget[cA.target] = byTarget[cA.target] || {}; byTarget[cA.target].a = cA; }
+  if (cB) { byTarget[cB.target] = byTarget[cB.target] || {}; byTarget[cB.target].b = cB; }
+  for (const tIdxStr in byTarget) {
+    const tIdx = parseInt(tIdxStr, 10);
+    const entry = byTarget[tIdxStr];
+    const a = entry.a, b = entry.b;
+    if (a && !b) {
+      // Uncontested
+      const sourcePostTroops = post[a.source].troops;
+      const newSourceTroops = Math.max(0, sourcePostTroops - a.amount);
+      effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSourceTroops <= 0 ? 0 : a.player, newTroops: newSourceTroops });
+      effects.push({ kind: 'claimTake',   idx: tIdx,      newOwner: a.player, newTroops: a.amount });
+      logs.push({ player: a.player, source: a.source, target: tIdx, amount: a.amount, outcome: 'win', uncontested: true });
+    } else if (b && !a) {
+      const sourcePostTroops = post[b.source].troops;
+      const newSourceTroops = Math.max(0, sourcePostTroops - b.amount);
+      effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSourceTroops <= 0 ? 0 : b.player, newTroops: newSourceTroops });
+      effects.push({ kind: 'claimTake',   idx: tIdx,      newOwner: b.player, newTroops: b.amount });
+      logs.push({ player: b.player, source: b.source, target: tIdx, amount: b.amount, outcome: 'win', uncontested: true });
+    } else {
+      // Contested
+      const aA = a.amount, aB = b.amount;
+      if (aA > aB) {
+        const newT = aA - Math.ceil(aB / 2);
+        const newSrcA = Math.max(0, post[a.source].troops - aA);
+        const newSrcB = Math.max(0, post[b.source].troops - aB);
+        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
+        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
+        effects.push({ kind: 'claimTake',   idx: tIdx, newOwner: a.player, newTroops: newT });
+        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'win-A' });
+      } else if (aB > aA) {
+        const newT = aB - Math.ceil(aA / 2);
+        const newSrcA = Math.max(0, post[a.source].troops - aA);
+        const newSrcB = Math.max(0, post[b.source].troops - aB);
+        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
+        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
+        effects.push({ kind: 'claimTake',   idx: tIdx, newOwner: b.player, newTroops: newT });
+        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'win-B' });
+      } else {
+        // Stalemate: each loses floor(amount/2) → remainder returns to source.
+        // Net source change = -ceil(amount/2). Target stays gray.
+        const lossA = Math.ceil(aA / 2);
+        const lossB = Math.ceil(aB / 2);
+        const newSrcA = Math.max(0, post[a.source].troops - lossA);
+        const newSrcB = Math.max(0, post[b.source].troops - lossB);
+        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
+        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
+        // target unchanged
+        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'stalemate' });
+      }
+    }
+  }
+  return { effects, logs };
+}
+
+/* Apply all effects to regions[] atomically.
+   Effects from attacks + claims are merged: if both an attack and a claim
+   affect the same region, the attack outcome wins (more dramatic). */
+function applyAoeEffects(effects) {
+  // Merge by idx: later wipe overrides anything; otherwise newest write wins
+  // but we have ordering: attacks first then claims. Wipes should dominate.
+  const finalByIdx = {};
+  for (const e of effects) {
+    const idx = e.idx;
+    if (!(idx in finalByIdx)) { finalByIdx[idx] = e; continue; }
+    const cur = finalByIdx[idx];
+    const isWipeDef = (e.kind === 'wipeDef' || e.kind === 'wipeAtt');
+    const wasWipe = (cur.kind === 'wipeDef' || cur.kind === 'wipeAtt');
+    if (isWipeDef || wasWipe) {
+      // wipe always wins; if both have wipes, use the one with newTroops 0 owner 0
+      finalByIdx[idx] = isWipeDef ? e : cur;
+    } else {
+      // Both writes are non-wipe (e.g. damage + claimSource on same source)
+      // Apply algebraically: combine net troop change relative to post snapshot.
+      // We've already pre-computed each effect's newTroops from post; for safety,
+      // take the minimum newTroops (worse outcome) and last owner.
+      finalByIdx[idx] = { kind: cur.kind, idx,
+                          newOwner: e.newOwner !== undefined ? e.newOwner : cur.newOwner,
+                          newTroops: Math.min(cur.newTroops, e.newTroops) };
+    }
+  }
+  for (const idx in finalByIdx) {
+    const e = finalByIdx[idx];
+    const r = regions[idx];
+    r.troops = Math.max(0, e.newTroops | 0);
+    r.owner  = e.newOwner;
+    if (r.troops === 0 && r.owner !== -1) r.owner = 0;
+  }
+}
+
+/* Mutual-clash detection. Triggers when BOTH plans are attacks AND each side's
+   declared defender is a member of the other side's attacking group, i.e.
+   D1 ∈ G2 AND D2 ∈ G1. */
+function isMutualAttackClash(planA, planB) {
+  if (!planA || !planB) return false;
+  if (planA.type !== 'attack' || planB.type !== 'attack') return false;
+  const gA = planA.group, dA = planA.defender;
+  const gB = planB.group, dB = planB.defender;
+  if (!Array.isArray(gA) || !Array.isArray(gB)) return false;
+  return gB.indexOf(dA) >= 0 && gA.indexOf(dB) >= 0;
+}
+
+/* Resolve a mutual-attack clash. Both sides take damage proportional to the
+   OTHER side's power; neither side wins territory. Damage on each side is
+   distributed across that side's attacking group (which by construction
+   contains the OTHER side's declared defender, so that defender absorbs its
+   share as a member of the group). Wipes (troops → 0) flip the territory to
+   gray as natural attrition.
+
+   Distribution honors plan.failDist (carried over from the attack confirm
+   dialog when manual) and otherwise falls back to autoBleed (overflow allowed,
+   since side-wide damage may exceed any individual region's troops). */
+function resolveMutualClash(planA, planB, post) {
+  const pwrA = aoePowerFromState(planA.group, post);
+  const pwrB = aoePowerFromState(planB.group, post);
+  // Floor power to integer before halving so the tiny coop-bonus fraction
+  // (e.g. 1+1 → power 2.01) doesn't get rounded up by ceil and double the damage.
+  // Coop bonus still affects the comparison branch in normal attacks; it just
+  // doesn't contaminate damage in mutual clashes.
+  const dmgToA = Math.ceil(Math.floor(pwrB.total) / 2);
+  const dmgToB = Math.ceil(Math.floor(pwrA.total) / 2);
+
+  function pickDist(plan, totalDmg) {
+    if (plan.failDist && typeof plan.failDist === 'object') {
+      const d = {};
+      for (const g of plan.group) d[g] = (plan.failDist[g] | 0);
+      return d;
+    }
+    return autoBleedDist(plan.group, totalDmg, post, true);
+  }
+  const distA = pickDist(planA, dmgToA);
+  const distB = pickDist(planB, dmgToB);
+
+  const effects = [];
+  function applySide(group, dist) {
+    for (const g of group) {
+      const loss = (dist[g] | 0);
+      const cur = post[g].troops;
+      const remaining = Math.max(0, cur - loss);
+      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+    }
+  }
+  applySide(planA.group, distA);
+  applySide(planB.group, distB);
+
+  const log = {
+    type: 'mutualClash',
+    playerA: planA.player, groupA: planA.group.slice(), defenderA: planA.defender,
+    powerA: pwrA.total, dmgToB, lossesA: distA,
+    playerB: planB.player, groupB: planB.group.slice(), defenderB: planB.defender,
+    powerB: pwrB.total, dmgToA, lossesB: distB,
+    outcome: 'mutualClash'
+  };
+  return { effects, log };
+}
+
+/* The full round resolve. plans = { 1, 2 } each a committed plan or null.
+   rngSeed = integer (host broadcasts; local games use Math.random-derived).
+   Returns { logs, attackLogs, claimLogs, hunkered, postSnap }. */
+function resolveAoeRound(planA, planB, rngSeed) {
+  // Step 1: adjustments against pre-round (current regions)
+  if (planA && planA.type === 'adjust') applyAdjustmentsToState(planA, regions);
+  if (planB && planB.type === 'adjust') applyAdjustmentsToState(planB, regions);
+
+  // Step 2: hunker flags
+  const hunkered = new Set();
+  if (planA && planA.type === 'hunker') hunkered.add(planA.target);
+  if (planB && planB.type === 'hunker') hunkered.add(planB.target);
+
+  // Step 3: attacks + claims against post-adjust snapshot
+  const postSnap = regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
+                                       neighbors: r.neighbors.slice(),
+                                       owner: r.owner, troops: r.troops }));
+  const rng = mulberry32(rngSeed | 0);
+  const attackLogs = [];
+  let allEffects = [];
+  if (isMutualAttackClash(planA, planB)) {
+    // Mutual clash supersedes independent attack resolution (and the 1v1
+    // coin-flip case): both sides take damage, no territorial change.
+    const { effects, log } = resolveMutualClash(planA, planB, postSnap);
+    attackLogs.push(log);
+    allEffects = allEffects.concat(effects);
+  } else {
+    if (planA && planA.type === 'attack') {
+      const { effects, log } = resolveSingleAttack(planA, postSnap, hunkered, rng);
+      attackLogs.push(log);
+      allEffects = allEffects.concat(effects);
+    }
+    if (planB && planB.type === 'attack') {
+      const { effects, log } = resolveSingleAttack(planB, postSnap, hunkered, rng);
+      attackLogs.push(log);
+      allEffects = allEffects.concat(effects);
+    }
+  }
+  const claimRes = resolveClaims(planA, planB, postSnap);
+  allEffects = allEffects.concat(claimRes.effects);
+
+  applyAoeEffects(allEffects);
+
+  return { attackLogs, claimLogs: claimRes.logs, hunkered, postSnap };
+}
+
+/* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
+
+function aoeStartRound() {
+  aoeRound++;
+  aoePlans = { 1: null, 2: null };
+  aoeSubmitted = { 1: false, 2: false };
+  aoePassFlags = { 1: false, 2: false };
+  aoeWorking = makeEmptyWorking();
+  aoeRevealing = false;
+  aoeHandoffPending = false;
+
+  // Termination check (before plans this round): a player with 0 territories loses
+  const p1Own = aoePlayerOwnedCount(1);
+  const p2Own = aoePlayerOwnedCount(2);
+  if (p1Own === 0 || p2Own === 0) { endGame(); return; }
+
+  if (mode === 'online') {
+    aoePlanningPlayer = myPlayer;
+    render();
+    return;
+  }
+
+  // Local & vs-CPU: first planner is firstPlayer (P1 by convention)
+  aoePlanningPlayer = firstPlayer;
+  render();
+  maybeTriggerCpuPlan();
+}
+
+function maybeTriggerCpuPlan() {
+  if (mode !== 'cpu') return;
+  if (phase !== 'battle') return;
+  if (aoePlanningPlayer === myPlayer) return; // human planning
+  if (aoeRevealing) return;
+  setTimeout(() => {
+    if (mode !== 'cpu' || phase !== 'battle') return;
+    if (aoePlanningPlayer === myPlayer) return;
+    cpuTurnAoeBattle(aoePlanningPlayer, cpuDifficulty);
+  }, 350);
+}
+
+/* Submit currently-active player's plan from aoeWorking. */
+function aoeSubmitPlan() {
+  if (phase !== 'battle') return;
+  if (!canIControlAoePlan()) return;
+  const p = aoePlanningPlayer;
+  const plan = buildPlanFromWorking(p);
+  if (!plan) { flashMessage('Choose an action first.', 'warn'); return; }
+  const err = validatePlan(plan);
+  if (err) { flashMessage(err, 'bad'); return; }
+  aoePlans[p] = plan;
+  aoeSubmitted[p] = true;
+  aoePassFlags[p] = (plan.type === 'pass');
+
+  if (mode === 'online' && conn && conn.open) {
+    conn.send({ type: 'aoe-plan', player: p, plan: serializePlan(plan) });
+  }
+  aoeAfterSubmit();
+}
+
+function buildPlanFromWorking(player) {
+  const w = aoeWorking;
+  if (!w.action) return null;
+  if (w.action === 'pass') return { type: 'pass', player };
+  if (w.action === 'attack') {
+    if (w.attackGroup.size === 0 || w.attackDefender < 0) return null;
+    const group = Array.from(w.attackGroup);
+    const plan = { type: 'attack', player, group, defender: w.attackDefender,
+                   autoBleed: !!w.attackAutoBleed,
+                   failDist: w.attackAutoBleed ? null : (w.attackFailManual || null),
+                   successDist: w.attackAutoBleed ? null : (w.attackSuccessManual || null) };
+    return plan;
+  }
+  if (w.action === 'hunker') {
+    if (w.hunkerTarget < 0) return null;
+    return { type: 'hunker', player, target: w.hunkerTarget };
+  }
+  if (w.action === 'adjust') {
+    if (w.adjustTransfers.length === 0) return null;
+    return { type: 'adjust', player, transfers: w.adjustTransfers.slice() };
+  }
+  if (w.action === 'claim') {
+    if (w.claimSource < 0 || w.claimTarget < 0 || w.claimAmount < 1) return null;
+    return { type: 'claim', player, source: w.claimSource, target: w.claimTarget, amount: w.claimAmount };
+  }
+  return null;
+}
+
+function validatePlan(plan) {
+  if (!plan) return 'No plan.';
+  if (plan.type === 'pass') return null;
+  if (plan.type === 'attack') {
+    if (isTrivialOneVsOne(plan.player, plan.group, plan.defender)) {
+      return 'Trivial 1v1 attacks are not allowed.';
+    }
+    if (!attackPlanValid(plan.player, plan.group, plan.defender)) return 'Invalid attack plan (adjacency/ownership).';
+    return null;
+  }
+  if (plan.type === 'hunker') {
+    if (!hunkerPlanValid(plan.player, plan.target)) return 'Invalid hunker target.';
+    return null;
+  }
+  if (plan.type === 'adjust') {
+    if (!adjustPlanValid(plan.player, plan.transfers)) return 'Invalid adjust transfers.';
+    return null;
+  }
+  if (plan.type === 'claim') {
+    if (!claimPlanValid(plan.player, plan.source, plan.target, plan.amount)) return 'Invalid claim.';
+    return null;
+  }
+  return 'Unknown action.';
+}
+
+function serializePlan(plan) {
+  if (!plan) return null;
+  const out = { type: plan.type, player: plan.player };
+  if (plan.type === 'attack') {
+    out.group = plan.group.slice();
+    out.defender = plan.defender;
+    out.autoBleed = plan.autoBleed;
+    out.failDist = plan.failDist ? { ...plan.failDist } : null;
+    out.successDist = plan.successDist ? { ...plan.successDist } : null;
+  } else if (plan.type === 'hunker') {
+    out.target = plan.target;
+  } else if (plan.type === 'adjust') {
+    out.transfers = plan.transfers.map(t => ({ source: t.source, dest: t.dest, amount: t.amount }));
+  } else if (plan.type === 'claim') {
+    out.source = plan.source; out.target = plan.target; out.amount = plan.amount;
+  }
+  return out;
+}
+
+function deserializePlan(s) {
+  if (!s) return null;
+  return s;
+}
+
+/* When a plan is submitted, advance flow. */
+function aoeAfterSubmit() {
+  aoeWorking = makeEmptyWorking();
+  if (mode === 'online') {
+    flashMessage('Plan submitted. Waiting for opponent…', 'good');
+    render();
+    if (aoeSubmitted[1] && aoeSubmitted[2]) aoeBeginReveal();
+    return;
+  }
+  if (mode === 'cpu') {
+    // Both human and CPU plans need to be collected.
+    if (aoeSubmitted[1] && aoeSubmitted[2]) { aoeBeginReveal(); return; }
+    // Switch to other side (the CPU)
+    aoePlanningPlayer = otherPlayer(aoePlanningPlayer);
+    render();
+    maybeTriggerCpuPlan();
+    return;
+  }
+  // local 2P
+  if (aoeSubmitted[1] && aoeSubmitted[2]) { aoeBeginReveal(); return; }
+  aoePlanningPlayer = otherPlayer(aoePlanningPlayer);
+  aoeHandoffPending = true;
+  showPlanHandoff(aoePlanningPlayer);
+}
+
+function showPlanHandoff(nextPlayer) {
+  const ov = document.getElementById('planHandoffOverlay');
+  document.getElementById('planHandoffTitle').textContent = 'Pass device to Player ' + nextPlayer;
+  const otherP = nextPlayer === 1 ? 2 : 1;
+  document.getElementById('planHandoffSub').textContent = "Make sure Player " + otherP + " isn't watching, then tap to start your plan step.";
+  ov.classList.remove('hidden');
+  render();
+}
+function dismissPlanHandoff() {
+  aoeHandoffPending = false;
+  document.getElementById('planHandoffOverlay').classList.add('hidden');
+  render();
+}
+
+function canIControlAoePlan() {
+  if (phase !== 'battle') return false;
+  if (aoeRevealing || aoeHandoffPending) return false;
+  if (mode === 'local') return !aoeSubmitted[aoePlanningPlayer];
+  if (mode === 'cpu')   return aoePlanningPlayer === myPlayer && !aoeSubmitted[myPlayer];
+  return !aoeSubmitted[myPlayer]; // online
+}
+
+/* Begin reveal animation + apply resolution. */
+function aoeBeginReveal() {
+  aoeRevealing = true;
+  aoeHandoffPending = false;
+  render();
+  // Generate seed
+  let rngSeed;
+  if (mode === 'online') {
+    if (isHost) {
+      rngSeed = (Math.random() * 0x7FFFFFFF) | 0;
+      if (conn && conn.open) {
+        conn.send({ type: 'aoe-resolve', rng_seed: rngSeed });
+      }
+      aoePerformResolutionWithSeed(rngSeed);
+    } else {
+      // Guest waits for host's aoe-resolve msg
+      flashMessage('Waiting for host to resolve…', 'good');
+    }
+  } else {
+    rngSeed = (Math.random() * 0x7FFFFFFF) | 0;
+    aoePerformResolutionWithSeed(rngSeed);
+  }
+}
+
+function aoePerformResolutionWithSeed(rngSeed) {
+  // Draw plan intents for ~1.5s, then resolve+flash, then next round
+  drawIntentArrows();
+  setTimeout(() => {
+    const planA = aoePlans[1], planB = aoePlans[2];
+    const thisRound = aoeRound;
+    const res = resolveAoeRound(planA, planB, rngSeed);
+    flashOutcomes(res);
+    // Record round entry in battle log
+    appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res));
+    setTimeout(() => {
+      clearIntentArrows();
+      render();
+      // Termination: both pass in same round?
+      if (aoePassFlags[1] && aoePassFlags[2]) { endGame(); return; }
+      // Or someone has 0 territories?
+      if (aoePlayerOwnedCount(1) === 0 || aoePlayerOwnedCount(2) === 0) { endGame(); return; }
+      // Or both armies reduced to 1-troop garrisons (no productive moves remain)?
+      if (bothPlayersStuckAtOnes()) {
+        appendLogEntry({
+          title: null,
+          lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — counting phase begins.' }]
+        });
+        endGame();
+        return;
+      }
+      // Otherwise next round
+      aoeStartRound();
+    }, 1800);
+  }, 1500);
+}
+
+/* ═══════════════════════════ AoE — ACTION-PICKER UI ═══════════════════════════ */
+
+function setAoeUiAction(action) {
+  if (phase !== 'battle') return;
+  if (!canIControlAoePlan()) {
+    flashMessage('Wait for your plan step.', 'warn'); return;
+  }
+  aoeWorking = makeEmptyWorking();
+  aoeWorking.action = action;
+  if (action === 'pass') {
+    // Submit immediately after a brief confirm
+    openPassConfirmModal();
+    return;
+  }
+  if (action === 'claim') {
+    aoeWorking.claimAmount = 1;
+  }
+  render();
+}
+
+function aoeClearWorking() {
+  if (!aoeWorking.action) return;
+  const a = aoeWorking.action;
+  aoeWorking = makeEmptyWorking();
+  aoeWorking.action = a;
+  render();
+}
+
+function onRegionClickAoe(idx) {
+  if (!canIControlAoePlan()) { flashMessage('Wait for your turn.', 'warn'); return; }
+  // If fog hides this region, ignore
+  if (fogOfWar && !regionVisibleTo(idx, aoePlanningPlayer)) {
+    flashMessage('Hidden by fog.', 'warn'); return;
+  }
+  const r = regions[idx];
+  const player = aoePlanningPlayer;
+  const act = aoeWorking.action;
+  if (!act) { flashMessage('Choose an action first.', 'warn'); return; }
+
+  if (act === 'attack') {
+    if (r.owner === player) {
+      if (aoeWorking.attackGroup.has(idx)) aoeWorking.attackGroup.delete(idx);
+      else aoeWorking.attackGroup.add(idx);
+      aoeWorking.attackDefender = -1;
+      render(); return;
+    }
+    if (r.owner === otherPlayer(player)) {
+      if (aoeWorking.attackGroup.size === 0) {
+        flashMessage('Select your attacking regions first.', 'warn'); return;
+      }
+      const G = Array.from(aoeWorking.attackGroup);
+      for (const g of G) {
+        if (!isAdjacent(g, idx)) {
+          flashMessage('All attackers must border the defender. Region #' + (g+1) + ' is not adjacent.', 'bad');
+          return;
+        }
+      }
+      if (isTrivialOneVsOne(player, G, idx)) {
+        flashMessage('1v1 (single attacker, both 1 troop) is not allowed — bring more troops or coop with neighbors.', 'bad');
+        return;
+      }
+      aoeWorking.attackDefender = idx;
+      openAttackConfirmModal(G, idx);
+      return;
+    }
+    flashMessage('Gray region — use Claim to take it.', 'warn'); return;
+  }
+
+  if (act === 'hunker') {
+    if (r.owner !== player) { flashMessage('Pick one of your own territories.', 'warn'); return; }
+    aoeWorking.hunkerTarget = idx;
+    render(); return;
+  }
+
+  if (act === 'adjust') {
+    if (r.owner !== player) { flashMessage('Pick your own territory.', 'warn'); return; }
+    // If we already have a source selected and click an adjacent friendly: dest
+    if (aoeWorking.adjustSourceSel >= 0 && aoeWorking.adjustSourceSel !== idx) {
+      const src = regions[aoeWorking.adjustSourceSel];
+      if (isAdjacent(aoeWorking.adjustSourceSel, idx)) {
+        openAdjustAmountModal(aoeWorking.adjustSourceSel, idx);
+        return;
+      }
+    }
+    // Toggle source selection
+    if (aoeWorking.adjustSourceSel === idx) {
+      aoeWorking.adjustSourceSel = -1;
+    } else {
+      // Reject if this source is already used in a pending transfer
+      if (aoeWorking.adjustTransfers.some(t => t.source === idx)) {
+        flashMessage('Region #' + (idx+1) + ' already used as a source. Click Clear to reset.', 'warn');
+        return;
+      }
+      if (regions[idx].troops < 2) {
+        flashMessage('Source must have ≥ 2 troops to transfer (cap is floor/2).', 'warn');
+        return;
+      }
+      aoeWorking.adjustSourceSel = idx;
+    }
+    render(); return;
+  }
+
+  if (act === 'claim') {
+    if (r.owner === 0) {
+      // Pick gray target
+      if (aoeWorking.claimSource < 0) {
+        flashMessage('Pick one of your own territories adjacent to a gray first.', 'warn'); return;
+      }
+      if (!isAdjacent(aoeWorking.claimSource, idx)) {
+        flashMessage('Target gray must be adjacent to your selected source.', 'warn'); return;
+      }
+      aoeWorking.claimTarget = idx;
+      openClaimAmountModal(aoeWorking.claimSource, idx);
+      return;
+    }
+    if (r.owner === player) {
+      // Pick source
+      if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
+      // Ensure adjacent to some gray
+      const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
+      if (!hasGrayAdj) { flashMessage('That territory has no adjacent gray.', 'warn'); return; }
+      aoeWorking.claimSource = idx;
+      aoeWorking.claimTarget = -1;
+      render(); return;
+    }
+    flashMessage('Click your own territory, then an adjacent gray.', 'warn'); return;
+  }
+}
+
+/* ═══════════════════════════ AoE — MODALS ═══════════════════════════ */
+function closeAoeModal() {
+  const host = document.getElementById('aoeModalHost');
+  if (host) host.innerHTML = '';
+}
+
+function openAttackConfirmModal(G, defenderIdx) {
+  const def = regions[defenderIdx];
+  const pwr = aoePower(G);
+  // Compute projected outcomes for both cases (defender hunker / no hunker).
+  const defenseNoHunk = def.troops;
+  const hSumIfHunk = hunkerSum(defenderIdx, regions);
+  const defenseIfHunk = Math.ceil((def.troops + hSumIfHunk) / 2);
+  const successAttrition = Math.ceil(def.troops / 2);
+  const successAttritionHunk = Math.ceil(hSumIfHunk / 2);
+  const failDmg = Math.ceil(def.troops / 2);
+  const failDmgHunk = Math.ceil(hSumIfHunk / 2);
+  // Distribution presets (manual mode targets the no-hunker totals; if the
+  // defender actually hunkers, auto-bleed handles the scaled-up damage).
+  let autoBleed = true;
+  let successManual = autoBleedDist(G, successAttrition, regions, false);
+  let failManual = autoBleedDist(G, failDmg, regions, true);
+
+  function isOneVsOneCoin() {
+    return G.length === 1 && regions[G[0]].troops === def.troops;
+  }
+
+  function render2() {
+    const host = document.getElementById('aoeModalHost');
+    let projection;
+    const isWeak = (pwr.total <= defenseNoHunk) && !isOneVsOneCoin();
+    if (pwr.total > defenseIfHunk) projection = 'win even if defender hunkers';
+    else if (pwr.total > defenseNoHunk) projection = 'win unless defender hunkers (defense → ' + defenseIfHunk + ')';
+    else if (isOneVsOneCoin()) projection = '50/50 coin flip (unless defender hunkers)';
+    else projection = '<span class="weak">attack will fail</span> — used as a "softening" strike to bleed the defender (defender will still take ' + Math.floor(defenseNoHunk/2) + ' damage)';
+
+    const successRows = G.map(idx => {
+      const v = successManual[idx] || 0;
+      return '<div class="row"><span class="lbl">#' + (idx+1) + ' (' + regions[idx].troops + ')</span>' +
+             '<input type="number" min="0" max="' + regions[idx].troops + '" value="' + v +
+             '" data-idx="' + idx + '" data-dist="success" ' + (autoBleed ? 'disabled' : '') + '></div>';
+    }).join('');
+    const failRows = G.map(idx => {
+      const v = failManual[idx] || 0;
+      return '<div class="row"><span class="lbl">#' + (idx+1) + ' (' + regions[idx].troops + ')</span>' +
+             '<input type="number" min="0" value="' + v +
+             '" data-idx="' + idx + '" data-dist="fail" ' + (autoBleed ? 'disabled' : '') + '></div>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="aoe-modal"><div class="aoe-modal-card">' +
+        '<h3>Attack Region #' + (defenderIdx+1) + ' — defender: ' + def.troops + '</h3>' +
+        '<div class="modal-info">' +
+          'Attack power: <strong' + (isWeak ? ' class="weak"' : '') + '>' + pwr.total.toFixed(1) + '</strong> ' +
+          'vs Defense: <strong>' + defenseNoHunk + '</strong> ' +
+          '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span>.<br>' +
+          'Projected: ' + projection + '.<br>' +
+          'On success: attackers lose <strong>' + successAttrition + '</strong> total (or <strong>' + successAttritionHunk + '</strong> if defender hunkers — digging through fortifications hurts).<br>' +
+          'On failure: attackers lose <strong>' + failDmg + '</strong> total (or <strong>' + failDmgHunk + '</strong> if defender hunkers); defender takes minor damage.<br>' +
+          '<em>If the opponent counter-attacks into this group, both sides will take damage and no territory changes hands.</em>' +
+        '</div>' +
+        '<div class="checkbox-row">' +
+          '<label><input type="checkbox" id="autoBleedChk" ' + (autoBleed ? 'checked' : '') + '> Auto-bleed (even split)</label>' +
+        '</div>' +
+        '<div class="section-head">Success-case attrition (total ' + successAttrition + ')</div>' +
+        successRows +
+        '<div class="section-head">Failure-case damage (total ' + failDmg + ', overflow wipes)</div>' +
+        failRows +
+        '<div class="err" id="atkErr"></div>' +
+        '<div class="modal-foot">' +
+          '<button class="actionBtn primary" id="atkOk">Confirm Plan</button>' +
+          '<button class="actionBtn" id="atkCancel">Cancel</button>' +
+        '</div>' +
+      '</div></div>';
+
+    document.getElementById('autoBleedChk').onchange = (e) => {
+      autoBleed = e.target.checked;
+      if (autoBleed) {
+        successManual = autoBleedDist(G, successAttrition, regions, false);
+        failManual = autoBleedDist(G, failDmg, regions, true);
+      }
+      render2();
+    };
+    document.getElementById('atkCancel').onclick = () => {
+      aoeWorking.attackDefender = -1;
+      closeAoeModal();
+      render();
+    };
+    document.getElementById('atkOk').onclick = () => {
+      // Validate success-distribution sums to successAttrition
+      if (!autoBleed) {
+        let sSum = 0;
+        for (const idx of G) sSum += successManual[idx] || 0;
+        if (sSum !== successAttrition) {
+          document.getElementById('atkErr').textContent = 'Success attrition must sum to ' + successAttrition + ' (got ' + sSum + ').';
+          return;
+        }
+      }
+      aoeWorking.attackAutoBleed = autoBleed;
+      aoeWorking.attackSuccessManual = autoBleed ? null : { ...successManual };
+      aoeWorking.attackFailManual = autoBleed ? null : { ...failManual };
+      closeAoeModal();
+      flashMessage('Attack plan ready. Click Submit Plan.', 'good');
+      render();
+    };
+    if (!autoBleed) {
+      document.querySelectorAll('input[type=number][data-idx]').forEach(inp => {
+        inp.oninput = () => {
+          const idx = parseInt(inp.dataset.idx, 10);
+          const dist = inp.dataset.dist;
+          let v = parseInt(inp.value, 10);
+          if (!Number.isFinite(v) || v < 0) v = 0;
+          if (dist === 'success') successManual[idx] = v;
+          else failManual[idx] = v;
+        };
+      });
+    }
+  }
+  render2();
+}
+
+function openAdjustAmountModal(sourceIdx, destIdx) {
+  const src = regions[sourceIdx];
+  const cap = Math.floor(src.troops / 2);
+  if (cap < 1) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
+  let amt = Math.max(1, Math.min(cap, Math.floor(src.troops / 2)));
+
+  function render2() {
+    const host = document.getElementById('aoeModalHost');
+    host.innerHTML =
+      '<div class="aoe-modal"><div class="aoe-modal-card">' +
+        '<h3>Adjust: #' + (sourceIdx+1) + ' → #' + (destIdx+1) + '</h3>' +
+        '<div class="modal-info">Source #' + (sourceIdx+1) + ' has ' + src.troops +
+          '. Max transfer = floor(' + src.troops + '/2) = ' + cap + '.</div>' +
+        '<div class="checkbox-row">' +
+          '<input type="range" id="adjRange" min="1" max="' + cap + '" value="' + amt + '">' +
+          '<input type="number" id="adjNum" min="1" max="' + cap + '" value="' + amt + '" style="width:64px; padding:6px 8px; text-align:center; background:rgba(0,0,0,.3); color:#fff; border:1px solid rgba(168,85,247,.3); border-radius:6px; font-family:inherit;font-size:13px;">' +
+        '</div>' +
+        '<div class="modal-info">After this transfer (assuming nothing else changes): #' + (sourceIdx+1) + ': ' + src.troops + ' → ' + (src.troops - amt) + '; #' + (destIdx+1) + ' gets +' + amt + '.</div>' +
+        '<div class="modal-foot">' +
+          '<button class="actionBtn primary" id="adjOk">Add Transfer</button>' +
+          '<button class="actionBtn" id="adjCancel">Cancel</button>' +
+        '</div>' +
+      '</div></div>';
+    const rng = document.getElementById('adjRange');
+    const num = document.getElementById('adjNum');
+    const sync = (v) => { v = Math.max(1, Math.min(cap, v|0)); amt = v; rng.value = v; num.value = v; };
+    rng.oninput = () => sync(parseInt(rng.value, 10));
+    num.oninput = () => sync(parseInt(num.value, 10));
+    document.getElementById('adjCancel').onclick = () => { closeAoeModal(); };
+    document.getElementById('adjOk').onclick = () => {
+      aoeWorking.adjustTransfers.push({ source: sourceIdx, dest: destIdx, amount: amt });
+      aoeWorking.adjustSourceSel = -1;
+      closeAoeModal();
+      render();
+    };
+  }
+  render2();
+}
+
+function openClaimAmountModal(sourceIdx, targetIdx) {
+  const src = regions[sourceIdx];
+  const cap = Math.floor(src.troops / 2);
+  if (cap < 1) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
+  let amt = Math.max(1, Math.min(cap, Math.floor(src.troops / 2)));
+  function render2() {
+    const host = document.getElementById('aoeModalHost');
+    host.innerHTML =
+      '<div class="aoe-modal"><div class="aoe-modal-card">' +
+        '<h3>Claim Gray #' + (targetIdx+1) + ' from #' + (sourceIdx+1) + '</h3>' +
+        '<div class="modal-info">Source #' + (sourceIdx+1) + ' has ' + src.troops + ' troops.<br>' +
+          'Max send = floor(' + src.troops + '/2) = ' + cap + '. If opponent also claims, more troops wins.</div>' +
+        '<div class="checkbox-row">' +
+          '<input type="range" id="clmRange" min="1" max="' + cap + '" value="' + amt + '">' +
+          '<input type="number" id="clmNum" min="1" max="' + cap + '" value="' + amt + '" style="width:64px; padding:6px 8px; text-align:center; background:rgba(0,0,0,.3); color:#fff; border:1px solid rgba(168,85,247,.3); border-radius:6px; font-family:inherit;font-size:13px;">' +
+        '</div>' +
+        '<div class="modal-foot">' +
+          '<button class="actionBtn primary" id="clmOk">Set Claim</button>' +
+          '<button class="actionBtn" id="clmCancel">Cancel</button>' +
+        '</div>' +
+      '</div></div>';
+    const rng = document.getElementById('clmRange');
+    const num = document.getElementById('clmNum');
+    const sync = (v) => { v = Math.max(1, Math.min(cap, v|0)); amt = v; rng.value = v; num.value = v; };
+    rng.oninput = () => sync(parseInt(rng.value, 10));
+    num.oninput = () => sync(parseInt(num.value, 10));
+    document.getElementById('clmCancel').onclick = closeAoeModal;
+    document.getElementById('clmOk').onclick = () => {
+      aoeWorking.claimAmount = amt;
+      closeAoeModal();
+      flashMessage('Claim plan ready. Click Submit Plan.', 'good');
+      render();
+    };
+  }
+  render2();
+}
+
+function openPassConfirmModal() {
+  const host = document.getElementById('aoeModalHost');
+  host.innerHTML =
+    '<div class="aoe-modal"><div class="aoe-modal-card aoe-pass-confirm-card">' +
+      '<h3>Pass this round?</h3>' +
+      '<div class="modal-info">If both players pass in the SAME round, the game ends and scores are tallied.</div>' +
+      '<div class="modal-foot">' +
+        '<button class="actionBtn primary" id="passYes">Yes, pass</button>' +
+        '<button class="actionBtn" id="passNo">Cancel</button>' +
+      '</div>' +
+    '</div></div>';
+  document.getElementById('passNo').onclick = () => {
+    aoeWorking.action = null; closeAoeModal(); render();
+  };
+  document.getElementById('passYes').onclick = () => {
+    closeAoeModal();
+    aoeSubmitPlan();
+  };
+}
+
+/* ═══════════════════════════ AoE — REVEAL VISUALS ═══════════════════════════ */
+function regionCenterPct(r) {
+  return { cx: ((r.x + r.w/2)/gridSize)*100, cy: ((r.y + r.h/2)/gridSize)*100 };
+}
+function clearIntentArrows() {
+  const g = document.getElementById('aoeArrowsG');
+  if (g) g.innerHTML = '';
+}
+function drawIntentArrows() {
+  const g = document.getElementById('aoeArrowsG');
+  if (!g) return;
+  g.innerHTML = '';
+  const draw = (a, b, color, marker) => {
+    const ac = regionCenterPct(regions[a]);
+    const bc = regionCenterPct(regions[b]);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', ac.cx); line.setAttribute('y1', ac.cy);
+    line.setAttribute('x2', bc.cx); line.setAttribute('y2', bc.cy);
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '0.7');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('marker-end', 'url(#' + marker + ')');
+    g.appendChild(line);
+  };
+  const showPlan = (plan) => {
+    if (!plan) return;
+    if (plan.type === 'attack') {
+      for (const a of plan.group) draw(a, plan.defender, '#ef4444', 'arrowhead-red');
+    } else if (plan.type === 'adjust') {
+      for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
+    } else if (plan.type === 'claim') {
+      draw(plan.source, plan.target, '#86efac', 'arrowhead-green');
+    }
+  };
+  showPlan(aoePlans[1]); showPlan(aoePlans[2]);
+}
+/* ═══════════════════════════ BATTLE LOG ═══════════════════════════ */
+function clearBattleLog() {
+  battleLog = [];
+  renderBattleLog();
+}
+
+function appendLogEntry(entry) {
+  battleLog.push(entry);
+  renderBattleLog();
+}
+
+function toggleBattleLog() {
+  battleLogCollapsed = !battleLogCollapsed;
+  const body = document.getElementById('battleLogBody');
+  const btn = document.getElementById('battleLogToggleBtn');
+  if (!body || !btn) return;
+  body.classList.toggle('collapsed', battleLogCollapsed);
+  btn.textContent = battleLogCollapsed ? 'Show' : 'Hide';
+}
+
+function renderBattleLog() {
+  const panel = document.getElementById('battleLogPanel');
+  const body = document.getElementById('battleLogBody');
+  if (!panel || !body) return;
+  if (battleLog.length === 0) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  body.classList.toggle('collapsed', battleLogCollapsed);
+
+  const html = battleLog.map(entry => {
+    const title = entry.title
+      ? '<div class="battle-log-roundTitle">' + escapeHtml(entry.title) + '</div>'
+      : '';
+    const lines = entry.lines.map(L => {
+      const cls = 'battle-log-line ' + (L.kind || '');
+      return '<div class="' + cls + '">' + L.html + '</div>';
+    }).join('');
+    return '<div class="battle-log-round">' + title + lines + '</div>';
+  }).join('');
+  body.innerHTML = html;
+  // Auto-scroll to bottom
+  body.scrollTop = body.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+function regionRef(idx) {
+  return '#' + (idx + 1);
+}
+
+function playerName(p) {
+  return p === 1 ? 'Player 1' : (p === 2 ? 'Player 2' : 'Neutral');
+}
+
+function classOfPlayer(p) {
+  return p === 1 ? 'p1' : (p === 2 ? 'p2' : 'system');
+}
+
+/* Build human-readable lines for an AoE round. */
+function buildAoeRoundLog(roundNum, planA, planB, res) {
+  const lines = [];
+
+  // Per-player action descriptions (with outcomes inline)
+  function describePlan(plan, attackLog, mutualLog) {
+    if (!plan || plan.type === 'pass') {
+      return [{
+        kind: classOfPlayer(plan ? plan.player : 0),
+        html: '<strong>' + playerName(plan ? plan.player : 0) + '</strong> passed.'
+      }];
+    }
+    const p = plan.player;
+    const cls = classOfPlayer(p);
+    if (plan.type === 'hunker') {
+      const t = plan.target;
+      const attackedHere = res.attackLogs.some(l => l.defender === t);
+      let txt = '<strong>' + playerName(p) + '</strong> hunkered ' + regionRef(t) + '.';
+      if (!attackedHere) txt += ' <span class="neutral">(not attacked → action wasted)</span>';
+      return [{ kind: cls, html: txt }];
+    }
+    if (plan.type === 'adjust') {
+      const moves = plan.transfers.map(t =>
+        regionRef(t.source) + '→' + regionRef(t.dest) + ' (' + t.amount + ')'
+      ).join(', ');
+      return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> adjusted: ' + (moves || '(no transfers)') + '.' }];
+    }
+    if (plan.type === 'claim') {
+      // Find this player's claim log entry. Two log shapes possible:
+      //   uncontested: { player, source, target, amount, outcome:'win', uncontested:true }
+      //   contested:   { playerA, sourceA, amountA, playerB, sourceB, amountB, target, outcome:'win-A'|'win-B'|'stalemate' }
+      let outcomeTxt = '';
+      const myClaim = res.claimLogs.find(c =>
+        (c.player === p && c.target === plan.target) ||
+        ((c.playerA === p || c.playerB === p) && c.target === plan.target)
+      );
+      if (myClaim) {
+        if (myClaim.uncontested && myClaim.outcome === 'win') {
+          outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + plan.amount + ' troops landed.';
+        } else if (myClaim.outcome === 'win-A' || myClaim.outcome === 'win-B') {
+          const winner = myClaim.outcome === 'win-A' ? myClaim.playerA : myClaim.playerB;
+          if (winner === p) {
+            const oppAmt = myClaim.outcome === 'win-A' ? myClaim.amountB : myClaim.amountA;
+            const landed = plan.amount - Math.ceil(oppAmt / 2);
+            outcomeTxt = ' → <span style="color:#86efac;">captured</span> after clash (sent ' + plan.amount + ', took ' +
+                         Math.ceil(oppAmt / 2) + ' damage; landed with ' + landed + ' troops).';
+          } else {
+            outcomeTxt = ' → <span style="color:#fca5a5;">outpowered</span> by opponent\'s claim.';
+          }
+        } else if (myClaim.outcome === 'stalemate') {
+          outcomeTxt = ' → <span style="color:#c4b5fd;">stalemate</span>: both forces lost ' + Math.ceil(plan.amount/2) +
+                       ' troops, gray remains.';
+        }
+      }
+      return [{
+        kind: cls,
+        html: '<strong>' + playerName(p) + '</strong> sent ' + plan.amount +
+              ' from ' + regionRef(plan.source) + ' to claim gray ' + regionRef(plan.target) + outcomeTxt
+      }];
+    }
+    if (plan.type === 'attack') {
+      const grpStr = plan.group.map(regionRef).join(', ');
+      const head = '<strong>' + playerName(p) + '</strong> attacked ' + regionRef(plan.defender) +
+                   ' with [' + grpStr + ']';
+
+      // Mutual clash supersedes individual attack logs
+      if (mutualLog) {
+        const totLoss = (mutualLog.playerA === p ? Object.values(mutualLog.lossesA || {}) :
+                         Object.values(mutualLog.lossesB || {})).reduce((a,b) => a + (b|0), 0);
+        const oppPwr = (mutualLog.playerA === p ? mutualLog.powerB : mutualLog.powerA);
+        return [{
+          kind: cls,
+          html: head + '. <em>Mutual clash</em> with opponent (no territory changes). Took <strong>' + totLoss +
+                '</strong> total damage (½ of opponent\'s power ' + oppPwr.toFixed(1) + ').'
+        }];
+      }
+
+      // Individual attack outcome
+      if (!attackLog) return [{ kind: cls, html: head + '.' }];
+      const totLoss = Object.values(attackLog.attackerLosses || {}).reduce((a,b) => a + (b|0), 0);
+      let outcomeLine;
+      if (attackLog.outcome === 'win') {
+        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
+                      ' wiped. Attackers lost <strong>' + totLoss + '</strong>' +
+                      (attackLog.hunkered ? ' (hunkered: hSum=' + attackLog.hunkerSum + ', cost ½·hSum)' : '') + '.';
+      } else if (attackLog.outcome === 'fail') {
+        outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
+                      ' vs defense ' + attackLog.defense + (attackLog.hunkered ? ' [hunkered]' : '') +
+                      '). Attackers lost <strong>' + (attackLog.attackerDmg || totLoss) + '</strong>; defender lost ' +
+                      (attackLog.defenderDmg || 0) + '.';
+      } else if (attackLog.outcome === 'coinWin') {
+        outcomeLine = ' → coin flip <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
+                      ' wiped. Attacker lost <strong>' + totLoss + '</strong>.';
+      } else if (attackLog.outcome === 'coinLose') {
+        outcomeLine = ' → coin flip <span style="color:#fca5a5;">lost</span>. Attacker territory wiped.';
+      } else {
+        outcomeLine = '.';
+      }
+      return [{ kind: cls, html: head + outcomeLine }];
+    }
+    return [];
+  }
+
+  // Find which attack log belongs to which player (and detect mutual)
+  const mutualLog = res.attackLogs.find(l => l.type === 'mutualClash');
+  function attackLogFor(player) {
+    if (!player) return null;
+    return res.attackLogs.find(l => !l.type && l.player === player) || null;
+  }
+
+  // P1 first, then P2 (consistent ordering)
+  for (const p of [1, 2]) {
+    const plan = (p === 1 ? planA : planB);
+    if (!plan) continue;
+    const aLog = mutualLog ? null : attackLogFor(p);
+    const planLines = describePlan(plan, aLog, mutualLog);
+    for (const L of planLines) lines.push(L);
+  }
+
+  if (mutualLog) {
+    // Both attacks already covered above; nothing extra.
+  }
+
+  return { title: 'Round ' + roundNum, lines };
+}
+
+function flashOutcomes(res) {
+  // Attacks
+  for (const log of res.attackLogs) {
+    const cell = document.querySelector('#mapContainer .region[data-idx="' + log.defender + '"]');
+    if (!cell) continue;
+    if (log.outcome === 'win' || log.outcome === 'coinWin') cell.classList.add('flash-success');
+    else if (log.outcome === 'fail' || log.outcome === 'coinLose') cell.classList.add('flash-fail');
+    setTimeout(() => { cell.classList.remove('flash-success','flash-fail'); }, 1400);
+  }
+  for (const log of res.claimLogs) {
+    const cell = document.querySelector('#mapContainer .region[data-idx="' + log.target + '"]');
+    if (!cell) continue;
+    if (log.outcome === 'win' || log.outcome === 'win-A' || log.outcome === 'win-B') cell.classList.add('flash-claim');
+    else cell.classList.add('flash-fail');
+    setTimeout(() => { cell.classList.remove('flash-claim','flash-fail'); }, 1400);
+  }
+  // Hunker shield pulse
+  for (const idx of res.hunkered) {
+    const cell = document.querySelector('#mapContainer .region[data-idx="' + idx + '"]');
+    if (!cell) continue;
+    cell.classList.add('flash-claim');
+    setTimeout(() => cell.classList.remove('flash-claim'), 1200);
+  }
+}
+
+/* ═══════════════════════════ AoE — FOG OF WAR ═══════════════════════════ */
+function regionVisibleTo(idx, player) {
+  if (!fogOfWar) return true;
+  if (gameMode !== 'aoe') return true;
+  if (phase !== 'battle') return true;
+  const r = regions[idx];
+  if (!r) return false;
+  if (r.owner === player) return true;
+  if (r.owner === 0) return true; // gray always visible
+  // Enemy: visible only if adjacent to any of my territories
+  for (const nid of r.neighbors) {
+    if (regions[nid] && regions[nid].owner === player) return true;
+  }
+  return false;
+}
+
+function viewerForFog() {
+  // Whose perspective to show in render
+  if (gameMode !== 'aoe' || phase !== 'battle' || !fogOfWar) return null;
+  if (aoeRevealing) return null; // reveal everything
+  if (mode === 'local') return aoePlanningPlayer;
+  if (mode === 'cpu')   return myPlayer;
+  if (mode === 'online')return myPlayer;
+  return null;
+}
+
+/* ═══════════════════════════ RENDER ═══════════════════════════ */
+function render() {
+  const cells = document.querySelectorAll('#mapContainer .region');
+
+  const validTargets = (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn())
+    ? new Set(validTargetsForPlayer(currentPlayer)) : null;
+
+  const aoeUiVisible = (gameMode === 'aoe' && phase === 'battle' && canIControlAoePlan());
+  const planner = aoePlanningPlayer;
+  const fogViewer = viewerForFog();
+
+  // Working-state highlights
+  let attackHighlights = null;
+  let hunkerHighlight = -1;
+  let adjustHighlights = null;
+  let claimHighlights = null;
+  if (aoeUiVisible && aoeWorking.action) {
+    if (aoeWorking.action === 'attack') {
+      attackHighlights = {
+        group: aoeWorking.attackGroup,
+        targets: computeAttackTargets(planner, Array.from(aoeWorking.attackGroup))
+      };
+    } else if (aoeWorking.action === 'hunker') {
+      hunkerHighlight = aoeWorking.hunkerTarget;
+    } else if (aoeWorking.action === 'adjust') {
+      adjustHighlights = {
+        srcSel: aoeWorking.adjustSourceSel,
+        srcs: new Set(aoeWorking.adjustTransfers.map(t => t.source)),
+        dsts: new Set(aoeWorking.adjustTransfers.map(t => t.dest)),
+        validDests: aoeWorking.adjustSourceSel >= 0
+          ? new Set(regions[aoeWorking.adjustSourceSel].neighbors.filter(n => regions[n].owner === planner && !aoeWorking.adjustTransfers.some(t => t.source === n)))
+          : null
+      };
+    } else if (aoeWorking.action === 'claim') {
+      claimHighlights = {
+        src: aoeWorking.claimSource,
+        target: aoeWorking.claimTarget,
+        validTargets: aoeWorking.claimSource >= 0
+          ? new Set(regions[aoeWorking.claimSource].neighbors.filter(n => regions[n].owner === 0))
+          : null
+      };
+    }
+  }
+
+  cells.forEach(el => {
+    const idx = parseInt(el.dataset.idx, 10);
+    const r = regions[idx];
+    const tinyClass = (r.w * r.h <= 2) ? ' tiny' : '';
+    let cls = 'region' + tinyClass;
+
+    // Fog
+    if (fogViewer !== null && !regionVisibleTo(idx, fogViewer)) {
+      cls += ' fogged';
+      el.className = cls;
+      el.querySelector('.region-troops').textContent = '';
+      return;
+    }
+
+    if (r.owner === -1) cls += ' eliminated';
+    else if (r.owner === 1) cls += ' p1';
+    else if (r.owner === 2) cls += ' p2';
+    else {
+      const showAsRuin = (gameMode === 'aoe' && phase === 'battle');
+      cls += showAsRuin ? ' empty unoccupied' : ' empty';
+    }
+    if (idx === lastMoveRegion && r.owner !== -1) cls += ' lastMove';
+
+    let clickable = false;
+    if (phase === 'deploy' && canIControlCurrentTurn() && r.owner === 0) clickable = true;
+    if (validTargets && validTargets.has(idx)) { cls += ' target'; clickable = true; }
+    if (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn() && validTargets) {
+      const opp = otherPlayer(currentPlayer);
+      if (r.owner === opp && !validTargets.has(idx)) cls += ' dim';
+    }
+
+    if (aoeUiVisible) {
+      if (attackHighlights) {
+        if (r.owner === planner) {
+          if (attackHighlights.group.has(idx)) cls += ' attackerSel';
+          clickable = true;
+        }
+        if (attackHighlights.targets.has(idx)) {
+          const info = attackHighlights.targets.get(idx);
+          cls += info.beatable ? ' beatable' : ' unbeatable';
+          clickable = true;
+        }
+      } else if (hunkerHighlight !== -1 || aoeWorking.action === 'hunker') {
+        if (r.owner === planner) { clickable = true; if (idx === hunkerHighlight) cls += ' hunkerSel'; }
+      } else if (adjustHighlights) {
+        if (r.owner === planner) clickable = true;
+        if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
+        if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
+        if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
+        if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
+      } else if (claimHighlights) {
+        if (r.owner === planner) { clickable = true; if (idx === claimHighlights.src) cls += ' claimSource'; }
+        if (r.owner === 0) {
+          if (claimHighlights.validTargets && claimHighlights.validTargets.has(idx)) {
+            cls += ' claimTargetCand'; clickable = true;
+          } else if (claimHighlights.src < 0) {
+            // Encourage choosing source first; still clickable to hint
+          }
+        }
+      } else {
+        // No sub-action yet: still allow clicking own territories visually
+      }
+    }
+
+    // Hunker glyph if the live region is hunkered (only shown during reveal)
+    if (aoeRevealing && aoePlans[1] && aoePlans[1].type === 'hunker' && aoePlans[1].target === idx) cls += ' hunkered';
+    if (aoeRevealing && aoePlans[2] && aoePlans[2].type === 'hunker' && aoePlans[2].target === idx) cls += ' hunkered';
+
+    if (clickable) cls += ' clickable';
+    el.className = cls;
+    el.title = '';
+    const tEl = el.querySelector('.region-troops');
+    if (r.owner === -1 || r.owner === 0) tEl.textContent = '';
+    else tEl.textContent = (r.troops > 0 ? r.troops : '');
+  });
+
+  // Score panel
+  let p1Regs = 0, p1Tr = 0, p2Regs = 0, p2Tr = 0;
+  for (const r of regions) {
+    if (r.owner === 1) { p1Regs++; p1Tr += r.troops; }
+    else if (r.owner === 2) { p2Regs++; p2Tr += r.troops; }
+  }
+  document.getElementById('p1Regions').textContent = p1Regs;
+  document.getElementById('p1Troops').textContent = p1Tr;
+  document.getElementById('p2Regions').textContent = p2Regs;
+  document.getElementById('p2Troops').textContent = p2Tr;
+  document.getElementById('p1Remaining').textContent = (phase === 'deploy') ? p1Remaining : '–';
+  document.getElementById('p2Remaining').textContent = (phase === 'deploy') ? p2Remaining : '–';
+
+  document.getElementById('p1Card').classList.toggle('active',
+    (phase === 'battle' && aoePlanningPlayer === 1 && !aoeRevealing) ||
+    (phase !== 'battle' && phase !== 'over' && currentPlayer === 1));
+  document.getElementById('p2Card').classList.toggle('active',
+    (phase === 'battle' && aoePlanningPlayer === 2 && !aoeRevealing) ||
+    (phase !== 'battle' && phase !== 'over' && currentPlayer === 2));
+
+  document.getElementById('p1Submitted').classList.toggle('hidden', !(phase === 'battle' && aoeSubmitted[1]));
+  document.getElementById('p2Submitted').classList.toggle('hidden', !(phase === 'battle' && aoeSubmitted[2]));
+  document.getElementById('p1Planning').classList.toggle('hidden',
+    !(phase === 'battle' && !aoeRevealing && !aoeSubmitted[1] && aoePlanningPlayer === 1 && mode !== 'online'));
+  document.getElementById('p2Planning').classList.toggle('hidden',
+    !(phase === 'battle' && !aoeRevealing && !aoeSubmitted[2] && aoePlanningPlayer === 2 && mode !== 'online'));
+
+  // Turn indicator + phase label
+  const ti = document.getElementById('turnIndicator');
+  const pl = document.getElementById('phaseLabel');
+  if (phase === 'over') {
+    ti.className = 'turn-indicator';
+    ti.style.background = 'rgba(255,255,255,.1)';
+    ti.style.color = '#fff';
+    ti.style.borderColor = 'rgba(255,255,255,.2)';
+    ti.textContent = 'Game Over';
+    pl.textContent = 'Finished';
+  } else {
+    ti.removeAttribute('style');
+    if (phase === 'battle') {
+      if (aoeRevealing) { ti.className = 'turn-indicator both'; ti.textContent = 'Resolving round ' + aoeRound + '…'; }
+      else {
+        const p = aoePlanningPlayer;
+        ti.className = 'turn-indicator ' + (p === 1 ? 'p1' : 'p2');
+        if (mode === 'local') ti.textContent = 'Player ' + p + "'s plan";
+        else if (mode === 'cpu') ti.textContent = (p === myPlayer ? 'Your plan' : 'CPU planning…');
+        else ti.textContent = (p === myPlayer ? 'Your plan' : 'Opponent planning…');
+      }
+      pl.textContent = 'Phase 2 · Battle — Round ' + Math.max(1, aoeRound) + (fogOfWar ? ' · Fog On' : '');
+    } else if (phase === 'attack') {
+      ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2');
+      ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
+                      : (mode === 'cpu')   ? (currentPlayer === myPlayer ? 'Your turn' : "CPU's turn")
+                                            : (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
+      pl.textContent = 'Phase 2 · Aggression';
+    } else if (phase === 'deploy') {
+      ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2');
+      ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
+                      : (mode === 'cpu')   ? (currentPlayer === myPlayer ? 'Your turn' : "CPU's turn")
+                                            : (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
+      pl.textContent = 'Phase 1 · Deployment';
+    }
+  }
+
+  // Action bar + banner + submit bar
+  const bar = document.getElementById('aoeActionBar');
+  const banner = document.getElementById('aoeBanner');
+  const submitBar = document.getElementById('aoeSubmitBar');
+  if (gameMode === 'aoe' && phase === 'battle' && canIControlAoePlan()) {
+    bar.classList.remove('hidden');
+    const w = aoeWorking;
+    document.getElementById('aoeAttackBtn').classList.toggle('active', w.action === 'attack');
+    document.getElementById('aoeHunkerBtn').classList.toggle('active', w.action === 'hunker');
+    document.getElementById('aoeAdjustBtn').classList.toggle('active', w.action === 'adjust');
+    document.getElementById('aoeClaimBtn').classList.toggle('active', w.action === 'claim');
+    document.getElementById('aoePassBtn').classList.toggle('active', w.action === 'pass');
+
+    // Banner
+    let html = '';
+    if (!w.action) {
+      html = '<div class="sub">Pick one action: ⚔ Attack, 🛡 Hunker, ↔ Adjust troops, ▣ Claim a gray, or ⏭ Pass.</div>';
+    } else if (w.action === 'attack') {
+      const G = Array.from(w.attackGroup);
+      if (G.length === 0) {
+        html = '<div class="sub">Click your own territories to add them to the attack group, then click an enemy region.</div>';
+      } else {
+        const pwr = aoePower(G);
+        let pwrCls = 'pwr';
+        let weakHint = '';
+        const soloOneTroop = (G.length === 1 && regions[G[0]] && regions[G[0]].troops === 1);
+        if (soloOneTroop) {
+          pwrCls = 'pwr weak';
+          weakHint = ' <span class="bad">(can\'t attack a 1-troop alone — need coop or more troops)</span>';
+        } else if (w.attackDefender >= 0 && regions[w.attackDefender]) {
+          const defT = regions[w.attackDefender].troops;
+          if (pwr.total <= defT) {
+            pwrCls = 'pwr weak';
+            weakHint = ' <span class="bad">(weaker than defender ' + defT + ' — attack will fail; useful to soften them up)</span>';
+          }
+        }
+        html = '<div>Attack power: <span class="' + pwrCls + '">' + pwr.total.toFixed(1) + '</span>' + weakHint + ' ' +
+               '<span class="sub">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span></div>';
+        if (w.attackDefender >= 0) html += '<div class="sub">Defender selected: #' + (w.attackDefender+1) + '. Re-open dialog by clicking the defender again.</div>';
+        else html += '<div class="sub">Click an adjacent enemy region as target.</div>';
+      }
+    } else if (w.action === 'hunker') {
+      if (w.hunkerTarget < 0) {
+        html = '<div class="sub">Click one of your territories to hunker. If attacked, defense inflates.</div>';
+      } else {
+        const hSum = hunkerSum(w.hunkerTarget, regions);
+        const defv = hunkerDefenseValue(w.hunkerTarget, regions);
+        const failD = Math.ceil(hSum / 2);
+        html = '<div>Hunker on #' + (w.hunkerTarget+1) + ' (' + regions[w.hunkerTarget].troops + 't): ' +
+               'defense → <span class="pwr">' + defv + '</span></div>' +
+               '<div class="sub">Failure damage to attackers: ' + failD + '. Only applies if attacked this round.</div>';
+      }
+    } else if (w.action === 'adjust') {
+      const n = w.adjustTransfers.length;
+      if (n === 0 && w.adjustSourceSel < 0) {
+        html = '<div class="sub">Click a source you own (≥ 2 troops), then an adjacent own territory to set a transfer. Cap = floor(source/2). One source per transfer.</div>';
+      } else {
+        const list = w.adjustTransfers.map(t => '#' + (t.source+1) + '→#' + (t.dest+1) + ' (' + t.amount + ')').join(', ');
+        html = '<div>Pending transfers: <span class="pwr">' + n + '</span> <span class="sub">' + list + '</span></div>';
+        if (w.adjustSourceSel >= 0) html += '<div class="sub">Source #' + (w.adjustSourceSel+1) + ' selected. Click an adjacent friendly destination.</div>';
+        else html += '<div class="sub">Add more transfers or Submit Plan.</div>';
+      }
+    } else if (w.action === 'claim') {
+      if (w.claimSource < 0) {
+        html = '<div class="sub">Click your own territory adjacent to a gray (≥ 2 troops).</div>';
+      } else if (w.claimTarget < 0) {
+        html = '<div class="sub">Source #' + (w.claimSource+1) + ' (' + regions[w.claimSource].troops + 't). Click an adjacent gray.</div>';
+      } else {
+        html = '<div>Claim plan: #' + (w.claimSource+1) + ' sends <span class="pwr">' + w.claimAmount + '</span> to gray #' + (w.claimTarget+1) + '.</div>' +
+               '<div class="sub">If opponent claims too, larger force wins (stalemate if equal).</div>';
+      }
+    } else if (w.action === 'pass') {
+      html = '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
+    }
+    banner.innerHTML = html;
+    banner.classList.remove('hidden');
+
+    // Submit bar
+    submitBar.classList.remove('hidden');
+    const submitBtn = document.getElementById('aoeSubmitBtn');
+    const clearBtn = document.getElementById('aoeClearBtn');
+    const canSubmit = (w.action === 'pass')
+      || (w.action === 'attack' && w.attackGroup.size > 0 && w.attackDefender >= 0)
+      || (w.action === 'hunker' && w.hunkerTarget >= 0)
+      || (w.action === 'adjust' && w.adjustTransfers.length > 0)
+      || (w.action === 'claim'  && w.claimSource >= 0 && w.claimTarget >= 0 && w.claimAmount >= 1);
+    submitBtn.disabled = !canSubmit;
+    clearBtn.style.display = w.action ? '' : 'none';
+  } else if (gameMode === 'aoe' && phase === 'battle') {
+    bar.classList.add('hidden');
+    submitBar.classList.add('hidden');
+    if (aoeRevealing) {
+      banner.innerHTML = '<div class="sub">Resolving round…</div>';
+      banner.classList.remove('hidden');
+    } else if (mode === 'online' && aoeSubmitted[myPlayer]) {
+      banner.innerHTML = '<div class="sub">Plan submitted. Waiting for opponent…</div>';
+      banner.classList.remove('hidden');
+    } else if (mode === 'cpu' && aoePlanningPlayer !== myPlayer) {
+      banner.innerHTML = '<div class="sub">CPU is planning…</div>';
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  } else {
+    bar.classList.add('hidden');
+    banner.classList.add('hidden');
+    submitBar.classList.add('hidden');
+  }
+
+  // Hide deploy bar when not deploying
+  const dep = document.getElementById('deployBar');
+  if (phase !== 'deploy' || !canIControlCurrentTurn()) dep.classList.add('hidden');
+  else dep.classList.remove('hidden');
+
+  // Arrows overlay only during reveal
+  const ov = document.getElementById('aoeArrowsOverlay');
+  if (gameMode === 'aoe' && phase === 'battle' && aoeRevealing) ov.classList.remove('hidden');
+  else { ov.classList.add('hidden'); }
+}
+
+function computeAttackTargets(player, group) {
+  const map = new Map();
+  if (!group || group.length === 0) return map;
+  const opp = otherPlayer(player);
+  const seen = new Set();
+  for (const g of group) {
+    for (const nid of regions[g].neighbors) {
+      if (regions[nid] && regions[nid].owner === opp) seen.add(nid);
+    }
+  }
+  for (const idx of seen) {
+    const def = regions[idx];
+    const allAdj = group.every(g => isAdjacent(g, idx));
+    if (!allAdj) { map.set(idx, { beatable: false }); continue; }
+    const pwr = aoePower(group);
+    map.set(idx, { beatable: pwr.total > def.troops });
+  }
+  return map;
+}
+
+/* ═══════════════════════════ CPU AI (Classic + AoE-deploy) ═══════════════════════════ */
+function maybeTriggerCpuTurn() {
+  if (mode !== 'cpu' || phase === 'over') return;
+  if (phase === 'battle') { maybeTriggerCpuPlan(); return; }
+  if (currentPlayer === myPlayer) return;
+  setTimeout(cpuTakeTurn, 500);
+}
+
+function cpuTakeTurn() {
+  if (mode !== 'cpu' || phase === 'over') return;
+  if (currentPlayer === myPlayer) return;
+  if (phase === 'deploy') cpuDeploy();
+  else if (phase === 'attack') cpuClassicAttack();
+}
+
+function cpuDeploy() {
+  const me = currentPlayer;
+  const remaining = me === 1 ? p1Remaining : p2Remaining;
+  if (remaining <= 0) { afterDeployMove(); return; }
+  const empties = regions.filter(r => r.owner === 0);
+  if (empties.length === 0) { afterDeployMove(); return; }
+  let chosen;
+  if (cpuDifficulty === 'easy') chosen = empties[Math.floor(Math.random() * empties.length)];
+  else {
+    const opp = otherPlayer(me);
+    let best = null, bestScore = -Infinity;
+    for (const r of empties) {
+      let oppAdj = 0, ownAdj = 0, openAdj = 0;
+      for (const n of r.neighbors) {
+        const nb = regions[n];
+        if (!nb || nb.owner === -1) continue;
+        if (nb.owner === 0) openAdj++;
+        else if (nb.owner === opp) oppAdj++;
+        else if (nb.owner === me) ownAdj++;
+      }
+      let s = openAdj * 0.5 + ownAdj * 0.2 + (cpuDifficulty === 'hard' ? oppAdj * 1.2 : oppAdj * 0.4);
+      s += r.w * r.h * 0.05; s += Math.random() * 0.2;
+      if (s > bestScore) { bestScore = s; best = r; }
+    }
+    chosen = best || empties[0];
+  }
+  const myExpectedPlacements = Math.max(1, Math.ceil(empties.length / 2));
+  let amt = Math.max(1, Math.round(remaining / myExpectedPlacements));
+  if (cpuDifficulty === 'hard') {
+    const opp = otherPlayer(me);
+    const oppAdj = chosen.neighbors.reduce((acc, n) => acc + (regions[n] && regions[n].owner === opp ? 1 : 0), 0);
+    amt = Math.max(1, Math.round(amt * (1 + oppAdj * 0.25)));
+  }
+  if (empties.length - 1 <= 1) amt = remaining;
+  amt = Math.min(remaining, Math.max(1, amt));
+  applyDeploy(chosen.id, me, amt);
+  flashMessage('CPU deployed ' + amt + ' to #' + (chosen.id+1));
+  afterDeployMove();
+}
+
+function cpuClassicAttack() {
+  const me = currentPlayer;
+  const opp = otherPlayer(me);
+  const targets = validTargetsForPlayer(me);
+  if (targets.length === 0) { afterClassicMove(); return; }
+  let chosenIdx;
+  if (cpuDifficulty === 'easy') chosenIdx = targets[Math.floor(Math.random() * targets.length)];
+  else {
+    let best = -1, bestScore = -Infinity;
+    for (const tIdx of targets) {
+      const def = regions[tIdx];
+      let s = def.troops * 3 + 2;
+      if (cpuDifficulty === 'hard') {
+        let myExposure = 0;
+        for (const nid of def.neighbors) {
+          const my = regions[nid];
+          if (!my || my.owner !== me) continue;
+          let oppSum = 0;
+          for (const nn of my.neighbors) {
+            if (nn === tIdx) continue;
+            const nb = regions[nn];
+            if (!nb || nb.owner !== opp) continue;
+            oppSum += nb.troops;
+          }
+          if (oppSum > my.troops) myExposure += my.troops + 1;
+        }
+        s -= myExposure * 1.5;
+        s += Math.min(6, def.troops * 0.1);
+      }
+      s += Math.random() * 0.3;
+      if (s > bestScore) { bestScore = s; best = tIdx; }
+    }
+    chosenIdx = best;
+  }
+  applyClassicAttack(chosenIdx, me);
+  flashMessage('CPU attacked region #' + (chosenIdx + 1));
+  afterClassicMove();
+}
+
+/* ═══════════════════════════ CPU AI (AoE BATTLE — plan generator) ═══════════════════════════ */
+
+/* Build all legal Attack candidates for player against current regions[].
+   Each: { group:[idx], defender:idx, pwr, defense, kind:'win'|'maybe'|'fail',
+           failDmg, successAttrition, killValue, failureDefRem }. */
+function enumerateAttackCandidates(player) {
+  const opp = otherPlayer(player);
+  const out = [];
+  for (const def of regions) {
+    if (def.owner !== opp) continue;
+    const adj = def.neighbors.filter(n => regions[n] && regions[n].owner === player);
+    if (adj.length === 0) continue;
+    const groups = [];
+    groups.push(adj.slice());
+    // singletons (1v1 coin-flip candidate)
+    for (const g of adj) if (adj.length > 1) groups.push([g]);
+    // sortedAsc removing weakest
+    const sortedAsc = adj.slice().sort((a, b) => regions[a].troops - regions[b].troops);
+    for (let k = 1; k < sortedAsc.length; k++) groups.push(sortedAsc.slice(k));
+    const seen = new Set();
+    for (const G of groups) {
+      const key = G.slice().sort((a, b) => a - b).join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Skip forbidden trivial 1v1 (1-troop solo attacker vs 1-troop defender).
+      if (G.length === 1 && regions[G[0]] && regions[G[0]].troops === 1 && def.troops === 1) continue;
+      const pwr = aoePower(G);
+      const defenseNoHunk = def.troops;
+      let kind;
+      if (pwr.total > defenseNoHunk) kind = 'win';
+      else if (G.length === 1 && regions[G[0]].troops === def.troops) kind = 'coin';
+      else kind = 'fail';
+      out.push({
+        group: G, defender: def.id,
+        pwr, defense: defenseNoHunk, kind,
+        killValue: def.troops,
+        successAttrition: Math.ceil(def.troops / 2),
+        failDmg: Math.ceil(def.troops / 2)
+      });
+    }
+  }
+  return out;
+}
+
+function enumerateClaimCandidates(player) {
+  const out = [];
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    if (r.troops < 2) continue;
+    const cap = Math.floor(r.troops / 2);
+    if (cap < 1) continue;
+    for (const nid of r.neighbors) {
+      const t = regions[nid];
+      if (!t || t.owner !== 0) continue;
+      out.push({ source: r.id, target: nid, cap });
+    }
+  }
+  return out;
+}
+
+function enumerateAdjustCandidates(player) {
+  const out = [];
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    if (r.troops < 2) continue;
+    const cap = Math.floor(r.troops / 2);
+    for (const nid of r.neighbors) {
+      const d = regions[nid];
+      if (!d || d.owner !== player) continue;
+      out.push({ source: r.id, dest: nid, cap });
+    }
+  }
+  return out;
+}
+
+function enumerateHunkerCandidates(player) {
+  const out = [];
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    out.push({ target: r.id });
+  }
+  return out;
+}
+
+function cpuTurnAoeBattle(player, difficulty) {
+  if (phase !== 'battle' || aoeSubmitted[player] || aoeRevealing) return;
+  let plan = null;
+  const attacks = enumerateAttackCandidates(player);
+  const claims = enumerateClaimCandidates(player);
+  const adjusts = enumerateAdjustCandidates(player);
+  const hunkers = enumerateHunkerCandidates(player);
+
+  if (difficulty === 'easy') {
+    plan = randomEasyPlan(player, attacks, claims, adjusts, hunkers);
+  } else if (difficulty === 'medium') {
+    plan = mediumPlan(player, attacks, claims, adjusts, hunkers);
+  } else {
+    plan = hardPlan(player, attacks, claims, adjusts, hunkers);
+  }
+  if (!plan) plan = { type: 'pass', player };
+  aoePlans[player] = plan;
+  aoeSubmitted[player] = true;
+  aoePassFlags[player] = (plan.type === 'pass');
+  flashMessage('CPU planned: ' + plan.type, 'good');
+  aoeAfterSubmit();
+}
+
+function randomEasyPlan(player, attacks, claims, adjusts, hunkers) {
+  const opts = [];
+  if (attacks.length) opts.push('attack');
+  if (claims.length)  opts.push('claim');
+  if (adjusts.length) opts.push('adjust');
+  if (hunkers.length) opts.push('hunker');
+  opts.push('pass');
+  const pick = opts[Math.floor(Math.random() * opts.length)];
+  if (pick === 'attack') {
+    const c = attacks[Math.floor(Math.random() * attacks.length)];
+    return { type: 'attack', player, group: c.group, defender: c.defender, autoBleed: true, failDist: null, successDist: null };
+  }
+  if (pick === 'claim') {
+    const c = claims[Math.floor(Math.random() * claims.length)];
+    const amt = Math.max(1, Math.floor(c.cap / 2));
+    return { type: 'claim', player, source: c.source, target: c.target, amount: amt };
+  }
+  if (pick === 'adjust') {
+    const c = adjusts[Math.floor(Math.random() * adjusts.length)];
+    const amt = Math.max(1, Math.floor(c.cap / 2));
+    return { type: 'adjust', player, transfers: [{ source: c.source, dest: c.dest, amount: amt }] };
+  }
+  if (pick === 'hunker') {
+    const c = hunkers[Math.floor(Math.random() * hunkers.length)];
+    return { type: 'hunker', player, target: c.target };
+  }
+  return { type: 'pass', player };
+}
+
+function scoreAttack(c, player) {
+  // kill_value − failure_risk * failure_damage
+  let risk;
+  if (c.kind === 'win') risk = 0.05;
+  else if (c.kind === 'coin') risk = 0.5;
+  else risk = 0.95;
+  const score = c.killValue * (1 - risk) - c.failDmg * risk - c.group.length * 0.5;
+  return score;
+}
+function bestAttack(attacks, player) {
+  let best = null, bestS = -Infinity;
+  for (const c of attacks) {
+    const s = scoreAttack(c, player);
+    if (s > bestS) { bestS = s; best = c; }
+  }
+  if (!best || bestS <= 0) return null;
+  return { plan: { type: 'attack', player, group: best.group, defender: best.defender, autoBleed: true, failDist: null, successDist: null }, score: bestS };
+}
+
+function bestClaim(claims, player) {
+  // Prefer high-area gray adjacent to many friendlies; score = area * 2 + adjFriendlies
+  let best = null, bestS = -Infinity;
+  for (const c of claims) {
+    const t = regions[c.target];
+    let adj = 0; for (const nid of t.neighbors) if (regions[nid].owner === player) adj++;
+    const s = t.w * t.h * 1.5 + adj * 0.5 - 0.1 * Math.abs(c.cap - 3);
+    if (s > bestS) { bestS = s; best = c; }
+  }
+  if (!best) return null;
+  const amt = Math.max(1, Math.min(best.cap, Math.ceil(best.cap * 0.8)));
+  return { plan: { type: 'claim', player, source: best.source, target: best.target, amount: amt }, score: bestS };
+}
+
+function bestAdjust(adjusts, player) {
+  // Pick transfer to consolidate near border: dest adjacent to enemy, source not
+  const opp = otherPlayer(player);
+  let best = null, bestS = -Infinity;
+  for (const c of adjusts) {
+    const src = regions[c.source]; const dst = regions[c.dest];
+    const srcEnemy = src.neighbors.filter(n => regions[n] && regions[n].owner === opp).length;
+    const dstEnemy = dst.neighbors.filter(n => regions[n] && regions[n].owner === opp).length;
+    let s = (dstEnemy - srcEnemy) * 2 + c.cap * 0.3;
+    if (s > bestS) { bestS = s; best = c; }
+  }
+  if (!best || bestS <= 0) return null;
+  const amt = Math.max(1, Math.min(best.cap, Math.ceil(best.cap * 0.9)));
+  return { plan: { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }] }, score: bestS };
+}
+
+function bestHunker(hunkers, player) {
+  // Hunker only if a friendly is adjacent to a strong enemy stack
+  const opp = otherPlayer(player);
+  let best = null, bestS = -Infinity;
+  for (const c of hunkers) {
+    const r = regions[c.target];
+    let threat = 0;
+    for (const nid of r.neighbors) {
+      const nb = regions[nid];
+      if (!nb || nb.owner !== opp) continue;
+      threat += nb.troops;
+    }
+    if (threat <= r.troops) continue;
+    const s = threat - r.troops;
+    if (s > bestS) { bestS = s; best = c; }
+  }
+  if (!best || bestS <= 2) return null;
+  return { plan: { type: 'hunker', player, target: best.target }, score: bestS };
+}
+
+function mediumPlan(player, attacks, claims, adjusts, hunkers) {
+  const bA = bestAttack(attacks, player);
+  if (bA && bA.score > 0) return bA.plan;
+  const bC = bestClaim(claims, player);
+  if (bC) return bC.plan;
+  const bAd = bestAdjust(adjusts, player);
+  if (bAd) return bAd.plan;
+  const bH = bestHunker(hunkers, player);
+  if (bH) return bH.plan;
+  return { type: 'pass', player };
+}
+
+function hardPlan(player, attacks, claims, adjusts, hunkers) {
+  // 1-ply opponent simulation: guess top 3 opponent attacks/claims and pick our plan that fares best.
+  const opp = otherPlayer(player);
+  const oppAttacks = enumerateAttackCandidates(opp);
+  const oppClaims = enumerateClaimCandidates(opp);
+  const oppAdjusts = enumerateAdjustCandidates(opp);
+  const oppHunkers = enumerateHunkerCandidates(opp);
+  const oppCands = [];
+  oppCands.push({ type: 'pass', player: opp });
+  for (const a of oppAttacks.slice(0, 3)) {
+    oppCands.push({ type: 'attack', player: opp, group: a.group, defender: a.defender, autoBleed: true, failDist: null, successDist: null });
+  }
+  for (const c of oppClaims.slice(0, 2)) {
+    const amt = Math.max(1, Math.ceil(c.cap * 0.8));
+    oppCands.push({ type: 'claim', player: opp, source: c.source, target: c.target, amount: amt });
+  }
+
+  // Our candidates: medium-like top plans
+  const ourCands = [];
+  const bA = bestAttack(attacks, player); if (bA) ourCands.push(bA.plan);
+  const bC = bestClaim(claims, player);   if (bC) ourCands.push(bC.plan);
+  const bAd = bestAdjust(adjusts, player);if (bAd) ourCands.push(bAd.plan);
+  const bH = bestHunker(hunkers, player); if (bH) ourCands.push(bH.plan);
+  ourCands.push({ type: 'pass', player });
+
+  // Score each our-cand by simulating against opp-cands (average outcome)
+  let bestPlan = null, bestS = -Infinity;
+  for (const our of ourCands) {
+    let total = 0;
+    for (const o of oppCands) {
+      total += simulateScore(our, o, player);
+    }
+    const avg = total / oppCands.length;
+    if (avg > bestS) { bestS = avg; bestPlan = our; }
+  }
+  return bestPlan || { type: 'pass', player };
+}
+
+function simulateScore(myPlan, oppPlan, player) {
+  // Snapshot
+  const snap = regions.map(r => ({ owner: r.owner, troops: r.troops }));
+  const planA = (myPlan && myPlan.player === 1) ? myPlan : (oppPlan && oppPlan.player === 1 ? oppPlan : null);
+  const planB = (myPlan && myPlan.player === 2) ? myPlan : (oppPlan && oppPlan.player === 2 ? oppPlan : null);
+  try {
+    resolveAoeRound(planA, planB, 12345);
+  } catch (_) {}
+  let myRegs = 0, myTr = 0, oppRegs = 0, oppTr = 0;
+  for (const r of regions) {
+    if (r.owner === player) { myRegs++; myTr += r.troops; }
+    else if (r.owner === otherPlayer(player)) { oppRegs++; oppTr += r.troops; }
+  }
+  // Restore
+  for (let i = 0; i < regions.length; i++) {
+    regions[i].owner = snap[i].owner; regions[i].troops = snap[i].troops;
+  }
+  return (myRegs - oppRegs) * 5 + (myTr - oppTr) * 0.5;
+}
+
+/* ═══════════════════════════ ONLINE / PEERJS ═══════════════════════════ */
+async function fetchIceServers() {
+  try {
+    const r = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+    if (!r.ok) throw 0;
+    return { iceServers: await r.json() };
+  } catch (_) {
+    return {
+      iceServers: [
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+        { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+      ]
+    };
+  }
+}
+function generateRoomId() {
+  const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = 'ag-';
+  for (let i = 0; i < 8; i++) id += c[Math.floor(Math.random() * c.length)];
+  return id;
+}
+function showLobby(html) {
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('gameScreen').classList.add('hidden');
+  const lobby = document.getElementById('lobbyScreen');
+  lobby.classList.remove('hidden');
+  document.getElementById('lobbyContent').innerHTML = html;
+}
+function showDisconnectNotice() {
+  phase = 'over';
+  const d = document.createElement('div');
+  d.className = 'dc-notice';
+  d.innerHTML = 'Opponent disconnected<br><button onclick="this.parentElement.remove();backToSetup()">Back to Setup</button>';
+  document.body.appendChild(d);
+}
+function serializeMap(map) {
+  return {
+    gridSize: map.gridSize,
+    regions: map.regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h, neighbors: r.neighbors.slice() }))
+  };
+}
+async function createRoom() {
+  isHost = true;
+  myPlayer = goFirstSelected ? 1 : 2;
+  firstPlayer = 1;
+  showLobby('<h2>Creating room…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>');
+  const ice = await fetchIceServers();
+  const rid = generateRoomId();
+  peer = new Peer(rid, { config: ice });
+  peer.on('open', (id) => {
+    const link = location.origin + location.pathname + '#room=' + id;
+    showLobby(
+      '<h2>Room Created</h2><p style="opacity:.6;font-size:14px;">Share this link with your opponent:</p>' +
+      '<div class="lobby-link-wrap"><input class="lobby-link-input" id="roomLink" value="' + link + '" readonly><button class="lobby-copy-btn" id="copyBtn" onclick="copyLink()">Copy</button></div>' +
+      '<div class="lobby-status"><div class="spinner"></div><span>Waiting for opponent…</span></div>' +
+      '<button class="newGameBtn" onclick="backToSetup()">Cancel</button>'
+    );
+  });
+  peer.on('connection', (cn) => {
+    conn = cn;
+    cn.on('open', () => {
+      const map = generateMatrixMap(effectiveNumRegions());
+      conn.send({
+        type: 'start',
+        guestPlayer: myPlayer === 1 ? 2 : 1,
+        firstPlayer: 1,
+        totalTroops, gameMode, fogOfWar,
+        map: serializeMap(map)
+      });
+      startGame(map);
+    });
+    cn.on('data', handlePeerData);
+    cn.on('close', () => { if (phase !== 'over') showDisconnectNotice(); });
+  });
+  peer.on('error', (e) => { showLobby('<h2>Error</h2><p style="color:#f87171">' + e.message + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>'); });
+}
+async function joinRoom(rid) {
+  if (!rid) { const m = location.hash.match(/room=([^&]+)/); if (m) rid = m[1]; else return; }
+  isHost = false;
+  myPlayer = 2;
+  mode = 'online';
+  showLobby('<h2>Joining…</h2><div class="lobby-status"><div class="spinner"></div><span>Connecting…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>');
+  const ice = await fetchIceServers();
+  peer = new Peer({ config: ice });
+  peer.on('open', () => {
+    conn = peer.connect(rid, { reliable: true });
+    conn.on('open', () => { showLobby('<h2>Connected</h2><div class="lobby-status"><div class="spinner"></div><span>Waiting for host…</span></div><button class="newGameBtn" onclick="backToSetup()">Cancel</button>'); });
+    conn.on('data', handlePeerData);
+    conn.on('close', () => { if (phase !== 'over') showDisconnectNotice(); });
+  });
+  peer.on('error', (e) => { showLobby('<h2>Connection Failed</h2><p style="color:#f87171">' + e.message + '</p><button class="newGameBtn" onclick="backToSetup()">Back</button>'); });
+}
+
+function handlePeerData(d) {
+  switch (d.type) {
+    case 'start':
+      if (typeof d.guestPlayer === 'number') myPlayer = d.guestPlayer;
+      if (typeof d.firstPlayer === 'number') firstPlayer = d.firstPlayer;
+      if (typeof d.totalTroops === 'number') totalTroops = d.totalTroops;
+      if (typeof d.gameMode === 'string') gameMode = d.gameMode;
+      if (typeof d.fogOfWar === 'boolean') fogOfWar = d.fogOfWar;
+      if (d.map) {
+        const m = { gridSize: d.map.gridSize, regions: d.map.regions.map(r => ({ ...r })) };
+        startGame(m);
+      }
+      break;
+    case 'deploy':
+      if (phase === 'deploy' && regions[d.idx] && regions[d.idx].owner === 0) {
+        applyDeploy(d.idx, d.player, d.amount); afterDeployMove();
+      }
+      break;
+    case 'attack':
+      if (phase === 'attack' && gameMode === 'classic' && typeof d.defender === 'number' && regions[d.defender]) {
+        applyClassicAttack(d.defender, d.player); afterClassicMove();
+      }
+      break;
+    case 'aoe-plan':
+      if (phase === 'battle' && gameMode === 'aoe' && typeof d.player === 'number' && d.plan) {
+        aoePlans[d.player] = d.plan;
+        aoeSubmitted[d.player] = true;
+        aoePassFlags[d.player] = (d.plan.type === 'pass');
+        if (aoeSubmitted[1] && aoeSubmitted[2]) aoeBeginReveal();
+        else render();
+      }
+      break;
+    case 'aoe-resolve':
+      if (phase === 'battle' && gameMode === 'aoe' && typeof d.rng_seed === 'number') {
+        aoeRevealing = true;
+        render();
+        aoePerformResolutionWithSeed(d.rng_seed);
+      }
+      break;
+    case 'rematch':
+      if (d.map) {
+        const m = { gridSize: d.map.gridSize, regions: d.map.regions.map(r => ({ ...r })) };
+        startGame(m);
+      }
+      break;
+    case 'wantRematch':
+      if (isHost) {
+        const map = generateMatrixMap(effectiveNumRegions());
+        conn.send({ type: 'rematch', map: serializeMap(map) });
+        startGame(map);
+      }
+      break;
+  }
+}
+
+function copyLink() {
+  const i = document.getElementById('roomLink');
+  i.select(); navigator.clipboard.writeText(i.value).then(() => {
+    const b = document.getElementById('copyBtn');
+    b.textContent = 'Copied!'; setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+  });
+}
+
+/* ═══════════════════════════ END GAME / RESULTS ═══════════════════════════ */
+function endGame() {
+  phase = 'over';
+  render();
+  let p1Regs = 0, p1Tr = 0, p2Regs = 0, p2Tr = 0;
+  for (const r of regions) {
+    if (r.owner === 1) { p1Regs++; p1Tr += r.troops; }
+    else if (r.owner === 2) { p2Regs++; p2Tr += r.troops; }
+  }
+  let winner = 0;
+  if (p1Regs !== p2Regs) winner = p1Regs > p2Regs ? 1 : 2;
+  else if (p1Tr !== p2Tr) winner = p1Tr > p2Tr ? 1 : 2;
+
+  // Log the final outcome
+  const winnerLabel = winner === 0 ? 'Draw' : 'Player ' + winner + ' wins';
+  appendLogEntry({
+    title: 'Game over',
+    lines: [
+      { kind: 'system', html: '<strong>' + winnerLabel + '</strong>' },
+      { kind: 'p1', html: 'Player 1: <strong>' + p1Regs + '</strong> regions, <strong>' + p1Tr + '</strong> troops' },
+      { kind: 'p2', html: 'Player 2: <strong>' + p2Regs + '</strong> regions, <strong>' + p2Tr + '</strong> troops' }
+    ]
+  });
+
+  const youAre = mode === 'local' ? 0 : myPlayer;
+  let title;
+  if (winner === 0) title = "It's a draw!";
+  else if (mode === 'local') title = 'Player ' + winner + ' wins!';
+  else if (mode === 'cpu') title = (winner === youAre ? 'You win!' : 'CPU wins');
+  else title = (winner === youAre ? 'You win!' : 'You lose');
+
+  let reason;
+  if (p1Regs === 0 || p2Regs === 0) reason = 'One side has no territories left.';
+  else if (p1Regs !== p2Regs) reason = 'Most regions controlled.';
+  else if (p1Tr !== p2Tr) reason = 'Region tie — won on troop count.';
+  else reason = 'Same regions and troops on both sides.';
+
+  const p1Label = document.getElementById('p1Name').textContent;
+  const p2Label = document.getElementById('p2Name').textContent;
+  const area = document.getElementById('resultArea');
+  area.classList.remove('hidden');
+  area.innerHTML =
+    '<div class="resultCard">' +
+      '<h2>' + title + '</h2>' +
+      '<p class="sub">' + reason + '</p>' +
+      '<div class="resultRow">' +
+        '<div class="resultCol p1' + (winner === 1 ? ' winner' : '') + '">' +
+          '<div class="label">Regions</div><div class="name">' + p1Label + '</div>' +
+          '<div class="val">' + p1Regs + '</div><div class="sub-val">' + p1Tr + ' troops</div></div>' +
+        '<div class="resultCol p2' + (winner === 2 ? ' winner' : '') + '">' +
+          '<div class="label">Regions</div><div class="name">' + p2Label + '</div>' +
+          '<div class="val">' + p2Regs + '</div><div class="sub-val">' + p2Tr + ' troops</div></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">' +
+        '<button class="actionBtn primary" onclick="rematch()">Play Again</button>' +
+        '<button class="actionBtn" onclick="backToSetup()">Change Settings</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function rematch() {
+  if (mode === 'online') {
+    if (conn && conn.open) {
+      if (isHost) {
+        const map = generateMatrixMap(effectiveNumRegions());
+        conn.send({ type: 'rematch', map: serializeMap(map) });
+        startGame(map);
+      } else {
+        flashMessage('Waiting for host to start rematch…');
+        conn.send({ type: 'wantRematch' });
+      }
+    } else backToSetup();
+    return;
+  }
+  startGame(generateMatrixMap(effectiveNumRegions()));
+}
+
+/* ═══════════════════════════ MESSAGE BAR ═══════════════════════════ */
+function flashMessage(text, kind) {
+  const bar = document.getElementById('messageBar');
+  bar.textContent = text;
+  bar.className = 'messageBar' + (kind ? ' ' + kind : '');
+  clearTimeout(flashMessage._t);
+  flashMessage._t = setTimeout(() => { bar.textContent = ''; bar.className = 'messageBar'; }, 2400);
+}
+
+/* ═══════════════════════════ RULES CARD ═══════════════════════════ */
+function renderRulesCard() {
+  const card = document.getElementById('rulesCard');
+  const deployBlock =
+    '<h3>Phase 1 · Deployment</h3>' +
+    '<ul>' +
+      '<li>Players take turns placing troops onto an empty region.</li>' +
+      '<li>On your turn, pick how many troops to deploy and tap an empty region.</li>' +
+      '<li>Continue until both players have placed all their troops.</li>' +
+    '</ul>';
+  const mapBlock =
+    '<h3>Map Types</h3>' +
+    '<ul><li><strong>Matrix:</strong> a grid of rectangles. Two regions are neighbours if they share an edge.</li>' +
+    '<li><strong>Geographical:</strong> coming soon.</li></ul>';
+
+  let body;
+  if (gameMode === 'aoe') {
+    body =
+      '<h2>How to Play — Aggression: Age of Empires</h2>' +
+      deployBlock +
+      '<h3>Phase 2 · Battle (parallel turns)</h3>' +
+      '<p>Each round, BOTH players privately pick one action; actions reveal and resolve simultaneously.</p>' +
+      '<h3>Action ⚔ Attack</h3>' +
+      '<ul>' +
+        '<li>Pick a subset G of your territories, all adjacent to one enemy defender D.</li>' +
+        '<li>Power = sum(troops in G) + Σ_{i&lt;j} (g<sub>i</sub>/10)·(g<sub>j</sub>/10) (cooperation bonus).</li>' +
+        '<li>Defense = D.troops (or hunker-inflated, see below).</li>' +
+        '<li><strong>Power &gt; Defense → win:</strong> D wiped (gray, 0 troops). Attackers pay ceil(D/2) attrition — or ceil(hunker_sum/2) if D was hunkered (digging through fortifications is costly even on success).</li>' +
+        '<li><strong>|G|=1, D not hunkered, equal troops → coin flip:</strong> 50/50. Winner-attacker wipes D + pays ceil(D/2). Winner-defender wipes attacker territory; D loses ceil(att/2).</li>' +
+        '<li><strong>Else (incl. exact equality) → fail:</strong> attackers take ceil(def/2) (or ceil(hunker_sum/2)); damage distributed and wipes overflowing tiles. Defender takes floor(def/2) (or floor(def/4) when hunkered) but survives.</li>' +
+        '<li><strong>1v1 attacks are not allowed</strong> — a single 1-troop attacker on a 1-troop defender is forbidden. Bring more troops or coop with adjacent territories for the bonus.</li>' +
+      '</ul>' +
+      '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), the engagement resolves as a mutual clash — both sides take damage proportional to the other\'s power (each side absorbs ⌈power<sub>other</sub>/2⌉ across its attacking group), no territorial change. Supersedes the 1v1 coin-flip case (no RNG).</p>' +
+      '<h3>Action 🛡 Hunker</h3>' +
+      '<p>Fortify one territory D. Only matters if D is attacked this round.</p>' +
+      '<p style="text-align:center; font-family:monospace; opacity:.85;">hunker_sum = ⌈D·1.1⌉ + Σ adj/2 + Σ 2-hop/3 + … + Σ 5-hop/6</p>' +
+      '<p style="text-align:center; font-family:monospace; opacity:.85;">defense = ⌈(D + hunker_sum) / 2⌉</p>' +
+      '<p>Hops are through your own (friendly) territories only; each region counts at its first hop distance.</p>' +
+      '<h3>Action ↔ Adjust troops</h3>' +
+      '<ul>' +
+        '<li>Set one or more transfers (source → adjacent friendly dest), each amount ≤ ⌊source/2⌋.</li>' +
+        '<li>Each source appears in at most one transfer; a dest may receive multiple.</li>' +
+        '<li>Resolution order makes Adjust a defense option — applied in Step 1, before attacks.</li>' +
+      '</ul>' +
+      '<h3>Action ▣ Claim a gray</h3>' +
+      '<ul>' +
+        '<li>Pick a source (yours, ≥ 2 troops), an adjacent gray, and amount ≤ ⌊source/2⌋.</li>' +
+        '<li>Uncontested: gray becomes yours with that amount; source loses the amount.</li>' +
+        '<li>Contested: larger force wins; winner B = (their amount) − ⌈(loser amount)/2⌉. Equal → stalemate, B stays gray; each side loses ⌈amount/2⌉.</li>' +
+      '</ul>' +
+      '<h3>Action ⏭ Pass</h3>' +
+      '<p>If BOTH players Pass in the SAME round, game ends and scores tally.</p>' +
+      '<h3>Resolution order</h3>' +
+      '<ol style="padding-left:22px;">' +
+        '<li>Step 1 — Adjustments applied atomically against pre-round counts.</li>' +
+        '<li>Step 2 — Hunker flags noted (no troop changes).</li>' +
+        '<li>Step 3 — Attacks &amp; claims resolved against post-adjustment state.</li>' +
+      '</ol>' +
+      '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 3 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts use pre-round source counts as cap.</p>' +
+      (fogOfWar ? '<h3>Fog of War (enabled)</h3><p>You only see your own territories, gray ruins, and enemy territories adjacent to yours. Everything else renders as a fog tile until it borders you.</p>' : '') +
+      '<h3>Victory</h3>' +
+      '<ul><li>Game ends when both players Pass in the same round, or one player has zero territories.</li>' +
+      '<li>Game also ends immediately when BOTH players have every owned territory reduced to 1 troop or less — neither side can adjust, claim, or attack productively, so counting begins.</li>' +
+      '<li>Most owned regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
+      mapBlock;
+  } else {
+    body =
+      '<h2>How to Play — Aggression: Classic</h2>' +
+      deployBlock +
+      '<h3>Phase 2 · Aggression</h3>' +
+      '<ul>' +
+        '<li>On your turn, tap one enemy region B to attack it.</li>' +
+        '<li>The attack is legal only if the sum of YOUR troops in B-adjacent regions is strictly greater than B.troops.</li>' +
+        '<li>On success, B (and its troops) is wiped off the map. Your regions are unchanged.</li>' +
+        '<li>If you have no legal attack, your turn is skipped.</li>' +
+      '</ul>' +
+      '<h3>Victory</h3>' +
+      '<ul><li>Most regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
+      mapBlock;
+  }
+  card.innerHTML = body + '<button class="rulesCloseBtn" onclick="hideRules(event)">Got it</button>';
+}
+
+/* ═══════════════════════════ INIT ═══════════════════════════ */
+window.addEventListener('load', () => {
+  const m = location.hash.match(/room=([^&]+)/);
+  if (m) joinRoom(m[1]);
+});
+
+/* Expose for unit checks under window.AG */
+window.AG = {
+  state: () => ({ regions, gridSize }),
+  setRegions: (rs, gs) => { regions = rs; if (gs) gridSize = gs; },
+  hunkerSum, hunkerDefenseValue, autoBleedDist,
+  resolveAoeRound, mulberry32,
+  resolveMutualClash, isMutualAttackClash,
+  applyAdjustmentsToState, applyAoeEffects,
+  enumerateAttackCandidates, enumerateClaimCandidates,
+  regionVisibleTo,
+  setFog: (f) => { fogOfWar = f; },
+  setGameMode: (g) => { gameMode = g; },
+  setPhase: (p) => { phase = p; }
+};
+
+  </script>
+</body>
+</html>

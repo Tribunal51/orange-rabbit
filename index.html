@@ -109,6 +109,39 @@
       background: radial-gradient(circle at 50% 55%, #1e1b4b 0%, #0b0a1f 70%);
     }
 
+    .game-icon.aggression {
+      background: linear-gradient(135deg, #1e1b4b, #4c1d95);
+      position: relative;
+    }
+
+    .ag-mini {
+      display: grid;
+      grid-template-columns: repeat(4, 14px);
+      grid-template-rows: repeat(4, 14px);
+      gap: 2px;
+    }
+
+    .ag-cell {
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .ag-cell.p1 { background: linear-gradient(135deg, #38bdf8, #0ea5e9); }
+    .ag-cell.p2 { background: linear-gradient(135deg, #f472b6, #ec4899); }
+    .ag-cell.span2c { grid-column: span 2; }
+    .ag-cell.span2r { grid-row: span 2; }
+    .ag-cell.dead {
+      background: rgba(255,80,80,0.12);
+      color: rgba(255,80,80,0.7);
+      border: 1px dashed rgba(255,80,80,0.4);
+    }
+
     .game-icon.paper-soccer {
       background: linear-gradient(135deg, #064e3b, #022c22);
       position: relative;
@@ -636,6 +669,26 @@
       <div class="game-title">Paper Soccer</div>
       <div class="game-desc">Bounce the ball off walls and trails to score in your opponent's net.</div>
       <span class="game-badge badge-players">2 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="ag.html">
+      <div class="game-icon aggression">
+        <div class="ag-mini">
+          <div class="ag-cell p1 span2c">8</div>
+          <div class="ag-cell p2">5</div>
+          <div class="ag-cell p1">3</div>
+          <div class="ag-cell p1 span2r">7</div>
+          <div class="ag-cell p2">4</div>
+          <div class="ag-cell dead">✕</div>
+          <div class="ag-cell p2 span2c">6</div>
+          <div class="ag-cell p1">2</div>
+          <div class="ag-cell p2">9</div>
+          <div class="ag-cell p1">1</div>
+        </div>
+      </div>
+      <div class="game-title">Aggression</div>
+      <div class="game-desc">Deploy troops then conquer neighbouring regions. The attacker always wins — if you have more troops.</div>
+      <span class="game-badge badge-players">1–2 Players · Online</span>
     </a>
 
     <a class="game-card" href="hm.html">
