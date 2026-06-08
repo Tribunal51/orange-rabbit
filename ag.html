@@ -244,25 +244,12 @@
       box-shadow: 0 0 0 2px #c4b5fd, 0 4px 14px rgba(0,0,0,.4);
     }
 
-    .region.hunkerSel {
-      outline: 3px solid #93c5fd; outline-offset: -4px; z-index: 6;
-      box-shadow: inset 0 0 22px rgba(147,197,253,.35), 0 4px 14px rgba(0,0,0,.3);
-    }
-
     .region.claimSource {
       outline: 3px solid #fde68a; outline-offset: -4px; z-index: 6;
       animation: attackerPulse 1.4s ease-in-out infinite;
     }
     .region.claimTargetCand {
       outline: 2px dashed #86efac; outline-offset: -4px; cursor: crosshair; z-index: 5;
-    }
-
-    /* hunkered marker */
-    .region.hunkered::before {
-      content: '🛡';
-      position: absolute; top: 4px; right: 4px;
-      font-size: 13px; opacity: .9;
-      pointer-events: none;
     }
 
     /* Fog of War */
@@ -608,11 +595,174 @@
       30%, 70% { box-shadow: 0 0 0 5px #fde68a, 0 0 28px rgba(253,230,138,.7); }
     }
 
+    /* ─── Geographic mode (SVG) ─── */
+    .map-container.geo-map {
+      background:
+        radial-gradient(ellipse at 30% 20%, rgba(56,189,248,.05), transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(168,85,247,.05), transparent 60%),
+        rgba(10,8,28,.55);
+    }
+    .geo-regions-svg {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      display: block; overflow: visible;
+    }
+    /* Reset HTML-only matrix styles (outline / box-shadow / transform on the
+       <g> would render around its bounding box, not the polygon shape). */
+    .map-container.geo-map g.region {
+      outline: none !important;
+      box-shadow: none !important;
+      border: none !important;
+      background: none !important;
+      transform: none !important;
+    }
+    .map-container.geo-map g.region polygon {
+      fill: rgba(255,255,255,.05);
+      stroke: rgba(255,255,255,.18);
+      stroke-width: 0.35;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      pointer-events: all;
+      transition: fill .2s, stroke .2s, stroke-width .2s, opacity .3s;
+    }
+    .map-container.geo-map g.region text {
+      text-anchor: middle;
+      pointer-events: none;
+      user-select: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .map-container.geo-map g.region text.region-troops {
+      font-size: 5.4px;
+      font-weight: 900;
+      fill: #fff;
+      paint-order: stroke;
+      stroke: rgba(0,0,0,.65);
+      stroke-width: 0.7;
+      dominant-baseline: middle;
+    }
+    .map-container.geo-map g.region text.region-label {
+      font-size: 1.7px;
+      font-weight: 700;
+      fill: rgba(255,255,255,.55);
+      letter-spacing: 0.18px;
+      text-transform: uppercase;
+      dominant-baseline: middle;
+    }
+    .map-container.geo-map g.region.p1 text.region-label,
+    .map-container.geo-map g.region.p2 text.region-label { fill: rgba(255,255,255,.9); }
+    .map-container.geo-map g.region.tiny text.region-troops { font-size: 3.4px; }
+    .map-container.geo-map g.region.tiny text.region-label  { font-size: 1.2px; }
+
+    .map-container.geo-map g.region text.region-mark {
+      display: none; font-weight: 900;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+    .map-container.geo-map g.region.eliminated text.region-mark.mark-elim {
+      display: block; fill: rgba(255,80,80,.85); font-size: 8px;
+    }
+    .map-container.geo-map g.region.fogged text.region-mark.mark-fog {
+      display: block; fill: rgba(168,85,247,.7); font-size: 6.5px;
+    }
+    .map-container.geo-map g.region.clickable { cursor: pointer; }
+    .map-container.geo-map g.region.clickable:hover polygon {
+      fill: rgba(168,85,247,.22);
+      stroke: rgba(168,85,247,.85);
+      stroke-width: 0.55;
+    }
+    .map-container.geo-map g.region.p1 polygon {
+      fill: rgba(56,189,248,.55);
+      stroke: #0284c7;
+      stroke-width: 0.5;
+    }
+    .map-container.geo-map g.region.p2 polygon {
+      fill: rgba(244,114,182,.55);
+      stroke: #db2777;
+      stroke-width: 0.5;
+    }
+    .map-container.geo-map g.region.empty polygon {
+      fill: rgba(255,255,255,.05);
+    }
+    .map-container.geo-map g.region.unoccupied polygon {
+      fill: rgba(120,120,140,.18);
+      stroke: rgba(255,255,255,.22);
+      stroke-dasharray: 0.8 0.8;
+    }
+    .map-container.geo-map g.region.unoccupied text.region-troops { display: none; }
+    .map-container.geo-map g.region.eliminated polygon {
+      fill: rgba(20,10,30,.55);
+      stroke: rgba(255,80,80,.35);
+      stroke-dasharray: 0.8 0.8;
+      opacity: .45;
+    }
+    .map-container.geo-map g.region.eliminated text.region-troops,
+    .map-container.geo-map g.region.eliminated text.region-label { display: none; }
+    .map-container.geo-map g.region.dim { opacity: .55; }
+
+    .map-container.geo-map g.region.lastMove polygon {
+      stroke: #fde68a; stroke-width: 0.75;
+    }
+    .map-container.geo-map g.region.target polygon {
+      stroke: #fde68a; stroke-width: 0.75;
+      stroke-dasharray: 1.2 0.8;
+      cursor: crosshair;
+    }
+    .map-container.geo-map g.region.target:hover polygon { fill: rgba(253,230,138,.22); }
+    .map-container.geo-map g.region.attackerSel polygon,
+    .map-container.geo-map g.region.adjustSource polygon,
+    .map-container.geo-map g.region.claimSource polygon {
+      stroke: #fde68a; stroke-width: 0.85;
+      animation: geoAttackerPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes geoAttackerPulse {
+      0%, 100% { stroke-width: 0.85; }
+      50%      { stroke-width: 1.5;  }
+    }
+    .map-container.geo-map g.region.beatable polygon {
+      stroke: #86efac; stroke-width: 0.75;
+      stroke-dasharray: 1.2 0.8;
+      cursor: crosshair;
+    }
+    .map-container.geo-map g.region.beatable text.region-troops { fill: #86efac; stroke: rgba(0,40,10,.7); }
+    .map-container.geo-map g.region.unbeatable polygon {
+      stroke: rgba(248,113,113,.7); stroke-width: 0.75;
+      stroke-dasharray: 1.2 0.8;
+      opacity: .55;
+    }
+    .map-container.geo-map g.region.unbeatable text.region-troops { fill: #f87171; stroke: rgba(40,5,5,.7); }
+    .map-container.geo-map g.region.adjustDest polygon,
+    .map-container.geo-map g.region.claimTargetCand polygon {
+      stroke: #86efac; stroke-width: 0.75;
+      stroke-dasharray: 1.2 0.8;
+      cursor: crosshair;
+    }
+    .map-container.geo-map g.region.adjustAssignedSrc polygon,
+    .map-container.geo-map g.region.adjustAssignedDst polygon {
+      stroke: #c4b5fd; stroke-width: 0.75;
+    }
+    .map-container.geo-map g.region.fogged polygon {
+      fill: rgba(15,12,30,.85) !important;
+      stroke: rgba(168,85,247,.18) !important;
+    }
+    .map-container.geo-map g.region.fogged text.region-troops,
+    .map-container.geo-map g.region.fogged text.region-label { display: none; }
+
+    .map-container.geo-map g.region.flash-success polygon { animation: geoFlashGlow 1.4s ease; --flash-color: #22c55e; }
+    .map-container.geo-map g.region.flash-fail    polygon { animation: geoFlashGlow 1.4s ease; --flash-color: #ef4444; }
+    .map-container.geo-map g.region.flash-claim   polygon { animation: geoFlashGlow 1.4s ease; --flash-color: #fde68a; }
+    @keyframes geoFlashGlow {
+      0%, 100% { filter: none; }
+      30%, 70% { filter: drop-shadow(0 0 2px var(--flash-color)) drop-shadow(0 0 5px var(--flash-color)); }
+    }
+
     @media (max-width: 540px) {
       h1 { font-size: 26px; }
       .region-troops { font-size: 20px; }
       .region.tiny .region-troops { font-size: 13px; }
       .deploy-bar input[type=range] { width: 160px; }
+      .map-container.geo-map g.region text.region-troops { font-size: 6.4px; stroke-width: 0.9; }
+      .map-container.geo-map g.region text.region-label  { font-size: 2.1px; }
+      .map-container.geo-map g.region.tiny text.region-troops { font-size: 4.4px; }
     }
   </style>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -634,7 +784,7 @@
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> — sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> — parallel turns; attack, hunker, adjust troops, or claim a gray ruin. Strategy &amp; bluff over many rounds.
+        <strong>Age of Empires</strong> — parallel turns; attack, adjust troops, or claim a gray ruin. Strategy &amp; bluff over many rounds.
       </div>
     </div>
 
@@ -683,7 +833,7 @@
       <div class="setupLabel">Map Type</div>
       <div id="mapTypeToggle" class="modeToggle">
         <button class="modeBtn selected" onclick="setMapType('matrix')">Matrix</button>
-        <button class="modeBtn disabled" onclick="setMapType('geo')" title="Coming soon">Geographical (soon)</button>
+        <button class="modeBtn" onclick="setMapType('geo')">Geographic</button>
       </div>
     </div>
 
@@ -762,7 +912,6 @@
 
     <div id="aoeActionBar" class="aoe-action-bar hidden">
       <button class="actionBtn" id="aoeAttackBtn" onclick="setAoeUiAction('attack')">⚔ Attack</button>
-      <button class="actionBtn" id="aoeHunkerBtn" onclick="setAoeUiAction('hunker')">🛡 Hunker</button>
       <button class="actionBtn" id="aoeAdjustBtn" onclick="setAoeUiAction('adjust')">↔ Adjust</button>
       <button class="actionBtn" id="aoeClaimBtn" onclick="setAoeUiAction('claim')">▣ Claim</button>
       <button class="actionBtn" id="aoePassBtn" onclick="setAoeUiAction('pass')">⏭ Pass</button>
@@ -857,6 +1006,7 @@ let lastMoveRegion = -1;
 
 /* AoE / parallel-turn runtime */
 let aoeRound = 0;
+let aoeMaxRounds = 0;
 let aoePlans = { 1: null, 2: null };
 let aoeSubmitted = { 1: false, 2: false };
 let aoePassFlags = { 1: false, 2: false };
@@ -875,18 +1025,17 @@ let battleLogCollapsed = false;
 let aoeWorking = makeEmptyWorking();
 function makeEmptyWorking() {
   return {
-    action: null,           // 'attack' | 'hunker' | 'adjust' | 'claim' | 'pass' | null
+    action: null,           // 'attack' | 'adjust' | 'claim' | 'pass' | null
     attackGroup: new Set(),
     attackDefender: -1,
     attackAutoBleed: true,
     attackFailManual: null,    // map idx->loss
     attackSuccessManual: null, // map idx->loss
-    hunkerTarget: -1,
     adjustTransfers: [],
     adjustSourceSel: -1,
-    claimSource: -1,
     claimTarget: -1,
-    claimAmount: 1
+    claimContribs: [],     // [{source, amount}]
+    claimSourceSel: -1     // own territory currently pending an amount input
   };
 }
 
@@ -979,11 +1128,11 @@ function onTroopsCustomInput() {
 }
 
 function setMapType(t) {
-  if (t === 'geo') return;
+  if (t !== 'matrix' && t !== 'geo') return;
   mapType = t;
   document.querySelectorAll('#mapTypeToggle .modeBtn').forEach((b, i) => {
     const which = ['matrix', 'geo'][i];
-    b.classList.toggle('selected', which === t && !b.classList.contains('disabled'));
+    b.classList.toggle('selected', which === t);
   });
 }
 
@@ -1032,11 +1181,11 @@ function launchGame() {
   } else if (mode === 'cpu') {
     myPlayer = goFirstSelected ? 1 : 2;
     firstPlayer = 1;
-    startGame(generateMatrixMap(effectiveNumRegions()));
+    startGame(generateMap(effectiveNumRegions()));
   } else {
     myPlayer = 0;
     firstPlayer = 1;
-    startGame(generateMatrixMap(effectiveNumRegions()));
+    startGame(generateMap(effectiveNumRegions()));
   }
 }
 
@@ -1062,6 +1211,7 @@ function backToSetup() {
 
 function aoeResetAll() {
   aoeRound = 0;
+  aoeMaxRounds = 0;
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
   aoePassFlags = { 1: false, 2: false };
@@ -1081,6 +1231,11 @@ function hideRules(e) {
 }
 
 /* ═══════════════════════════ MAP GENERATOR ═══════════════════════════ */
+function generateMap(numRegions) {
+  if (mapType === 'geo') return generateGeoMap(numRegions);
+  return generateMatrixMap(numRegions);
+}
+
 function generateMatrixMap(numRegions) {
   const gs = Math.max(6, Math.ceil(Math.sqrt(numRegions * 3)));
   let rects = [{ x: 0, y: 0, w: gs, h: gs }];
@@ -1112,7 +1267,11 @@ function generateMatrixMap(numRegions) {
     }
   }
   for (let i = 0; i < rects.length; i++) {
-    rects[i].id = i; rects[i].neighbors = []; rects[i].owner = 0; rects[i].troops = 0;
+    rects[i].id = i;
+    rects[i].neighbors = [];
+    rects[i].owner = 0;
+    rects[i].troops = 0;
+    rects[i].tiny = (rects[i].w * rects[i].h <= 2);
   }
   for (let i = 0; i < rects.length; i++) {
     for (let j = i + 1; j < rects.length; j++) {
@@ -1142,14 +1301,286 @@ function rectanglesShareEdge(a, b) {
   return false;
 }
 
+/* ─── Geographic map: country-style irregular regions ─── */
+function generateGeoMap(numRegions) {
+  const N = Math.max(4, Math.min(50, numRegions | 0));
+  // Fine grid resolution for cell-based growth. Larger = smoother shapes.
+  const G = 64;
+  const totalCells = G * G;
+
+  // 1) Place N seeds with poisson-disk-like spacing so no two are too close.
+  const seeds = [];
+  const minDistSq = (G * G * 0.55) / N;
+  let attempts = 0;
+  while (seeds.length < N && attempts++ < 8000) {
+    const sx = 1 + Math.floor(Math.random() * (G - 2));
+    const sy = 1 + Math.floor(Math.random() * (G - 2));
+    let ok = true;
+    for (const s of seeds) {
+      const dx = s.x - sx, dy = s.y - sy;
+      if (dx*dx + dy*dy < minDistSq) { ok = false; break; }
+    }
+    if (ok) seeds.push({ x: sx, y: sy });
+  }
+  while (seeds.length < N) {
+    seeds.push({ x: Math.floor(Math.random() * G), y: Math.floor(Math.random() * G) });
+  }
+
+  // 2) Randomized round-robin BFS growth. Each pass, every region grows
+  //    by ~one cell from a randomly-chosen frontier cell with a random
+  //    direction. Produces connected, irregular, country-like regions.
+  const owner = new Int16Array(totalCells).fill(-1);
+  const frontiers = seeds.map(() => []);
+  for (let i = 0; i < seeds.length; i++) {
+    const s = seeds[i];
+    const c = s.y * G + s.x;
+    owner[c] = i;
+    frontiers[i].push(c);
+  }
+  let assigned = seeds.length;
+  while (assigned < totalCells) {
+    // Shuffle region order each pass so no one direction is biased.
+    const order = new Array(N);
+    for (let i = 0; i < N; i++) order[i] = i;
+    for (let i = N - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    let progressed = false;
+    for (const i of order) {
+      const f = frontiers[i];
+      while (f.length > 0) {
+        const fi = Math.floor(Math.random() * f.length);
+        const cell = f[fi];
+        const cx = cell % G, cy = (cell / G) | 0;
+        // shuffle 4 directions
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (let d = 3; d > 0; d--) {
+          const r = Math.floor(Math.random() * (d + 1));
+          const t = dirs[d]; dirs[d] = dirs[r]; dirs[r] = t;
+        }
+        let grew = false;
+        for (let d = 0; d < 4; d++) {
+          const nx = cx + dirs[d][0], ny = cy + dirs[d][1];
+          if (nx < 0 || nx >= G || ny < 0 || ny >= G) continue;
+          const nidx = ny * G + nx;
+          if (owner[nidx] === -1) {
+            owner[nidx] = i;
+            f.push(nidx);
+            assigned++;
+            progressed = true;
+            grew = true;
+            break;
+          }
+        }
+        if (grew) break;
+        // No unassigned neighbors → cell is fully surrounded; drop it.
+        f[fi] = f[f.length - 1];
+        f.pop();
+      }
+    }
+    if (!progressed) break;
+  }
+  // Sweep up any straggler cells (defensive — shouldn't happen).
+  for (let c = 0; c < totalCells; c++) {
+    if (owner[c] !== -1) continue;
+    const cx = c % G, cy = (c / G) | 0;
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || nx >= G || ny < 0 || ny >= G) continue;
+      const nv = owner[ny * G + nx];
+      if (nv !== -1) { owner[c] = nv; break; }
+    }
+    if (owner[c] === -1) owner[c] = 0;
+  }
+
+  // 3) For each region, compute polygon outline, neighbours, bbox, centroid.
+  const cellLists = Array.from({ length: N }, () => []);
+  for (let c = 0; c < totalCells; c++) cellLists[owner[c]].push(c);
+
+  const adj = Array.from({ length: N }, () => new Set());
+  const regions = [];
+
+  for (let i = 0; i < N; i++) {
+    const cells = cellLists[i];
+    const inRegion = new Uint8Array(totalCells);
+    for (const c of cells) inRegion[c] = 1;
+
+    // Directed boundary edges: map "fx,fy" -> [tx, ty] in grid corner coords.
+    // Edges are emitted clockwise around the region (with +y pointing down).
+    const edges = new Map();
+    let sumX = 0, sumY = 0, minX = G, minY = G, maxX = -1, maxY = -1;
+
+    for (const c of cells) {
+      const cx = c % G, cy = (c / G) | 0;
+      sumX += cx + 0.5; sumY += cy + 0.5;
+      if (cx < minX) minX = cx; if (cy < minY) minY = cy;
+      if (cx > maxX) maxX = cx; if (cy > maxY) maxY = cy;
+
+      const has = (nx, ny) =>
+        (nx >= 0 && nx < G && ny >= 0 && ny < G && inRegion[ny * G + nx]);
+
+      // North edge: top of cell, goes +x
+      if (!has(cx, cy - 1))     edges.set(cx + ',' + cy,         [cx + 1, cy]);
+      // East edge: right of cell, goes +y
+      if (!has(cx + 1, cy))     edges.set((cx + 1) + ',' + cy,   [cx + 1, cy + 1]);
+      // South edge: bottom of cell, goes -x
+      if (!has(cx, cy + 1))     edges.set((cx + 1) + ',' + (cy + 1), [cx, cy + 1]);
+      // West edge: left of cell, goes -y
+      if (!has(cx - 1, cy))     edges.set(cx + ',' + (cy + 1),   [cx, cy]);
+
+      // Track which other regions this cell borders.
+      const ck = (nx, ny) => {
+        if (nx < 0 || nx >= G || ny < 0 || ny >= G) return;
+        const nv = owner[ny * G + nx];
+        if (nv !== i) { adj[i].add(nv); adj[nv].add(i); }
+      };
+      ck(cx, cy - 1); ck(cx + 1, cy); ck(cx, cy + 1); ck(cx - 1, cy);
+    }
+
+    // Walk the boundary loop. (Region is guaranteed connected and
+    // hole-free by construction, so one walk yields the full outline.)
+    let polyGrid = [];
+    if (edges.size > 0) {
+      const startKey = edges.keys().next().value;
+      let curKey = startKey;
+      let safety = 0;
+      while (safety++ <= edges.size + 4) {
+        const parts = curKey.split(',');
+        polyGrid.push([+parts[0], +parts[1]]);
+        const next = edges.get(curKey);
+        if (!next) break;
+        const nextKey = next[0] + ',' + next[1];
+        if (nextKey === startKey) break;
+        curKey = nextKey;
+      }
+    }
+
+    polyGrid = simplifyCollinear(polyGrid);
+
+    // Per-vertex jitter, hashed by grid-corner coords so vertices shared
+    // between two regions get the SAME offset → no gaps in the map.
+    polyGrid = polyGrid.map(([px, py]) => {
+      const [jx, jy] = vertexJitterHash(px, py);
+      return [px + jx, py + jy];
+    });
+
+    // Chaikin corner-cutting for smooth, organic borders.
+    let polySmooth = chaikinSmooth(polyGrid, 2);
+
+    // Convert to viewBox percent coords, clamping to map bounds.
+    const poly = polySmooth.map(([px, py]) => [
+      Math.max(0, Math.min(100, (px / G) * 100)),
+      Math.max(0, Math.min(100, (py / G) * 100))
+    ]);
+
+    const cellCount = cells.length;
+    const cellAvgX = (sumX / cellCount) / G * 100;
+    const cellAvgY = (sumY / cellCount) / G * 100;
+    // Try to ensure label sits inside the polygon. Cell-average centroid
+    // can fall outside concave shapes; fall back to a random cell centre.
+    let cx = cellAvgX, cy = cellAvgY;
+    if (!pointInPolygon(cx, cy, poly)) {
+      let placed = false;
+      for (let tries = 0; tries < 12 && !placed; tries++) {
+        const cell = cells[Math.floor(Math.random() * cells.length)];
+        const tx = ((cell % G) + 0.5) / G * 100;
+        const ty = (((cell / G) | 0) + 0.5) / G * 100;
+        if (pointInPolygon(tx, ty, poly)) { cx = tx; cy = ty; placed = true; }
+      }
+    }
+
+    const avgCellsPerRegion = totalCells / N;
+    regions.push({
+      id: i,
+      x: minX, y: minY,
+      w: (maxX - minX + 1),
+      h: (maxY - minY + 1),
+      cx, cy,
+      poly,
+      isGeo: true,
+      tiny: cellCount < avgCellsPerRegion * 0.35,
+      neighbors: [],
+      owner: 0, troops: 0
+    });
+  }
+
+  for (let i = 0; i < N; i++) {
+    regions[i].neighbors = Array.from(adj[i]);
+  }
+
+  return { gridSize: G, regions };
+}
+
+function simplifyCollinear(poly) {
+  if (poly.length < 3) return poly;
+  const out = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[(i - 1 + n) % n];
+    const b = poly[i];
+    const c = poly[(i + 1) % n];
+    const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    if (Math.abs(cross) > 1e-9) out.push(b);
+  }
+  return out.length >= 3 ? out : poly;
+}
+
+// Deterministic per-vertex offset so shared grid corners always perturb
+// identically across neighbouring regions (no gaps along borders).
+function vertexJitterHash(x, y) {
+  let s = (((x | 0) * 73856093) ^ ((y | 0) * 19349663) ^ 0xa5a5a5) >>> 0;
+  s = ((s ^ (s >>> 13)) * 1274126177) >>> 0;
+  s = (s ^ (s >>> 16)) >>> 0;
+  const dx = ((s & 0xffff) / 65535 - 0.5) * 0.6;
+  s = ((s * 2654435761) >>> 0);
+  const dy = ((s & 0xffff) / 65535 - 0.5) * 0.6;
+  return [dx, dy];
+}
+
+function chaikinSmooth(poly, iters) {
+  let pts = poly;
+  for (let k = 0; k < iters; k++) {
+    const n = pts.length;
+    if (n < 3) break;
+    const out = new Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      out[i * 2]     = [a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25];
+      out[i * 2 + 1] = [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75];
+    }
+    pts = out;
+  }
+  return pts;
+}
+
+function pointInPolygon(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < (xj - xi) * (py - yi) / ((yj - yi) || 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 /* ═══════════════════════════ GAME LIFECYCLE ═══════════════════════════ */
 function startGame(mapData) {
   gridSize = mapData.gridSize;
   regions = mapData.regions.map(r => ({
     id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
+    cx: r.cx, cy: r.cy,
+    poly: r.poly,
+    tiny: !!r.tiny,
+    isGeo: !!r.isGeo,
     neighbors: r.neighbors.slice(),
     owner: 0, troops: 0
   }));
+  // Sync mapType from incoming map data (important for online guest).
+  mapType = (regions[0] && regions[0].isGeo) ? 'geo' : 'matrix';
   phase = 'deploy';
   currentPlayer = firstPlayer;
   p1Remaining = totalTroops;
@@ -1163,7 +1594,7 @@ function startGame(mapData) {
     lines: [{
       kind: 'system',
       html: gameMode === 'aoe'
-        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions' + (fogOfWar ? ' · Fog of War on' : '')
+        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + Math.floor(regions.length / 2) + ' rounds' + (fogOfWar ? ' · Fog of War on' : '')
         : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
     }]
   });
@@ -1196,6 +1627,13 @@ function buildMapDom() {
   const overlay = document.getElementById('aoeArrowsOverlay');
   container.innerHTML = '';
   if (overlay) container.appendChild(overlay);
+  const isGeo = !!(regions[0] && regions[0].isGeo);
+  container.classList.toggle('geo-map', isGeo);
+  if (isGeo) buildGeoMapDom(container);
+  else buildMatrixMapDom(container);
+}
+
+function buildMatrixMapDom(container) {
   const cellPct = 100 / gridSize;
   for (const r of regions) {
     const div = document.createElement('div');
@@ -1205,12 +1643,60 @@ function buildMapDom() {
     div.style.top  = (r.y * cellPct) + '%';
     div.style.width  = (r.w * cellPct) + '%';
     div.style.height = (r.h * cellPct) + '%';
-    if (r.w * r.h <= 2) div.classList.add('tiny');
+    if (r.tiny) div.classList.add('tiny');
     div.innerHTML = '<div class="region-label">' + (r.id + 1) + '</div>' +
                     '<div class="region-troops"></div>';
     div.onclick = () => onRegionClick(r.id);
     container.appendChild(div);
   }
+}
+
+function buildGeoMapDom(container) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'geo-regions-svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  for (const r of regions) {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'region empty');
+    g.setAttribute('data-idx', String(r.id));
+
+    const poly = document.createElementNS(NS, 'polygon');
+    poly.setAttribute('points', r.poly.map(p => p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' '));
+    g.appendChild(poly);
+
+    const troops = document.createElementNS(NS, 'text');
+    troops.setAttribute('class', 'region-troops');
+    troops.setAttribute('x', r.cx.toFixed(2));
+    troops.setAttribute('y', (r.cy - 0.4).toFixed(2));
+    g.appendChild(troops);
+
+    const lbl = document.createElementNS(NS, 'text');
+    lbl.setAttribute('class', 'region-label');
+    lbl.setAttribute('x', r.cx.toFixed(2));
+    lbl.setAttribute('y', (r.cy + (r.tiny ? 2.2 : 3.6)).toFixed(2));
+    lbl.textContent = String(r.id + 1);
+    g.appendChild(lbl);
+
+    const marks = [
+      { cls: 'mark-elim',   ch: '\u2715', dy: 0   },
+      { cls: 'mark-fog',    ch: '?',      dy: 0   }
+    ];
+    for (const m of marks) {
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('class', 'region-mark ' + m.cls);
+      t.setAttribute('x', r.cx.toFixed(2));
+      t.setAttribute('y', (r.cy + m.dy).toFixed(2));
+      t.textContent = m.ch;
+      g.appendChild(t);
+    }
+
+    g.addEventListener('click', () => onRegionClick(r.id));
+    svg.appendChild(g);
+  }
+  container.appendChild(svg);
 }
 
 /* ═══════════════════════════ DEPLOY ═══════════════════════════ */
@@ -1311,6 +1797,7 @@ function afterDeployMove() {
     if (gameMode === 'aoe') {
       phase = 'battle';
       aoeRound = 0;
+      aoeMaxRounds = Math.floor(regions.length / 2);
       flashMessage('Deployment done. Battle begins!', 'good');
       render();
       aoeStartRound();
@@ -1420,60 +1907,6 @@ function aoePowerFromState(group, state) {
 }
 function aoePower(group) { return aoePowerFromState(group, regions); }
 
-/* BFS hop distance through same-owner friendly graph. Returns Map<idx, hop>. */
-function bfsFriendlyHops(startIdx, owner, state, maxHop) {
-  const dist = new Map();
-  dist.set(startIdx, 0);
-  let frontier = [startIdx];
-  for (let h = 1; h <= maxHop; h++) {
-    const next = [];
-    for (const cur of frontier) {
-      for (const nid of state[cur].neighbors) {
-        if (dist.has(nid)) continue;
-        if (state[nid].owner !== owner) continue;
-        dist.set(nid, h);
-        next.push(nid);
-      }
-    }
-    frontier = next;
-    if (frontier.length === 0) break;
-  }
-  return dist;
-}
-
-/* Compute the hunker bonus sum for region D in given state.
-   hunker_sum = ceil(D.troops * 1.1)
-              + Σ(1-hop friendlies)/2
-              + Σ(2-hop friendlies)/3
-              + …
-              + Σ(5-hop friendlies)/6
-   Each region counts at its FIRST hop distance (BFS already enforces). */
-function hunkerSum(defenderIdx, state) {
-  const def = state[defenderIdx];
-  if (!def || def.owner !== 1 && def.owner !== 2) return 0;
-  const owner = def.owner;
-  const MAX_HOP = 5;
-  const dist = bfsFriendlyHops(defenderIdx, owner, state, MAX_HOP);
-  let sum = Math.ceil(def.troops * 1.1);
-  // sum contributions by hop
-  const byHop = {};
-  for (const [idx, h] of dist.entries()) {
-    if (h === 0) continue;
-    byHop[h] = (byHop[h] || 0) + state[idx].troops;
-  }
-  for (let h = 1; h <= MAX_HOP; h++) {
-    const t = byHop[h] || 0;
-    sum += t / (h + 1);
-  }
-  return sum;
-}
-
-function hunkerDefenseValue(defenderIdx, state) {
-  // final_defense = ceil((D + hunker_sum) / 2)
-  const def = state[defenderIdx];
-  return Math.ceil((def.troops + hunkerSum(defenderIdx, state)) / 2);
-}
-
 /* Auto-bleed: distribute integer total L across attackers in G evenly,
    respecting each attacker's available troops. Returns map idx->loss.
    If overflowAllowed, losses can exceed a region's troops (cap-and-wipe);
@@ -1542,7 +1975,7 @@ function allTerritoriesAtOrBelowOne(player) {
 }
 
 /* True when BOTH players have all owned territories reduced to ≤ 1 troop.
-   In that state neither side can attack productively, hunker meaningfully,
+   In that state neither side can attack productively,
    adjust (cap=⌊1/2⌋=0), or threaten anything — so we terminate the game. */
 function bothPlayersStuckAtOnes() {
   return allTerritoriesAtOrBelowOne(1) && allTerritoriesAtOrBelowOne(2);
@@ -1585,12 +2018,6 @@ function isTrivialOneVsOne(player, attackers, defender) {
   return a.troops === 1 && d.troops === 1;
 }
 
-/* Validity of Hunker plan. */
-function hunkerPlanValid(player, targetIdx) {
-  const r = regions[targetIdx];
-  return !!r && r.owner === player;
-}
-
 /* Validity of Adjust plan against pre-round state. Each transfer must:
    - source/dest owned by player
    - adjacent
@@ -1616,16 +2043,29 @@ function adjustPlanValid(player, transfers) {
   return true;
 }
 
-/* Validity of Claim plan. amount <= floor(source.troops/2). */
-function claimPlanValid(player, sourceIdx, targetIdx, amount) {
-  const s = regions[sourceIdx], t = regions[targetIdx];
-  if (!s || !t) return false;
-  if (s.owner !== player) return false;
-  if (s.troops < 2) return false;
+/* Validity of multi-source Claim plan.
+   contributions = [{source, amount}, ...]
+   - target exists and is gray (owner === 0)
+   - non-empty list, no duplicate sources
+   - each source owned by player, adjacent to target, 1 <= amount <= floor(troops/2) */
+function claimPlanValid(player, targetIdx, contributions) {
+  const t = regions[targetIdx];
+  if (!t) return false;
   if (t.owner !== 0) return false;
-  if (!isAdjacent(sourceIdx, targetIdx)) return false;
-  if (!Number.isFinite(amount) || amount < 1) return false;
-  if (amount > Math.floor(s.troops / 2)) return false;
+  if (!Array.isArray(contributions) || contributions.length === 0) return false;
+  const seen = new Set();
+  for (const c of contributions) {
+    if (!c || typeof c.source !== 'number' || typeof c.amount !== 'number') return false;
+    if (seen.has(c.source)) return false;
+    seen.add(c.source);
+    const s = regions[c.source];
+    if (!s) return false;
+    if (s.owner !== player) return false;
+    if (!isAdjacent(c.source, targetIdx)) return false;
+    if (!Number.isFinite(c.amount) || c.amount < 1) return false;
+    const cap = Math.floor(s.troops / 2);
+    if (c.amount > cap) return false;
+  }
   return true;
 }
 
@@ -1645,32 +2085,25 @@ function applyAdjustmentsToState(plan, state) {
   }
 }
 
-/* Resolve a single attack against `post` snapshot, using hunkered set.
-   Returns array of effects: { kind, idx, newOwner?, newTroops? }. */
-function resolveSingleAttack(plan, post, hunkered, rng) {
+/* Resolve a single attack against `post` snapshot.
+   Returns { effects, log }. */
+function resolveSingleAttack(plan, post, rng) {
   const player = plan.player;
   const G = plan.group;
   const D = plan.defender;
   const def = post[D];
 
-  const isHunk = hunkered.has(D);
-  const hSum = isHunk ? hunkerSum(D, post) : 0;
-  const defenseValue = isHunk ? Math.ceil((def.troops + hSum) / 2) : def.troops;
+  const defenseValue = def.troops;
   const pwr = aoePowerFromState(G, post);
   const effects = [];
 
   const attLog = { player, group: G.slice(), defender: D, power: pwr.total, defense: defenseValue,
-                   hunkered: isHunk, hunkerSum: hSum, outcome: null };
+                   outcome: null };
 
   if (pwr.total > defenseValue) {
     // Branch 1: success → defender wiped.
-    // Attackers pay ceil(hunker_sum / 2) if defender was hunkered (cost of digging
-    // through fortifications), otherwise normal attrition ceil(D.troops / 2).
-    const L = isHunk ? Math.ceil(hSum / 2) : Math.ceil(def.troops / 2);
+    const L = Math.ceil(def.troops / 2);
     let dist;
-    // Honour player's manual distribution only if it actually sums to the real
-    // attrition. The dialog targets the no-hunker total; if defender hunkered
-    // (player couldn't predict that), auto-bleed the scaled-up damage.
     if (plan.successDist) {
       let sum = 0; for (const g of G) sum += (plan.successDist[g] | 0);
       dist = (sum === L) ? plan.successDist : autoBleedDist(G, L, post, true);
@@ -1690,8 +2123,8 @@ function resolveSingleAttack(plan, post, hunkered, rng) {
     return { effects, log: attLog };
   }
 
-  // Branch 2: 1v1 coin-flip (G.length===1 && !hunkered && attacker.troops === def.troops)
-  if (G.length === 1 && !isHunk && post[G[0]].troops === def.troops) {
+  // Branch 2: 1v1 coin-flip (G.length===1 && attacker.troops === def.troops)
+  if (G.length === 1 && post[G[0]].troops === def.troops) {
     const coin = rng() < 0.5;
     attLog.outcome = coin ? 'coinWin' : 'coinLose';
     attLog.coin = coin;
@@ -1713,11 +2146,9 @@ function resolveSingleAttack(plan, post, hunkered, rng) {
   }
 
   // Branch 3: fail
-  const attackerDmg = isHunk ? Math.ceil(hSum / 2) : Math.ceil(def.troops / 2);
-  const defenderDmg = isHunk ? Math.floor(def.troops / 4) : Math.floor(def.troops / 2);
+  const attackerDmg = Math.ceil(def.troops / 2);
+  const defenderDmg = Math.floor(def.troops / 2);
   let dist;
-  // Honour manual fail distribution only if it sums to the real damage.
-  // (Player set it for the no-hunker total; if defender hunkered, scale via auto-bleed.)
   if (plan.failDist) {
     let sum = 0; for (const g of G) sum += (plan.failDist[g] | 0);
     dist = (sum === attackerDmg) ? plan.failDist : autoBleedDist(G, attackerDmg, post, true);
@@ -1740,7 +2171,31 @@ function resolveSingleAttack(plan, post, hunkered, rng) {
   return { effects, log: attLog };
 }
 
-/* Resolve simultaneous claims (both players may claim same gray).
+/* Distribute `totalDmg` integer points across `contribs=[{source,amount},...]`
+   proportionally to each contribution's amount. Returns an integer array of
+   damages, one per contribution, summing exactly to `totalDmg`.
+   Rounding remainder goes to contributions with the largest fractional part
+   first (ties broken by larger amount, then lower index). */
+function distributeClaimDamage(contribs, totalDmg) {
+  const n = contribs.length;
+  if (n === 0 || totalDmg <= 0) return new Array(n).fill(0);
+  const pwr = contribs.reduce((s, c) => s + c.amount, 0);
+  if (pwr <= 0) return new Array(n).fill(0);
+  const raw = contribs.map(c => (c.amount / pwr) * totalDmg);
+  const floored = raw.map(v => Math.floor(v));
+  let used = floored.reduce((a, b) => a + b, 0);
+  let rem = totalDmg - used;
+  const order = contribs.map((c, i) => ({ i, frac: raw[i] - floored[i], amt: c.amount }))
+                        .sort((a, b) => (b.frac - a.frac) || (b.amt - a.amt) || (a.i - b.i));
+  for (let k = 0; rem > 0; k++) {
+    floored[order[k % n].i]++;
+    rem--;
+  }
+  return floored;
+}
+
+/* Resolve simultaneous multi-source claims (both players may claim same gray).
+   Plans of shape { type:'claim', player, target, contributions:[{source,amount},...] }.
    Returns { effects: [{...}], logs: [{...}] }. */
 function resolveClaims(planA, planB, post) {
   const effects = [];
@@ -1748,58 +2203,99 @@ function resolveClaims(planA, planB, post) {
   const cA = (planA && planA.type === 'claim') ? planA : null;
   const cB = (planB && planB.type === 'claim') ? planB : null;
   if (!cA && !cB) return { effects, logs };
-  // Group by target
+
+  function pushSource(idx, ownerIfAlive, newTroops) {
+    const nt = Math.max(0, newTroops);
+    effects.push({
+      kind: 'claimSource',
+      idx,
+      newOwner: nt <= 0 ? 0 : ownerIfAlive,
+      newTroops: nt
+    });
+  }
+
+  function uncontested(plan, tIdx) {
+    const total = plan.contributions.reduce((s, c) => s + c.amount, 0);
+    for (const c of plan.contributions) {
+      pushSource(c.source, plan.player, post[c.source].troops - c.amount);
+    }
+    effects.push({ kind: 'claimTake', idx: tIdx, newOwner: plan.player, newTroops: total });
+    logs.push({
+      player: plan.player,
+      contributions: plan.contributions.slice(),
+      target: tIdx,
+      amount: total,
+      outcome: 'win',
+      uncontested: true
+    });
+  }
+
+  // Group by target. claimContribs by player.
   const byTarget = {};
   if (cA) { byTarget[cA.target] = byTarget[cA.target] || {}; byTarget[cA.target].a = cA; }
   if (cB) { byTarget[cB.target] = byTarget[cB.target] || {}; byTarget[cB.target].b = cB; }
+
   for (const tIdxStr in byTarget) {
     const tIdx = parseInt(tIdxStr, 10);
     const entry = byTarget[tIdxStr];
     const a = entry.a, b = entry.b;
-    if (a && !b) {
-      // Uncontested
-      const sourcePostTroops = post[a.source].troops;
-      const newSourceTroops = Math.max(0, sourcePostTroops - a.amount);
-      effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSourceTroops <= 0 ? 0 : a.player, newTroops: newSourceTroops });
-      effects.push({ kind: 'claimTake',   idx: tIdx,      newOwner: a.player, newTroops: a.amount });
-      logs.push({ player: a.player, source: a.source, target: tIdx, amount: a.amount, outcome: 'win', uncontested: true });
-    } else if (b && !a) {
-      const sourcePostTroops = post[b.source].troops;
-      const newSourceTroops = Math.max(0, sourcePostTroops - b.amount);
-      effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSourceTroops <= 0 ? 0 : b.player, newTroops: newSourceTroops });
-      effects.push({ kind: 'claimTake',   idx: tIdx,      newOwner: b.player, newTroops: b.amount });
-      logs.push({ player: b.player, source: b.source, target: tIdx, amount: b.amount, outcome: 'win', uncontested: true });
-    } else {
-      // Contested
-      const aA = a.amount, aB = b.amount;
-      if (aA > aB) {
-        const newT = aA - Math.ceil(aB / 2);
-        const newSrcA = Math.max(0, post[a.source].troops - aA);
-        const newSrcB = Math.max(0, post[b.source].troops - aB);
-        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
-        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
-        effects.push({ kind: 'claimTake',   idx: tIdx, newOwner: a.player, newTroops: newT });
-        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'win-A' });
-      } else if (aB > aA) {
-        const newT = aB - Math.ceil(aA / 2);
-        const newSrcA = Math.max(0, post[a.source].troops - aA);
-        const newSrcB = Math.max(0, post[b.source].troops - aB);
-        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
-        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
-        effects.push({ kind: 'claimTake',   idx: tIdx, newOwner: b.player, newTroops: newT });
-        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'win-B' });
-      } else {
-        // Stalemate: each loses floor(amount/2) → remainder returns to source.
-        // Net source change = -ceil(amount/2). Target stays gray.
-        const lossA = Math.ceil(aA / 2);
-        const lossB = Math.ceil(aB / 2);
-        const newSrcA = Math.max(0, post[a.source].troops - lossA);
-        const newSrcB = Math.max(0, post[b.source].troops - lossB);
-        effects.push({ kind: 'claimSource', idx: a.source, newOwner: newSrcA <= 0 ? 0 : a.player, newTroops: newSrcA });
-        effects.push({ kind: 'claimSource', idx: b.source, newOwner: newSrcB <= 0 ? 0 : b.player, newTroops: newSrcB });
-        // target unchanged
-        logs.push({ playerA: a.player, sourceA: a.source, amountA: aA, playerB: b.player, sourceB: b.source, amountB: aB, target: tIdx, outcome: 'stalemate' });
+    if (a && !b) { uncontested(a, tIdx); continue; }
+    if (b && !a) { uncontested(b, tIdx); continue; }
+
+    // Contested mutual claim
+    const pwrA = a.contributions.reduce((s, c) => s + c.amount, 0);
+    const pwrB = b.contributions.reduce((s, c) => s + c.amount, 0);
+
+    if (pwrA === pwrB) {
+      // Stalemate: each side takes ceil(power/2) damage distributed across its
+      // contributions; remaining troops return to sources. Target stays gray.
+      const dmgEach = Math.ceil(pwrA / 2);
+      const dmgsA = distributeClaimDamage(a.contributions, dmgEach);
+      const dmgsB = distributeClaimDamage(b.contributions, dmgEach);
+      for (let i = 0; i < a.contributions.length; i++) {
+        const c = a.contributions[i];
+        pushSource(c.source, a.player, post[c.source].troops - dmgsA[i]);
       }
+      for (let i = 0; i < b.contributions.length; i++) {
+        const c = b.contributions[i];
+        pushSource(c.source, b.player, post[c.source].troops - dmgsB[i]);
+      }
+      logs.push({
+        playerA: a.player, contributionsA: a.contributions.slice(), powerA: pwrA, damageA: dmgsA,
+        playerB: b.player, contributionsB: b.contributions.slice(), powerB: pwrB, damageB: dmgsB,
+        target: tIdx, outcome: 'stalemate'
+      });
+    } else {
+      // Winner/loser
+      const aWins = pwrA > pwrB;
+      const winner = aWins ? a : b;
+      const loser  = aWins ? b : a;
+      const pwrW = aWins ? pwrA : pwrB;
+      const pwrL = aWins ? pwrB : pwrA;
+      const dmgToLoser = Math.ceil(pwrL / 2);
+
+      // Winner's sources lose the full amount each (target absorbs the cost as
+      // reduced troops landed). No troops return to winner sources.
+      for (const c of winner.contributions) {
+        pushSource(c.source, winner.player, post[c.source].troops - c.amount);
+      }
+      // Loser's sources take a proportional share of ceil(pwrL/2) damage.
+      const dmgsLoser = distributeClaimDamage(loser.contributions, dmgToLoser);
+      for (let i = 0; i < loser.contributions.length; i++) {
+        const c = loser.contributions[i];
+        pushSource(c.source, loser.player, post[c.source].troops - dmgsLoser[i]);
+      }
+      const tTroops = Math.max(0, pwrW - dmgToLoser);
+      effects.push({ kind: 'claimTake', idx: tIdx, newOwner: winner.player, newTroops: tTroops });
+      logs.push({
+        playerA: a.player, contributionsA: a.contributions.slice(), powerA: pwrA,
+        playerB: b.player, contributionsB: b.contributions.slice(), powerB: pwrB,
+        target: tIdx,
+        outcome: aWins ? 'win-A' : 'win-B',
+        winner: winner.player,
+        pwrWinner: pwrW, pwrLoser: pwrL,
+        damageLoser: dmgsLoser
+      });
     }
   }
   return { effects, logs };
@@ -1909,18 +2405,13 @@ function resolveMutualClash(planA, planB, post) {
 
 /* The full round resolve. plans = { 1, 2 } each a committed plan or null.
    rngSeed = integer (host broadcasts; local games use Math.random-derived).
-   Returns { logs, attackLogs, claimLogs, hunkered, postSnap }. */
+   Returns { attackLogs, claimLogs, postSnap }. */
 function resolveAoeRound(planA, planB, rngSeed) {
   // Step 1: adjustments against pre-round (current regions)
   if (planA && planA.type === 'adjust') applyAdjustmentsToState(planA, regions);
   if (planB && planB.type === 'adjust') applyAdjustmentsToState(planB, regions);
 
-  // Step 2: hunker flags
-  const hunkered = new Set();
-  if (planA && planA.type === 'hunker') hunkered.add(planA.target);
-  if (planB && planB.type === 'hunker') hunkered.add(planB.target);
-
-  // Step 3: attacks + claims against post-adjust snapshot
+  // Step 2: attacks + claims against post-adjust snapshot
   const postSnap = regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
                                        neighbors: r.neighbors.slice(),
                                        owner: r.owner, troops: r.troops }));
@@ -1928,19 +2419,47 @@ function resolveAoeRound(planA, planB, rngSeed) {
   const attackLogs = [];
   let allEffects = [];
   if (isMutualAttackClash(planA, planB)) {
-    // Mutual clash supersedes independent attack resolution (and the 1v1
-    // coin-flip case): both sides take damage, no territorial change.
     const { effects, log } = resolveMutualClash(planA, planB, postSnap);
     attackLogs.push(log);
     allEffects = allEffects.concat(effects);
   } else {
-    if (planA && planA.type === 'attack') {
-      const { effects, log } = resolveSingleAttack(planA, postSnap, hunkered, rng);
+    // Ordered resolution: if A attacks B and B is in the other's attacking group,
+    // the attack whose defender is an attacker in the other resolves second.
+    const aIsAttack = planA && planA.type === 'attack';
+    const bIsAttack = planB && planB.type === 'attack';
+    let firstAttack = null, secondAttack = null;
+    if (aIsAttack && bIsAttack) {
+      const aDefIsInBGroup = planB.group.includes(planA.defender);
+      const bDefIsInAGroup = planA.group.includes(planB.defender);
+      if (aDefIsInBGroup && !bDefIsInAGroup) {
+        // B's group contains A's target → B attacks first, then A
+        firstAttack = planB; secondAttack = planA;
+      } else if (bDefIsInAGroup && !aDefIsInBGroup) {
+        // A's group contains B's target → A attacks first, then B
+        firstAttack = planA; secondAttack = planB;
+      } else {
+        // No chain dependency or circular → resolve independently
+        firstAttack = planA; secondAttack = planB;
+      }
+    } else {
+      if (aIsAttack) firstAttack = planA;
+      if (bIsAttack) secondAttack = bIsAttack ? planB : null;
+      if (!firstAttack && secondAttack) { firstAttack = secondAttack; secondAttack = null; }
+    }
+    if (firstAttack) {
+      const { effects, log } = resolveSingleAttack(firstAttack, postSnap, rng);
       attackLogs.push(log);
       allEffects = allEffects.concat(effects);
+      // Apply first attack effects to postSnap so second attack sees updated state
+      for (const e of effects) {
+        if (e.idx !== undefined && postSnap[e.idx]) {
+          if (e.newOwner !== undefined) postSnap[e.idx].owner = e.newOwner;
+          if (e.newTroops !== undefined) postSnap[e.idx].troops = e.newTroops;
+        }
+      }
     }
-    if (planB && planB.type === 'attack') {
-      const { effects, log } = resolveSingleAttack(planB, postSnap, hunkered, rng);
+    if (secondAttack) {
+      const { effects, log } = resolveSingleAttack(secondAttack, postSnap, rng);
       attackLogs.push(log);
       allEffects = allEffects.concat(effects);
     }
@@ -1950,7 +2469,7 @@ function resolveAoeRound(planA, planB, rngSeed) {
 
   applyAoeEffects(allEffects);
 
-  return { attackLogs, claimLogs: claimRes.logs, hunkered, postSnap };
+  return { attackLogs, claimLogs: claimRes.logs, postSnap };
 }
 
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
@@ -1963,6 +2482,9 @@ function aoeStartRound() {
   aoeWorking = makeEmptyWorking();
   aoeRevealing = false;
   aoeHandoffPending = false;
+
+  // Turn limit check
+  if (aoeRound > aoeMaxRounds) { endGame(); return; }
 
   // Termination check (before plans this round): a player with 0 territories loses
   const p1Own = aoePlayerOwnedCount(1);
@@ -2025,17 +2547,18 @@ function buildPlanFromWorking(player) {
                    successDist: w.attackAutoBleed ? null : (w.attackSuccessManual || null) };
     return plan;
   }
-  if (w.action === 'hunker') {
-    if (w.hunkerTarget < 0) return null;
-    return { type: 'hunker', player, target: w.hunkerTarget };
-  }
   if (w.action === 'adjust') {
     if (w.adjustTransfers.length === 0) return null;
     return { type: 'adjust', player, transfers: w.adjustTransfers.slice() };
   }
   if (w.action === 'claim') {
-    if (w.claimSource < 0 || w.claimTarget < 0 || w.claimAmount < 1) return null;
-    return { type: 'claim', player, source: w.claimSource, target: w.claimTarget, amount: w.claimAmount };
+    if (w.claimTarget < 0) return null;
+    if (!Array.isArray(w.claimContribs) || w.claimContribs.length === 0) return null;
+    return {
+      type: 'claim', player,
+      target: w.claimTarget,
+      contributions: w.claimContribs.map(c => ({ source: c.source, amount: c.amount }))
+    };
   }
   return null;
 }
@@ -2050,16 +2573,13 @@ function validatePlan(plan) {
     if (!attackPlanValid(plan.player, plan.group, plan.defender)) return 'Invalid attack plan (adjacency/ownership).';
     return null;
   }
-  if (plan.type === 'hunker') {
-    if (!hunkerPlanValid(plan.player, plan.target)) return 'Invalid hunker target.';
-    return null;
-  }
   if (plan.type === 'adjust') {
     if (!adjustPlanValid(plan.player, plan.transfers)) return 'Invalid adjust transfers.';
     return null;
   }
   if (plan.type === 'claim') {
-    if (!claimPlanValid(plan.player, plan.source, plan.target, plan.amount)) return 'Invalid claim.';
+    if (!Array.isArray(plan.contributions)) return 'Invalid claim plan format.';
+    if (!claimPlanValid(plan.player, plan.target, plan.contributions)) return 'Invalid claim.';
     return null;
   }
   return 'Unknown action.';
@@ -2074,12 +2594,11 @@ function serializePlan(plan) {
     out.autoBleed = plan.autoBleed;
     out.failDist = plan.failDist ? { ...plan.failDist } : null;
     out.successDist = plan.successDist ? { ...plan.successDist } : null;
-  } else if (plan.type === 'hunker') {
-    out.target = plan.target;
   } else if (plan.type === 'adjust') {
     out.transfers = plan.transfers.map(t => ({ source: t.source, dest: t.dest, amount: t.amount }));
   } else if (plan.type === 'claim') {
-    out.source = plan.source; out.target = plan.target; out.amount = plan.amount;
+    out.target = plan.target;
+    out.contributions = plan.contributions.map(c => ({ source: c.source, amount: c.amount }));
   }
   return out;
 }
@@ -2161,35 +2680,138 @@ function aoeBeginReveal() {
 }
 
 function aoePerformResolutionWithSeed(rngSeed) {
-  // Draw plan intents for ~1.5s, then resolve+flash, then next round
   drawIntentArrows();
   setTimeout(() => {
     const planA = aoePlans[1], planB = aoePlans[2];
     const thisRound = aoeRound;
     const res = resolveAoeRound(planA, planB, rngSeed);
     flashOutcomes(res);
-    // Record round entry in battle log
     appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res));
     setTimeout(() => {
       clearIntentArrows();
       render();
-      // Termination: both pass in same round?
-      if (aoePassFlags[1] && aoePassFlags[2]) { endGame(); return; }
-      // Or someone has 0 territories?
-      if (aoePlayerOwnedCount(1) === 0 || aoePlayerOwnedCount(2) === 0) { endGame(); return; }
-      // Or both armies reduced to 1-troop garrisons (no productive moves remain)?
-      if (bothPlayersStuckAtOnes()) {
-        appendLogEntry({
-          title: null,
-          lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — counting phase begins.' }]
-        });
-        endGame();
-        return;
+      // Check for territory acquisition opportunities (successful attacks that wiped a defender)
+      const acquisitions = [];
+      for (const log of res.attackLogs) {
+        if (log.outcome === 'win' || log.outcome === 'coinWin') {
+          const attacker = log.player;
+          const defIdx = log.defender;
+          // Only offer if the defender is now gray (not claimed by someone else)
+          if (regions[defIdx].owner === 0) {
+            // Compute total remaining troops in attacker's group
+            let totalRemaining = 0;
+            for (const g of log.group) {
+              if (regions[g].owner === attacker) totalRemaining += regions[g].troops;
+            }
+            const maxPlace = Math.floor(totalRemaining / 2);
+            if (maxPlace > 0) {
+              acquisitions.push({ player: attacker, defIdx, group: log.group, maxPlace });
+            }
+          }
+        }
       }
-      // Otherwise next round
-      aoeStartRound();
+      if (acquisitions.length > 0) {
+        processAcquisitions(acquisitions, 0);
+      } else {
+        aoePostResolution();
+      }
     }, 1800);
   }, 1500);
+}
+
+function processAcquisitions(acquisitions, idx) {
+  if (idx >= acquisitions.length) { aoePostResolution(); return; }
+  const acq = acquisitions[idx];
+  if (mode === 'cpu' && acq.player !== myPlayer) {
+    const cpuPlace = Math.floor(acq.maxPlace / 2);
+    applyAcquisition(acq, cpuPlace);
+    processAcquisitions(acquisitions, idx + 1);
+  } else if (mode === 'online' && acq.player !== myPlayer) {
+    // In online mode, skip opponent's acquisitions (they handle it on their end)
+    // For simplicity, auto-apply nothing (opponent sees their own modal)
+    processAcquisitions(acquisitions, idx + 1);
+  } else {
+    openAcquisitionModal(acq, function(amount) {
+      applyAcquisition(acq, amount);
+      if (mode === 'online' && conn && conn.open) {
+        conn.send({ type: 'aoe-acquire', defIdx: acq.defIdx, amount: amount, player: acq.player });
+      }
+      processAcquisitions(acquisitions, idx + 1);
+    });
+  }
+}
+
+function applyAcquisition(acq, amount) {
+  if (amount <= 0) return;
+  regions[acq.defIdx].owner = acq.player;
+  regions[acq.defIdx].troops = amount;
+  // Deduct troops from attacking group (even split, biggest first)
+  const sorted = (acq.group || []).filter(g => regions[g] && regions[g].owner === acq.player)
+                          .sort((a, b) => regions[b].troops - regions[a].troops);
+  let remaining = amount;
+  let safety = 0;
+  while (remaining > 0 && sorted.length > 0 && safety < amount * sorted.length + 10) {
+    const g = sorted[safety % sorted.length];
+    if (regions[g].troops > 0) {
+      regions[g].troops--;
+      remaining--;
+    }
+    safety++;
+  }
+  render();
+}
+
+function openAcquisitionModal(acq, callback) {
+  let amt = Math.min(acq.maxPlace, Math.floor(acq.maxPlace / 2));
+  if (amt < 0) amt = 0;
+  function render2() {
+    const host = document.getElementById('aoeModalHost');
+    host.innerHTML =
+      '<div class="aoe-modal"><div class="aoe-modal-card">' +
+        '<h3>Territory Conquered! Acquire #' + (acq.defIdx+1) + '?</h3>' +
+        '<div class="modal-info">You eliminated region #' + (acq.defIdx+1) +
+          '. You may place up to <strong>' + acq.maxPlace + '</strong> troops there to claim it (deducted from your attacking territories), or place 0 to leave it gray.</div>' +
+        '<div class="checkbox-row">' +
+          '<input type="range" id="acqRange" min="0" max="' + acq.maxPlace + '" value="' + amt + '">' +
+          '<input type="number" id="acqNum" min="0" max="' + acq.maxPlace + '" value="' + amt +
+          '" style="width:64px; padding:6px 8px; text-align:center; background:rgba(0,0,0,.3); color:#fff; border:1px solid rgba(168,85,247,.3); border-radius:6px; font-family:inherit;font-size:13px;">' +
+        '</div>' +
+        '<div class="modal-foot">' +
+          '<button class="actionBtn primary" id="acqOk">Confirm</button>' +
+          '<button class="actionBtn" id="acqSkip">Skip (leave gray)</button>' +
+        '</div>' +
+      '</div></div>';
+    const rng = document.getElementById('acqRange');
+    const num = document.getElementById('acqNum');
+    rng.oninput = () => { amt = parseInt(rng.value, 10); num.value = amt; };
+    num.oninput = () => {
+      let v = parseInt(num.value, 10);
+      if (!Number.isFinite(v) || v < 0) v = 0;
+      if (v > acq.maxPlace) v = acq.maxPlace;
+      amt = v; rng.value = amt;
+    };
+    document.getElementById('acqOk').onclick = () => { closeAoeModal(); callback(amt); };
+    document.getElementById('acqSkip').onclick = () => { closeAoeModal(); callback(0); };
+  }
+  render2();
+}
+
+function aoePostResolution() {
+  // Termination: both pass in same round?
+  if (aoePassFlags[1] && aoePassFlags[2]) { endGame(); return; }
+  // Or someone has 0 territories?
+  if (aoePlayerOwnedCount(1) === 0 || aoePlayerOwnedCount(2) === 0) { endGame(); return; }
+  // Or both armies reduced to 1-troop garrisons?
+  if (bothPlayersStuckAtOnes()) {
+    appendLogEntry({
+      title: null,
+      lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — counting phase begins.' }]
+    });
+    endGame();
+    return;
+  }
+  // Otherwise next round
+  aoeStartRound();
 }
 
 /* ═══════════════════════════ AoE — ACTION-PICKER UI ═══════════════════════════ */
@@ -2205,9 +2827,6 @@ function setAoeUiAction(action) {
     // Submit immediately after a brief confirm
     openPassConfirmModal();
     return;
-  }
-  if (action === 'claim') {
-    aoeWorking.claimAmount = 1;
   }
   render();
 }
@@ -2260,12 +2879,6 @@ function onRegionClickAoe(idx) {
     flashMessage('Gray region — use Claim to take it.', 'warn'); return;
   }
 
-  if (act === 'hunker') {
-    if (r.owner !== player) { flashMessage('Pick one of your own territories.', 'warn'); return; }
-    aoeWorking.hunkerTarget = idx;
-    render(); return;
-  }
-
   if (act === 'adjust') {
     if (r.owner !== player) { flashMessage('Pick your own territory.', 'warn'); return; }
     // If we already have a source selected and click an adjacent friendly: dest
@@ -2296,28 +2909,49 @@ function onRegionClickAoe(idx) {
 
   if (act === 'claim') {
     if (r.owner === 0) {
-      // Pick gray target
-      if (aoeWorking.claimSource < 0) {
-        flashMessage('Pick one of your own territories adjacent to a gray first.', 'warn'); return;
+      // Toggle target off if clicked again
+      if (aoeWorking.claimTarget === idx) {
+        aoeWorking.claimTarget = -1;
+        aoeWorking.claimContribs = [];
+        aoeWorking.claimSourceSel = -1;
+        render(); return;
       }
-      if (!isAdjacent(aoeWorking.claimSource, idx)) {
-        flashMessage('Target gray must be adjacent to your selected source.', 'warn'); return;
+      // Switching target: clear existing contributions
+      if (aoeWorking.claimTarget >= 0 && aoeWorking.claimTarget !== idx) {
+        aoeWorking.claimContribs = [];
       }
       aoeWorking.claimTarget = idx;
-      openClaimAmountModal(aoeWorking.claimSource, idx);
-      return;
-    }
-    if (r.owner === player) {
-      // Pick source
-      if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
-      // Ensure adjacent to some gray
-      const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
-      if (!hasGrayAdj) { flashMessage('That territory has no adjacent gray.', 'warn'); return; }
-      aoeWorking.claimSource = idx;
-      aoeWorking.claimTarget = -1;
+      // If a source is queued and adjacent to this gray, open the amount modal immediately
+      if (aoeWorking.claimSourceSel >= 0 && isAdjacent(aoeWorking.claimSourceSel, idx)) {
+        const src = aoeWorking.claimSourceSel;
+        openClaimAmountModal(src, idx);
+        return;
+      }
       render(); return;
     }
-    flashMessage('Click your own territory, then an adjacent gray.', 'warn'); return;
+    if (r.owner === player) {
+      // Click own territory: toggle remove if already in contributions
+      const existingIdx = aoeWorking.claimContribs.findIndex(c => c.source === idx);
+      if (existingIdx >= 0) {
+        aoeWorking.claimContribs.splice(existingIdx, 1);
+        render(); return;
+      }
+      if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops (cap is floor/2).', 'warn'); return; }
+      if (aoeWorking.claimTarget < 0) {
+        // No target yet — queue this source and require an adjacent gray
+        const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
+        if (!hasGrayAdj) { flashMessage('That territory has no adjacent gray.', 'warn'); return; }
+        aoeWorking.claimSourceSel = idx;
+        render(); return;
+      }
+      if (!isAdjacent(idx, aoeWorking.claimTarget)) {
+        flashMessage('Source must be adjacent to the selected gray target.', 'warn'); return;
+      }
+      aoeWorking.claimSourceSel = idx;
+      openClaimAmountModal(idx, aoeWorking.claimTarget);
+      return;
+    }
+    flashMessage('Click your own territory or an adjacent gray.', 'warn'); return;
   }
 }
 
@@ -2330,16 +2964,9 @@ function closeAoeModal() {
 function openAttackConfirmModal(G, defenderIdx) {
   const def = regions[defenderIdx];
   const pwr = aoePower(G);
-  // Compute projected outcomes for both cases (defender hunker / no hunker).
-  const defenseNoHunk = def.troops;
-  const hSumIfHunk = hunkerSum(defenderIdx, regions);
-  const defenseIfHunk = Math.ceil((def.troops + hSumIfHunk) / 2);
+  const defenseValue = def.troops;
   const successAttrition = Math.ceil(def.troops / 2);
-  const successAttritionHunk = Math.ceil(hSumIfHunk / 2);
   const failDmg = Math.ceil(def.troops / 2);
-  const failDmgHunk = Math.ceil(hSumIfHunk / 2);
-  // Distribution presets (manual mode targets the no-hunker totals; if the
-  // defender actually hunkers, auto-bleed handles the scaled-up damage).
   let autoBleed = true;
   let successManual = autoBleedDist(G, successAttrition, regions, false);
   let failManual = autoBleedDist(G, failDmg, regions, true);
@@ -2351,11 +2978,10 @@ function openAttackConfirmModal(G, defenderIdx) {
   function render2() {
     const host = document.getElementById('aoeModalHost');
     let projection;
-    const isWeak = (pwr.total <= defenseNoHunk) && !isOneVsOneCoin();
-    if (pwr.total > defenseIfHunk) projection = 'win even if defender hunkers';
-    else if (pwr.total > defenseNoHunk) projection = 'win unless defender hunkers (defense → ' + defenseIfHunk + ')';
-    else if (isOneVsOneCoin()) projection = '50/50 coin flip (unless defender hunkers)';
-    else projection = '<span class="weak">attack will fail</span> — used as a "softening" strike to bleed the defender (defender will still take ' + Math.floor(defenseNoHunk/2) + ' damage)';
+    const isWeak = (pwr.total <= defenseValue) && !isOneVsOneCoin();
+    if (pwr.total > defenseValue) projection = 'win';
+    else if (isOneVsOneCoin()) projection = '50/50 coin flip';
+    else projection = '<span class="weak">attack will fail</span> — used as a "softening" strike to bleed the defender (defender will still take ' + Math.floor(defenseValue/2) + ' damage)';
 
     const successRows = G.map(idx => {
       const v = successManual[idx] || 0;
@@ -2375,11 +3001,11 @@ function openAttackConfirmModal(G, defenderIdx) {
         '<h3>Attack Region #' + (defenderIdx+1) + ' — defender: ' + def.troops + '</h3>' +
         '<div class="modal-info">' +
           'Attack power: <strong' + (isWeak ? ' class="weak"' : '') + '>' + pwr.total.toFixed(1) + '</strong> ' +
-          'vs Defense: <strong>' + defenseNoHunk + '</strong> ' +
+          'vs Defense: <strong>' + defenseValue + '</strong> ' +
           '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span>.<br>' +
           'Projected: ' + projection + '.<br>' +
-          'On success: attackers lose <strong>' + successAttrition + '</strong> total (or <strong>' + successAttritionHunk + '</strong> if defender hunkers — digging through fortifications hurts).<br>' +
-          'On failure: attackers lose <strong>' + failDmg + '</strong> total (or <strong>' + failDmgHunk + '</strong> if defender hunkers); defender takes minor damage.<br>' +
+          'On success: attackers lose <strong>' + successAttrition + '</strong> total attrition.<br>' +
+          'On failure: attackers lose <strong>' + failDmg + '</strong> total; defender takes minor damage.<br>' +
           '<em>If the opponent counter-attacks into this group, both sides will take damage and no territory changes hands.</em>' +
         '</div>' +
         '<div class="checkbox-row">' +
@@ -2485,20 +3111,34 @@ function openClaimAmountModal(sourceIdx, targetIdx) {
   const src = regions[sourceIdx];
   const cap = Math.floor(src.troops / 2);
   if (cap < 1) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
-  let amt = Math.max(1, Math.min(cap, Math.floor(src.troops / 2)));
+  // If this source already has a pending contribution, prefill its current amount.
+  const existing = aoeWorking.claimContribs.find(c => c.source === sourceIdx);
+  let amt = existing ? Math.max(1, Math.min(cap, existing.amount))
+                     : Math.max(1, Math.min(cap, Math.floor(src.troops / 2)));
   function render2() {
     const host = document.getElementById('aoeModalHost');
+    const otherTotal = aoeWorking.claimContribs
+      .filter(c => c.source !== sourceIdx)
+      .reduce((s, c) => s + c.amount, 0);
+    const listHtml = aoeWorking.claimContribs.length === 0
+      ? ''
+      : '<div class="modal-info">Already added: ' +
+        aoeWorking.claimContribs.map(c => '#' + (c.source+1) + ' (' + c.amount + ')').join(', ') +
+        ' (sum ' + aoeWorking.claimContribs.reduce((s, c) => s + c.amount, 0) + ').</div>';
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
-        '<h3>Claim Gray #' + (targetIdx+1) + ' from #' + (sourceIdx+1) + '</h3>' +
-        '<div class="modal-info">Source #' + (sourceIdx+1) + ' has ' + src.troops + ' troops.<br>' +
-          'Max send = floor(' + src.troops + '/2) = ' + cap + '. If opponent also claims, more troops wins.</div>' +
+        '<h3>' + (existing ? 'Edit contribution' : 'Add contribution') + ': #' + (sourceIdx+1) + ' → gray #' + (targetIdx+1) + '</h3>' +
+        '<div class="modal-info">Source #' + (sourceIdx+1) + ' has ' + src.troops + ' troops. ' +
+          'Max = floor(' + src.troops + '/2) = ' + cap + '. ' +
+          'Power = sum of contributions; larger total wins a contested claim.</div>' +
+        listHtml +
         '<div class="checkbox-row">' +
           '<input type="range" id="clmRange" min="1" max="' + cap + '" value="' + amt + '">' +
           '<input type="number" id="clmNum" min="1" max="' + cap + '" value="' + amt + '" style="width:64px; padding:6px 8px; text-align:center; background:rgba(0,0,0,.3); color:#fff; border:1px solid rgba(168,85,247,.3); border-radius:6px; font-family:inherit;font-size:13px;">' +
         '</div>' +
+        '<div class="modal-info">After adding: target #' + (targetIdx+1) + ' will receive up to <strong>' + (otherTotal + amt) + '</strong> troops total (uncontested).</div>' +
         '<div class="modal-foot">' +
-          '<button class="actionBtn primary" id="clmOk">Set Claim</button>' +
+          '<button class="actionBtn primary" id="clmOk">' + (existing ? 'Update' : 'Add Contribution') + '</button>' +
           '<button class="actionBtn" id="clmCancel">Cancel</button>' +
         '</div>' +
       '</div></div>';
@@ -2507,11 +3147,17 @@ function openClaimAmountModal(sourceIdx, targetIdx) {
     const sync = (v) => { v = Math.max(1, Math.min(cap, v|0)); amt = v; rng.value = v; num.value = v; };
     rng.oninput = () => sync(parseInt(rng.value, 10));
     num.oninput = () => sync(parseInt(num.value, 10));
-    document.getElementById('clmCancel').onclick = closeAoeModal;
-    document.getElementById('clmOk').onclick = () => {
-      aoeWorking.claimAmount = amt;
+    document.getElementById('clmCancel').onclick = () => {
+      aoeWorking.claimSourceSel = -1;
       closeAoeModal();
-      flashMessage('Claim plan ready. Click Submit Plan.', 'good');
+      render();
+    };
+    document.getElementById('clmOk').onclick = () => {
+      const i = aoeWorking.claimContribs.findIndex(c => c.source === sourceIdx);
+      if (i >= 0) aoeWorking.claimContribs[i] = { source: sourceIdx, amount: amt };
+      else aoeWorking.claimContribs.push({ source: sourceIdx, amount: amt });
+      aoeWorking.claimSourceSel = -1;
+      closeAoeModal();
       render();
     };
   }
@@ -2540,6 +3186,7 @@ function openPassConfirmModal() {
 
 /* ═══════════════════════════ AoE — REVEAL VISUALS ═══════════════════════════ */
 function regionCenterPct(r) {
+  if (typeof r.cx === 'number') return { cx: r.cx, cy: r.cy };
   return { cx: ((r.x + r.w/2)/gridSize)*100, cy: ((r.y + r.h/2)/gridSize)*100 };
 }
 function clearIntentArrows() {
@@ -2569,7 +3216,7 @@ function drawIntentArrows() {
     } else if (plan.type === 'adjust') {
       for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
     } else if (plan.type === 'claim') {
-      draw(plan.source, plan.target, '#86efac', 'arrowhead-green');
+      for (const c of plan.contributions) draw(c.source, plan.target, '#86efac', 'arrowhead-green');
     }
   };
   showPlan(aoePlans[1]); showPlan(aoePlans[2]);
@@ -2649,13 +3296,6 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
     }
     const p = plan.player;
     const cls = classOfPlayer(p);
-    if (plan.type === 'hunker') {
-      const t = plan.target;
-      const attackedHere = res.attackLogs.some(l => l.defender === t);
-      let txt = '<strong>' + playerName(p) + '</strong> hunkered ' + regionRef(t) + '.';
-      if (!attackedHere) txt += ' <span class="neutral">(not attacked → action wasted)</span>';
-      return [{ kind: cls, html: txt }];
-    }
     if (plan.type === 'adjust') {
       const moves = plan.transfers.map(t =>
         regionRef(t.source) + '→' + regionRef(t.dest) + ' (' + t.amount + ')'
@@ -2663,9 +3303,12 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
       return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> adjusted: ' + (moves || '(no transfers)') + '.' }];
     }
     if (plan.type === 'claim') {
-      // Find this player's claim log entry. Two log shapes possible:
-      //   uncontested: { player, source, target, amount, outcome:'win', uncontested:true }
-      //   contested:   { playerA, sourceA, amountA, playerB, sourceB, amountB, target, outcome:'win-A'|'win-B'|'stalemate' }
+      // Multi-source claim log shapes:
+      //   uncontested: { player, contributions, target, amount, outcome:'win', uncontested:true }
+      //   contested:   { playerA, contributionsA, powerA, playerB, contributionsB, powerB, target,
+      //                  outcome:'win-A'|'win-B'|'stalemate', winner?, pwrWinner?, pwrLoser?, damageLoser?, damageA?, damageB? }
+      const contribStr = plan.contributions.map(c => regionRef(c.source) + ' (' + c.amount + ')').join(', ');
+      const totalSent = plan.contributions.reduce((s, c) => s + c.amount, 0);
       let outcomeTxt = '';
       const myClaim = res.claimLogs.find(c =>
         (c.player === p && c.target === plan.target) ||
@@ -2673,26 +3316,26 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
       );
       if (myClaim) {
         if (myClaim.uncontested && myClaim.outcome === 'win') {
-          outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + plan.amount + ' troops landed.';
+          outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + totalSent + ' troops landed.';
         } else if (myClaim.outcome === 'win-A' || myClaim.outcome === 'win-B') {
-          const winner = myClaim.outcome === 'win-A' ? myClaim.playerA : myClaim.playerB;
-          if (winner === p) {
-            const oppAmt = myClaim.outcome === 'win-A' ? myClaim.amountB : myClaim.amountA;
-            const landed = plan.amount - Math.ceil(oppAmt / 2);
-            outcomeTxt = ' → <span style="color:#86efac;">captured</span> after clash (sent ' + plan.amount + ', took ' +
-                         Math.ceil(oppAmt / 2) + ' damage; landed with ' + landed + ' troops).';
+          if (myClaim.winner === p) {
+            const lossDmg = Math.ceil(myClaim.pwrLoser / 2);
+            const landed = Math.max(0, totalSent - lossDmg);
+            outcomeTxt = ' → <span style="color:#86efac;">captured</span> after clash (sent ' + totalSent +
+                         ', took ' + lossDmg + ' damage; landed with ' + landed + ' troops).';
           } else {
             outcomeTxt = ' → <span style="color:#fca5a5;">outpowered</span> by opponent\'s claim.';
           }
         } else if (myClaim.outcome === 'stalemate') {
-          outcomeTxt = ' → <span style="color:#c4b5fd;">stalemate</span>: both forces lost ' + Math.ceil(plan.amount/2) +
-                       ' troops, gray remains.';
+          const halfTotal = Math.ceil(totalSent / 2);
+          outcomeTxt = ' → <span style="color:#c4b5fd;">stalemate</span>: contributions took ' + halfTotal +
+                       ' total damage, gray remains.';
         }
       }
       return [{
         kind: cls,
-        html: '<strong>' + playerName(p) + '</strong> sent ' + plan.amount +
-              ' from ' + regionRef(plan.source) + ' to claim gray ' + regionRef(plan.target) + outcomeTxt
+        html: '<strong>' + playerName(p) + '</strong> sent ' + totalSent +
+              ' troops from ' + contribStr + ' to claim gray ' + regionRef(plan.target) + outcomeTxt
       }];
     }
     if (plan.type === 'attack') {
@@ -2718,11 +3361,10 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
       let outcomeLine;
       if (attackLog.outcome === 'win') {
         outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
-                      ' wiped. Attackers lost <strong>' + totLoss + '</strong>' +
-                      (attackLog.hunkered ? ' (hunkered: hSum=' + attackLog.hunkerSum + ', cost ½·hSum)' : '') + '.';
+                      ' wiped. Attackers lost <strong>' + totLoss + '</strong>.';
       } else if (attackLog.outcome === 'fail') {
         outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
-                      ' vs defense ' + attackLog.defense + (attackLog.hunkered ? ' [hunkered]' : '') +
+                      ' vs defense ' + attackLog.defense +
                       '). Attackers lost <strong>' + (attackLog.attackerDmg || totLoss) + '</strong>; defender lost ' +
                       (attackLog.defenderDmg || 0) + '.';
       } else if (attackLog.outcome === 'coinWin') {
@@ -2777,13 +3419,6 @@ function flashOutcomes(res) {
     else cell.classList.add('flash-fail');
     setTimeout(() => { cell.classList.remove('flash-claim','flash-fail'); }, 1400);
   }
-  // Hunker shield pulse
-  for (const idx of res.hunkered) {
-    const cell = document.querySelector('#mapContainer .region[data-idx="' + idx + '"]');
-    if (!cell) continue;
-    cell.classList.add('flash-claim');
-    setTimeout(() => cell.classList.remove('flash-claim'), 1200);
-  }
 }
 
 /* ═══════════════════════════ AoE — FOG OF WAR ═══════════════════════════ */
@@ -2825,7 +3460,6 @@ function render() {
 
   // Working-state highlights
   let attackHighlights = null;
-  let hunkerHighlight = -1;
   let adjustHighlights = null;
   let claimHighlights = null;
   if (aoeUiVisible && aoeWorking.action) {
@@ -2834,8 +3468,6 @@ function render() {
         group: aoeWorking.attackGroup,
         targets: computeAttackTargets(planner, Array.from(aoeWorking.attackGroup))
       };
-    } else if (aoeWorking.action === 'hunker') {
-      hunkerHighlight = aoeWorking.hunkerTarget;
     } else if (aoeWorking.action === 'adjust') {
       adjustHighlights = {
         srcSel: aoeWorking.adjustSourceSel,
@@ -2847,10 +3479,18 @@ function render() {
       };
     } else if (aoeWorking.action === 'claim') {
       claimHighlights = {
-        src: aoeWorking.claimSource,
+        srcSel: aoeWorking.claimSourceSel,
         target: aoeWorking.claimTarget,
-        validTargets: aoeWorking.claimSource >= 0
-          ? new Set(regions[aoeWorking.claimSource].neighbors.filter(n => regions[n].owner === 0))
+        contribSrcs: new Set((aoeWorking.claimContribs || []).map(c => c.source)),
+        // If target chosen: highlight adjacent own territories that haven't contributed yet.
+        validSources: aoeWorking.claimTarget >= 0
+          ? new Set(regions[aoeWorking.claimTarget].neighbors.filter(n =>
+              regions[n] && regions[n].owner === planner &&
+              !(aoeWorking.claimContribs || []).some(c => c.source === n)))
+          : null,
+        // If a source is queued without target: highlight adjacent grays.
+        validTargets: (aoeWorking.claimSourceSel >= 0 && aoeWorking.claimTarget < 0)
+          ? new Set(regions[aoeWorking.claimSourceSel].neighbors.filter(n => regions[n].owner === 0))
           : null
       };
     }
@@ -2859,13 +3499,13 @@ function render() {
   cells.forEach(el => {
     const idx = parseInt(el.dataset.idx, 10);
     const r = regions[idx];
-    const tinyClass = (r.w * r.h <= 2) ? ' tiny' : '';
+    const tinyClass = r.tiny ? ' tiny' : '';
     let cls = 'region' + tinyClass;
 
     // Fog
     if (fogViewer !== null && !regionVisibleTo(idx, fogViewer)) {
       cls += ' fogged';
-      el.className = cls;
+      el.setAttribute('class', cls);
       el.querySelector('.region-troops').textContent = '';
       return;
     }
@@ -2898,8 +3538,6 @@ function render() {
           cls += info.beatable ? ' beatable' : ' unbeatable';
           clickable = true;
         }
-      } else if (hunkerHighlight !== -1 || aoeWorking.action === 'hunker') {
-        if (r.owner === planner) { clickable = true; if (idx === hunkerHighlight) cls += ' hunkerSel'; }
       } else if (adjustHighlights) {
         if (r.owner === planner) clickable = true;
         if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
@@ -2907,12 +3545,18 @@ function render() {
         if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
         if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
       } else if (claimHighlights) {
-        if (r.owner === planner) { clickable = true; if (idx === claimHighlights.src) cls += ' claimSource'; }
+        if (r.owner === planner) {
+          clickable = true;
+          if (idx === claimHighlights.srcSel) cls += ' claimSource';
+          if (claimHighlights.contribSrcs.has(idx)) cls += ' adjustAssignedSrc';
+          if (claimHighlights.validSources && claimHighlights.validSources.has(idx)) cls += ' adjustDest';
+        }
         if (r.owner === 0) {
-          if (claimHighlights.validTargets && claimHighlights.validTargets.has(idx)) {
+          if (idx === claimHighlights.target) { cls += ' claimTargetCand'; clickable = true; }
+          else if (claimHighlights.validTargets && claimHighlights.validTargets.has(idx)) {
             cls += ' claimTargetCand'; clickable = true;
-          } else if (claimHighlights.src < 0) {
-            // Encourage choosing source first; still clickable to hint
+          } else {
+            clickable = true;
           }
         }
       } else {
@@ -2920,13 +3564,9 @@ function render() {
       }
     }
 
-    // Hunker glyph if the live region is hunkered (only shown during reveal)
-    if (aoeRevealing && aoePlans[1] && aoePlans[1].type === 'hunker' && aoePlans[1].target === idx) cls += ' hunkered';
-    if (aoeRevealing && aoePlans[2] && aoePlans[2].type === 'hunker' && aoePlans[2].target === idx) cls += ' hunkered';
-
     if (clickable) cls += ' clickable';
-    el.className = cls;
-    el.title = '';
+    el.setAttribute('class', cls);
+    if (el.title !== undefined) el.title = '';
     const tEl = el.querySelector('.region-troops');
     if (r.owner === -1 || r.owner === 0) tEl.textContent = '';
     else tEl.textContent = (r.troops > 0 ? r.troops : '');
@@ -2980,7 +3620,7 @@ function render() {
         else if (mode === 'cpu') ti.textContent = (p === myPlayer ? 'Your plan' : 'CPU planning…');
         else ti.textContent = (p === myPlayer ? 'Your plan' : 'Opponent planning…');
       }
-      pl.textContent = 'Phase 2 · Battle — Round ' + Math.max(1, aoeRound) + (fogOfWar ? ' · Fog On' : '');
+      pl.textContent = 'Phase 2 · Battle — Round ' + Math.max(1, aoeRound) + '/' + aoeMaxRounds + (fogOfWar ? ' · Fog On' : '');
     } else if (phase === 'attack') {
       ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2');
       ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
@@ -3004,7 +3644,6 @@ function render() {
     bar.classList.remove('hidden');
     const w = aoeWorking;
     document.getElementById('aoeAttackBtn').classList.toggle('active', w.action === 'attack');
-    document.getElementById('aoeHunkerBtn').classList.toggle('active', w.action === 'hunker');
     document.getElementById('aoeAdjustBtn').classList.toggle('active', w.action === 'adjust');
     document.getElementById('aoeClaimBtn').classList.toggle('active', w.action === 'claim');
     document.getElementById('aoePassBtn').classList.toggle('active', w.action === 'pass');
@@ -3012,7 +3651,7 @@ function render() {
     // Banner
     let html = '';
     if (!w.action) {
-      html = '<div class="sub">Pick one action: ⚔ Attack, 🛡 Hunker, ↔ Adjust troops, ▣ Claim a gray, or ⏭ Pass.</div>';
+      html = '<div class="sub">Pick one action: ⚔ Attack, ↔ Adjust troops, ▣ Claim a gray, or ⏭ Pass.</div>';
     } else if (w.action === 'attack') {
       const G = Array.from(w.attackGroup);
       if (G.length === 0) {
@@ -3037,17 +3676,6 @@ function render() {
         if (w.attackDefender >= 0) html += '<div class="sub">Defender selected: #' + (w.attackDefender+1) + '. Re-open dialog by clicking the defender again.</div>';
         else html += '<div class="sub">Click an adjacent enemy region as target.</div>';
       }
-    } else if (w.action === 'hunker') {
-      if (w.hunkerTarget < 0) {
-        html = '<div class="sub">Click one of your territories to hunker. If attacked, defense inflates.</div>';
-      } else {
-        const hSum = hunkerSum(w.hunkerTarget, regions);
-        const defv = hunkerDefenseValue(w.hunkerTarget, regions);
-        const failD = Math.ceil(hSum / 2);
-        html = '<div>Hunker on #' + (w.hunkerTarget+1) + ' (' + regions[w.hunkerTarget].troops + 't): ' +
-               'defense → <span class="pwr">' + defv + '</span></div>' +
-               '<div class="sub">Failure damage to attackers: ' + failD + '. Only applies if attacked this round.</div>';
-      }
     } else if (w.action === 'adjust') {
       const n = w.adjustTransfers.length;
       if (n === 0 && w.adjustSourceSel < 0) {
@@ -3059,13 +3687,19 @@ function render() {
         else html += '<div class="sub">Add more transfers or Submit Plan.</div>';
       }
     } else if (w.action === 'claim') {
-      if (w.claimSource < 0) {
-        html = '<div class="sub">Click your own territory adjacent to a gray (≥ 2 troops).</div>';
+      const contribs = w.claimContribs || [];
+      const total = contribs.reduce((s, c) => s + c.amount, 0);
+      if (w.claimTarget < 0 && contribs.length === 0 && w.claimSourceSel < 0) {
+        html = '<div class="sub">Click an adjacent gray to set the target, then click your own territories (≥ 2 troops each) to stack contributions. Max per source = floor(troops/2).</div>';
       } else if (w.claimTarget < 0) {
-        html = '<div class="sub">Source #' + (w.claimSource+1) + ' (' + regions[w.claimSource].troops + 't). Click an adjacent gray.</div>';
+        html = '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to set the target.</div>';
+      } else if (contribs.length === 0) {
+        html = '<div>Claim target: gray #' + (w.claimTarget+1) + '.</div>' +
+               '<div class="sub">Click any adjacent own territory (≥ 2 troops) to add a contribution.</div>';
       } else {
-        html = '<div>Claim plan: #' + (w.claimSource+1) + ' sends <span class="pwr">' + w.claimAmount + '</span> to gray #' + (w.claimTarget+1) + '.</div>' +
-               '<div class="sub">If opponent claims too, larger force wins (stalemate if equal).</div>';
+        const list = contribs.map(c => '#' + (c.source+1) + ' (' + c.amount + ')').join(', ');
+        html = '<div>Claim gray #' + (w.claimTarget+1) + ' with total <span class="pwr">' + total + '</span> troops</div>' +
+               '<div class="sub">From ' + list + '. Click another adjacent own territory to stack more, or click a contributor to remove it.</div>';
       }
     } else if (w.action === 'pass') {
       html = '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
@@ -3079,9 +3713,8 @@ function render() {
     const clearBtn = document.getElementById('aoeClearBtn');
     const canSubmit = (w.action === 'pass')
       || (w.action === 'attack' && w.attackGroup.size > 0 && w.attackDefender >= 0)
-      || (w.action === 'hunker' && w.hunkerTarget >= 0)
       || (w.action === 'adjust' && w.adjustTransfers.length > 0)
-      || (w.action === 'claim'  && w.claimSource >= 0 && w.claimTarget >= 0 && w.claimAmount >= 1);
+      || (w.action === 'claim'  && w.claimTarget >= 0 && (w.claimContribs || []).length > 0);
     submitBtn.disabled = !canSubmit;
     clearBtn.style.display = w.action ? '' : 'none';
   } else if (gameMode === 'aoe' && phase === 'battle') {
@@ -3172,7 +3805,7 @@ function cpuDeploy() {
         else if (nb.owner === me) ownAdj++;
       }
       let s = openAdj * 0.5 + ownAdj * 0.2 + (cpuDifficulty === 'hard' ? oppAdj * 1.2 : oppAdj * 0.4);
-      s += r.w * r.h * 0.05; s += Math.random() * 0.2;
+      s += (r.w * r.h / (gridSize * gridSize)) * 5; s += Math.random() * 0.2;
       if (s > bestScore) { bestScore = s; best = r; }
     }
     chosen = best || empties[0];
@@ -3305,29 +3938,19 @@ function enumerateAdjustCandidates(player) {
   return out;
 }
 
-function enumerateHunkerCandidates(player) {
-  const out = [];
-  for (const r of regions) {
-    if (r.owner !== player) continue;
-    out.push({ target: r.id });
-  }
-  return out;
-}
-
 function cpuTurnAoeBattle(player, difficulty) {
   if (phase !== 'battle' || aoeSubmitted[player] || aoeRevealing) return;
   let plan = null;
   const attacks = enumerateAttackCandidates(player);
   const claims = enumerateClaimCandidates(player);
   const adjusts = enumerateAdjustCandidates(player);
-  const hunkers = enumerateHunkerCandidates(player);
 
   if (difficulty === 'easy') {
-    plan = randomEasyPlan(player, attacks, claims, adjusts, hunkers);
+    plan = randomEasyPlan(player, attacks, claims, adjusts);
   } else if (difficulty === 'medium') {
-    plan = mediumPlan(player, attacks, claims, adjusts, hunkers);
+    plan = mediumPlan(player, attacks, claims, adjusts);
   } else {
-    plan = hardPlan(player, attacks, claims, adjusts, hunkers);
+    plan = hardPlan(player, attacks, claims, adjusts);
   }
   if (!plan) plan = { type: 'pass', player };
   aoePlans[player] = plan;
@@ -3337,12 +3960,11 @@ function cpuTurnAoeBattle(player, difficulty) {
   aoeAfterSubmit();
 }
 
-function randomEasyPlan(player, attacks, claims, adjusts, hunkers) {
+function randomEasyPlan(player, attacks, claims, adjusts) {
   const opts = [];
   if (attacks.length) opts.push('attack');
   if (claims.length)  opts.push('claim');
   if (adjusts.length) opts.push('adjust');
-  if (hunkers.length) opts.push('hunker');
   opts.push('pass');
   const pick = opts[Math.floor(Math.random() * opts.length)];
   if (pick === 'attack') {
@@ -3352,16 +3974,12 @@ function randomEasyPlan(player, attacks, claims, adjusts, hunkers) {
   if (pick === 'claim') {
     const c = claims[Math.floor(Math.random() * claims.length)];
     const amt = Math.max(1, Math.floor(c.cap / 2));
-    return { type: 'claim', player, source: c.source, target: c.target, amount: amt };
+    return { type: 'claim', player, target: c.target, contributions: [{ source: c.source, amount: amt }] };
   }
   if (pick === 'adjust') {
     const c = adjusts[Math.floor(Math.random() * adjusts.length)];
     const amt = Math.max(1, Math.floor(c.cap / 2));
     return { type: 'adjust', player, transfers: [{ source: c.source, dest: c.dest, amount: amt }] };
-  }
-  if (pick === 'hunker') {
-    const c = hunkers[Math.floor(Math.random() * hunkers.length)];
-    return { type: 'hunker', player, target: c.target };
   }
   return { type: 'pass', player };
 }
@@ -3386,17 +4004,42 @@ function bestAttack(attacks, player) {
 }
 
 function bestClaim(claims, player) {
-  // Prefer high-area gray adjacent to many friendlies; score = area * 2 + adjFriendlies
-  let best = null, bestS = -Infinity;
+  // Group flat (source,target,cap) candidates by target → list of source options.
+  const byTarget = new Map();
   for (const c of claims) {
-    const t = regions[c.target];
-    let adj = 0; for (const nid of t.neighbors) if (regions[nid].owner === player) adj++;
-    const s = t.w * t.h * 1.5 + adj * 0.5 - 0.1 * Math.abs(c.cap - 3);
-    if (s > bestS) { bestS = s; best = c; }
+    if (!byTarget.has(c.target)) byTarget.set(c.target, []);
+    byTarget.get(c.target).push(c);
   }
-  if (!best) return null;
-  const amt = Math.max(1, Math.min(best.cap, Math.ceil(best.cap * 0.8)));
-  return { plan: { type: 'claim', player, source: best.source, target: best.target, amount: amt }, score: bestS };
+  let bestTarget = -1, bestS = -Infinity, bestContribs = null;
+  // Difficulty caps how many sources we stack. Multi-source helps win contested
+  // grays and lets us land more troops on uncontested ones.
+  const maxK = cpuDifficulty === 'hard' ? 3
+            : cpuDifficulty === 'medium' ? 2
+            : 1;
+  for (const [tIdx, opts] of byTarget) {
+    const t = regions[tIdx];
+    let adjFriendly = 0;
+    for (const nid of t.neighbors) if (regions[nid] && regions[nid].owner === player) adjFriendly++;
+    const sorted = opts.slice().sort((a, b) => b.cap - a.cap);
+    const k = Math.min(sorted.length, maxK);
+    const chosen = sorted.slice(0, k);
+    const totalCap = chosen.reduce((s, o) => s + o.cap, 0);
+    // Score: prefer big grays, more friendlies, more stack potential.
+    const s = t.w * t.h * 1.5 + adjFriendly * 0.5 + totalCap * 0.4 + chosen.length * 0.3;
+    if (s > bestS) {
+      bestS = s;
+      bestTarget = tIdx;
+      bestContribs = chosen.map(o => ({
+        source: o.source,
+        amount: Math.max(1, Math.min(o.cap, Math.ceil(o.cap * 0.8)))
+      }));
+    }
+  }
+  if (bestTarget < 0 || !bestContribs || bestContribs.length === 0) return null;
+  return {
+    plan: { type: 'claim', player, target: bestTarget, contributions: bestContribs },
+    score: bestS
+  };
 }
 
 function bestAdjust(adjusts, player) {
@@ -3415,45 +4058,21 @@ function bestAdjust(adjusts, player) {
   return { plan: { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }] }, score: bestS };
 }
 
-function bestHunker(hunkers, player) {
-  // Hunker only if a friendly is adjacent to a strong enemy stack
-  const opp = otherPlayer(player);
-  let best = null, bestS = -Infinity;
-  for (const c of hunkers) {
-    const r = regions[c.target];
-    let threat = 0;
-    for (const nid of r.neighbors) {
-      const nb = regions[nid];
-      if (!nb || nb.owner !== opp) continue;
-      threat += nb.troops;
-    }
-    if (threat <= r.troops) continue;
-    const s = threat - r.troops;
-    if (s > bestS) { bestS = s; best = c; }
-  }
-  if (!best || bestS <= 2) return null;
-  return { plan: { type: 'hunker', player, target: best.target }, score: bestS };
-}
-
-function mediumPlan(player, attacks, claims, adjusts, hunkers) {
+function mediumPlan(player, attacks, claims, adjusts) {
   const bA = bestAttack(attacks, player);
   if (bA && bA.score > 0) return bA.plan;
   const bC = bestClaim(claims, player);
   if (bC) return bC.plan;
   const bAd = bestAdjust(adjusts, player);
   if (bAd) return bAd.plan;
-  const bH = bestHunker(hunkers, player);
-  if (bH) return bH.plan;
   return { type: 'pass', player };
 }
 
-function hardPlan(player, attacks, claims, adjusts, hunkers) {
-  // 1-ply opponent simulation: guess top 3 opponent attacks/claims and pick our plan that fares best.
+function hardPlan(player, attacks, claims, adjusts) {
   const opp = otherPlayer(player);
   const oppAttacks = enumerateAttackCandidates(opp);
   const oppClaims = enumerateClaimCandidates(opp);
   const oppAdjusts = enumerateAdjustCandidates(opp);
-  const oppHunkers = enumerateHunkerCandidates(opp);
   const oppCands = [];
   oppCands.push({ type: 'pass', player: opp });
   for (const a of oppAttacks.slice(0, 3)) {
@@ -3461,15 +4080,13 @@ function hardPlan(player, attacks, claims, adjusts, hunkers) {
   }
   for (const c of oppClaims.slice(0, 2)) {
     const amt = Math.max(1, Math.ceil(c.cap * 0.8));
-    oppCands.push({ type: 'claim', player: opp, source: c.source, target: c.target, amount: amt });
+    oppCands.push({ type: 'claim', player: opp, target: c.target, contributions: [{ source: c.source, amount: amt }] });
   }
 
-  // Our candidates: medium-like top plans
   const ourCands = [];
   const bA = bestAttack(attacks, player); if (bA) ourCands.push(bA.plan);
   const bC = bestClaim(claims, player);   if (bC) ourCands.push(bC.plan);
   const bAd = bestAdjust(adjusts, player);if (bAd) ourCands.push(bAd.plan);
-  const bH = bestHunker(hunkers, player); if (bH) ourCands.push(bH.plan);
   ourCands.push({ type: 'pass', player });
 
   // Score each our-cand by simulating against opp-cands (average outcome)
@@ -3544,7 +4161,33 @@ function showDisconnectNotice() {
 function serializeMap(map) {
   return {
     gridSize: map.gridSize,
-    regions: map.regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h, neighbors: r.neighbors.slice() }))
+    regions: map.regions.map(r => {
+      const o = {
+        id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
+        neighbors: r.neighbors.slice()
+      };
+      if (r.isGeo) {
+        o.isGeo = true;
+        o.tiny = !!r.tiny;
+        o.cx = +r.cx.toFixed(3);
+        o.cy = +r.cy.toFixed(3);
+        o.poly = r.poly.map(p => [+p[0].toFixed(3), +p[1].toFixed(3)]);
+      }
+      return o;
+    })
+  };
+}
+function deserializeMap(d) {
+  return {
+    gridSize: d.gridSize,
+    regions: d.regions.map(r => ({
+      id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
+      cx: r.cx, cy: r.cy,
+      poly: r.poly,
+      tiny: !!r.tiny,
+      isGeo: !!r.isGeo,
+      neighbors: Array.isArray(r.neighbors) ? r.neighbors.slice() : []
+    }))
   };
 }
 async function createRoom() {
@@ -3567,7 +4210,7 @@ async function createRoom() {
   peer.on('connection', (cn) => {
     conn = cn;
     cn.on('open', () => {
-      const map = generateMatrixMap(effectiveNumRegions());
+      const map = generateMap(effectiveNumRegions());
       conn.send({
         type: 'start',
         guestPlayer: myPlayer === 1 ? 2 : 1,
@@ -3608,8 +4251,7 @@ function handlePeerData(d) {
       if (typeof d.gameMode === 'string') gameMode = d.gameMode;
       if (typeof d.fogOfWar === 'boolean') fogOfWar = d.fogOfWar;
       if (d.map) {
-        const m = { gridSize: d.map.gridSize, regions: d.map.regions.map(r => ({ ...r })) };
-        startGame(m);
+        startGame(deserializeMap(d.map));
       }
       break;
     case 'deploy':
@@ -3624,6 +4266,10 @@ function handlePeerData(d) {
       break;
     case 'aoe-plan':
       if (phase === 'battle' && gameMode === 'aoe' && typeof d.player === 'number' && d.plan) {
+        if (d.plan.type === 'claim' && !Array.isArray(d.plan.contributions)) {
+          flashMessage('Invalid claim plan format from peer.', 'bad');
+          break;
+        }
         aoePlans[d.player] = d.plan;
         aoeSubmitted[d.player] = true;
         aoePassFlags[d.player] = (d.plan.type === 'pass');
@@ -3638,15 +4284,19 @@ function handlePeerData(d) {
         aoePerformResolutionWithSeed(d.rng_seed);
       }
       break;
+    case 'aoe-acquire':
+      if (phase === 'battle' && gameMode === 'aoe' && typeof d.defIdx === 'number') {
+        applyAcquisition({ defIdx: d.defIdx, group: [], player: d.player }, d.amount);
+      }
+      break;
     case 'rematch':
       if (d.map) {
-        const m = { gridSize: d.map.gridSize, regions: d.map.regions.map(r => ({ ...r })) };
-        startGame(m);
+        startGame(deserializeMap(d.map));
       }
       break;
     case 'wantRematch':
       if (isHost) {
-        const map = generateMatrixMap(effectiveNumRegions());
+        const map = generateMap(effectiveNumRegions());
         conn.send({ type: 'rematch', map: serializeMap(map) });
         startGame(map);
       }
@@ -3695,6 +4345,7 @@ function endGame() {
 
   let reason;
   if (p1Regs === 0 || p2Regs === 0) reason = 'One side has no territories left.';
+  else if (aoeRound > aoeMaxRounds && aoeMaxRounds > 0) reason = 'Turn limit reached (' + aoeMaxRounds + ' rounds).';
   else if (p1Regs !== p2Regs) reason = 'Most regions controlled.';
   else if (p1Tr !== p2Tr) reason = 'Region tie — won on troop count.';
   else reason = 'Same regions and troops on both sides.';
@@ -3726,7 +4377,7 @@ function rematch() {
   if (mode === 'online') {
     if (conn && conn.open) {
       if (isHost) {
-        const map = generateMatrixMap(effectiveNumRegions());
+        const map = generateMap(effectiveNumRegions());
         conn.send({ type: 'rematch', map: serializeMap(map) });
         startGame(map);
       } else {
@@ -3736,7 +4387,7 @@ function rematch() {
     } else backToSetup();
     return;
   }
-  startGame(generateMatrixMap(effectiveNumRegions()));
+  startGame(generateMap(effectiveNumRegions()));
 }
 
 /* ═══════════════════════════ MESSAGE BAR ═══════════════════════════ */
@@ -3761,7 +4412,7 @@ function renderRulesCard() {
   const mapBlock =
     '<h3>Map Types</h3>' +
     '<ul><li><strong>Matrix:</strong> a grid of rectangles. Two regions are neighbours if they share an edge.</li>' +
-    '<li><strong>Geographical:</strong> coming soon.</li></ul>';
+    '<li><strong>Geographic:</strong> randomly-shaped countries with irregular borders. Two regions are neighbours if their borders touch.</li></ul>';
 
   let body;
   if (gameMode === 'aoe') {
@@ -3769,23 +4420,19 @@ function renderRulesCard() {
       '<h2>How to Play — Aggression: Age of Empires</h2>' +
       deployBlock +
       '<h3>Phase 2 · Battle (parallel turns)</h3>' +
-      '<p>Each round, BOTH players privately pick one action; actions reveal and resolve simultaneously.</p>' +
+      '<p>Each round, BOTH players privately pick one action; actions reveal and resolve simultaneously. The game lasts ⌊total_regions / 2⌋ rounds.</p>' +
       '<h3>Action ⚔ Attack</h3>' +
       '<ul>' +
         '<li>Pick a subset G of your territories, all adjacent to one enemy defender D.</li>' +
         '<li>Power = sum(troops in G) + Σ_{i&lt;j} (g<sub>i</sub>/10)·(g<sub>j</sub>/10) (cooperation bonus).</li>' +
-        '<li>Defense = D.troops (or hunker-inflated, see below).</li>' +
-        '<li><strong>Power &gt; Defense → win:</strong> D wiped (gray, 0 troops). Attackers pay ceil(D/2) attrition — or ceil(hunker_sum/2) if D was hunkered (digging through fortifications is costly even on success).</li>' +
-        '<li><strong>|G|=1, D not hunkered, equal troops → coin flip:</strong> 50/50. Winner-attacker wipes D + pays ceil(D/2). Winner-defender wipes attacker territory; D loses ceil(att/2).</li>' +
-        '<li><strong>Else (incl. exact equality) → fail:</strong> attackers take ceil(def/2) (or ceil(hunker_sum/2)); damage distributed and wipes overflowing tiles. Defender takes floor(def/2) (or floor(def/4) when hunkered) but survives.</li>' +
-        '<li><strong>1v1 attacks are not allowed</strong> — a single 1-troop attacker on a 1-troop defender is forbidden. Bring more troops or coop with adjacent territories for the bonus.</li>' +
+        '<li>Defense = D.troops.</li>' +
+        '<li><strong>Power &gt; Defense → win:</strong> D wiped. Attackers pay ceil(D/2) attrition. You may then place up to ⌊remaining_troops/2⌋ into the conquered territory to claim it.</li>' +
+        '<li><strong>|G|=1, equal troops → coin flip:</strong> 50/50. Winner-attacker wipes D + pays ceil(D/2). Winner-defender wipes attacker territory; D loses ceil(att/2).</li>' +
+        '<li><strong>Else (incl. exact equality) → fail:</strong> attackers take ceil(def/2); damage distributed and wipes overflowing tiles. Defender takes floor(def/2) but survives.</li>' +
+        '<li><strong>1v1 attacks are not allowed</strong> — a single 1-troop attacker on a 1-troop defender is forbidden.</li>' +
       '</ul>' +
-      '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), the engagement resolves as a mutual clash — both sides take damage proportional to the other\'s power (each side absorbs ⌈power<sub>other</sub>/2⌉ across its attacking group), no territorial change. Supersedes the 1v1 coin-flip case (no RNG).</p>' +
-      '<h3>Action 🛡 Hunker</h3>' +
-      '<p>Fortify one territory D. Only matters if D is attacked this round.</p>' +
-      '<p style="text-align:center; font-family:monospace; opacity:.85;">hunker_sum = ⌈D·1.1⌉ + Σ adj/2 + Σ 2-hop/3 + … + Σ 5-hop/6</p>' +
-      '<p style="text-align:center; font-family:monospace; opacity:.85;">defense = ⌈(D + hunker_sum) / 2⌉</p>' +
-      '<p>Hops are through your own (friendly) territories only; each region counts at its first hop distance.</p>' +
+      '<p><strong>Attack chain:</strong> if A attacks B and B attacks C, then B→C resolves first, then A→B resolves against updated state.</p>' +
+      '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), the engagement resolves as a mutual clash — both sides take damage proportional to the other\'s power, no territorial change.</p>' +
       '<h3>Action ↔ Adjust troops</h3>' +
       '<ul>' +
         '<li>Set one or more transfers (source → adjacent friendly dest), each amount ≤ ⌊source/2⌋.</li>' +
@@ -3794,23 +4441,23 @@ function renderRulesCard() {
       '</ul>' +
       '<h3>Action ▣ Claim a gray</h3>' +
       '<ul>' +
-        '<li>Pick a source (yours, ≥ 2 troops), an adjacent gray, and amount ≤ ⌊source/2⌋.</li>' +
-        '<li>Uncontested: gray becomes yours with that amount; source loses the amount.</li>' +
-        '<li>Contested: larger force wins; winner B = (their amount) − ⌈(loser amount)/2⌉. Equal → stalemate, B stays gray; each side loses ⌈amount/2⌉.</li>' +
+        '<li>Pick one adjacent gray as target, then stack contributions from any of your adjacent territories (≥ 2 troops each, ≤ ⌊source/2⌋ per source). Claim power = sum of contributions (no coop bonus).</li>' +
+        '<li>One target per turn; each source may contribute at most once.</li>' +
+        '<li>Uncontested: gray becomes yours with Σ amount troops; each contributing source loses its sent amount.</li>' +
+        '<li>Contested: larger total wins. Winner takes the gray with (winner power) − ⌈(loser power)/2⌉ troops; winner sources each lose their full sent amount. Loser sources take ⌈loser power /2⌉ damage spread proportionally and keep the rest.</li>' +
+        '<li>Tied: gray stays gray; each side takes ⌈power/2⌉ damage spread proportionally across its contributions, remainder returns to sources.</li>' +
       '</ul>' +
       '<h3>Action ⏭ Pass</h3>' +
-      '<p>If BOTH players Pass in the SAME round, game ends and scores tally.</p>' +
+      '<p>If BOTH players Pass in the SAME round, game ends early and scores tally.</p>' +
       '<h3>Resolution order</h3>' +
       '<ol style="padding-left:22px;">' +
         '<li>Step 1 — Adjustments applied atomically against pre-round counts.</li>' +
-        '<li>Step 2 — Hunker flags noted (no troop changes).</li>' +
-        '<li>Step 3 — Attacks &amp; claims resolved against post-adjustment state.</li>' +
+        '<li>Step 2 — Attacks &amp; claims resolved against post-adjustment state (chain-ordered).</li>' +
       '</ol>' +
-      '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 3 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts use pre-round source counts as cap.</p>' +
+      '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 2 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts use pre-round source counts as cap.</p>' +
       (fogOfWar ? '<h3>Fog of War (enabled)</h3><p>You only see your own territories, gray ruins, and enemy territories adjacent to yours. Everything else renders as a fog tile until it borders you.</p>' : '') +
       '<h3>Victory</h3>' +
-      '<ul><li>Game ends when both players Pass in the same round, or one player has zero territories.</li>' +
-      '<li>Game also ends immediately when BOTH players have every owned territory reduced to 1 troop or less — neither side can adjust, claim, or attack productively, so counting begins.</li>' +
+      '<ul><li>Game ends after ⌊total_regions / 2⌋ rounds, or when both players Pass in the same round, or one player has zero territories.</li>' +
       '<li>Most owned regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
       mapBlock;
   } else {
@@ -3841,7 +4488,7 @@ window.addEventListener('load', () => {
 window.AG = {
   state: () => ({ regions, gridSize }),
   setRegions: (rs, gs) => { regions = rs; if (gs) gridSize = gs; },
-  hunkerSum, hunkerDefenseValue, autoBleedDist,
+  autoBleedDist,
   resolveAoeRound, mulberry32,
   resolveMutualClash, isMutualAttackClash,
   applyAdjustmentsToState, applyAoeEffects,
