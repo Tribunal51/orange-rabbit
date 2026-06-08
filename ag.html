@@ -2696,16 +2696,17 @@ function aoePerformResolutionWithSeed(rngSeed) {
         if (log.outcome === 'win' || log.outcome === 'coinWin') {
           const attacker = log.player;
           const defIdx = log.defender;
-          // Only offer if the defender is now gray (not claimed by someone else)
           if (regions[defIdx].owner === 0) {
-            // Compute total remaining troops in attacker's group
-            let totalRemaining = 0;
+            // Each surviving attacker territory can contribute up to floor(troops/2)
+            const sources = [];
             for (const g of log.group) {
-              if (regions[g].owner === attacker) totalRemaining += regions[g].troops;
+              if (regions[g].owner === attacker && regions[g].troops >= 2) {
+                sources.push({ idx: g, cap: Math.floor(regions[g].troops / 2) });
+              }
             }
-            const maxPlace = Math.floor(totalRemaining / 2);
+            const maxPlace = sources.reduce((s, c) => s + c.cap, 0);
             if (maxPlace > 0) {
-              acquisitions.push({ player: attacker, defIdx, group: log.group, maxPlace });
+              acquisitions.push({ player: attacker, defIdx, group: log.group, sources, maxPlace });
             }
           }
         }
@@ -2723,75 +2724,101 @@ function processAcquisitions(acquisitions, idx) {
   if (idx >= acquisitions.length) { aoePostResolution(); return; }
   const acq = acquisitions[idx];
   if (mode === 'cpu' && acq.player !== myPlayer) {
-    const cpuPlace = Math.floor(acq.maxPlace / 2);
-    applyAcquisition(acq, cpuPlace);
+    // CPU: each source contributes floor(cap/2)
+    const contribs = {};
+    for (const s of acq.sources) contribs[s.idx] = Math.max(1, Math.floor(s.cap / 2));
+    applyAcquisitionContribs(acq, contribs);
     processAcquisitions(acquisitions, idx + 1);
   } else if (mode === 'online' && acq.player !== myPlayer) {
-    // In online mode, skip opponent's acquisitions (they handle it on their end)
-    // For simplicity, auto-apply nothing (opponent sees their own modal)
     processAcquisitions(acquisitions, idx + 1);
   } else {
-    openAcquisitionModal(acq, function(amount) {
-      applyAcquisition(acq, amount);
+    openAcquisitionModal(acq, function(contribs) {
+      applyAcquisitionContribs(acq, contribs);
       if (mode === 'online' && conn && conn.open) {
-        conn.send({ type: 'aoe-acquire', defIdx: acq.defIdx, amount: amount, player: acq.player });
+        conn.send({ type: 'aoe-acquire', defIdx: acq.defIdx, contribs, player: acq.player });
       }
       processAcquisitions(acquisitions, idx + 1);
     });
   }
 }
 
-function applyAcquisition(acq, amount) {
-  if (amount <= 0) return;
-  regions[acq.defIdx].owner = acq.player;
-  regions[acq.defIdx].troops = amount;
-  // Deduct troops from attacking group (even split, biggest first)
-  const sorted = (acq.group || []).filter(g => regions[g] && regions[g].owner === acq.player)
-                          .sort((a, b) => regions[b].troops - regions[a].troops);
-  let remaining = amount;
-  let safety = 0;
-  while (remaining > 0 && sorted.length > 0 && safety < amount * sorted.length + 10) {
-    const g = sorted[safety % sorted.length];
-    if (regions[g].troops > 0) {
-      regions[g].troops--;
-      remaining--;
+function applyAcquisitionContribs(acq, contribs) {
+  let total = 0;
+  for (const idxStr in contribs) {
+    const idx = parseInt(idxStr, 10);
+    const amt = contribs[idx] | 0;
+    if (amt > 0 && regions[idx]) {
+      regions[idx].troops = Math.max(0, regions[idx].troops - amt);
+      total += amt;
     }
-    safety++;
+  }
+  if (total > 0) {
+    regions[acq.defIdx].owner = acq.player;
+    regions[acq.defIdx].troops = total;
   }
   render();
 }
 
 function openAcquisitionModal(acq, callback) {
-  let amt = Math.min(acq.maxPlace, Math.floor(acq.maxPlace / 2));
-  if (amt < 0) amt = 0;
+  // Per-source contribution amounts, default to each source's max (floor(troops/2))
+  const contribs = {};
+  for (const s of acq.sources) contribs[s.idx] = s.cap;
+
+  function getTotal() {
+    let t = 0;
+    for (const s of acq.sources) t += (contribs[s.idx] | 0);
+    return t;
+  }
+
   function render2() {
     const host = document.getElementById('aoeModalHost');
+    const total = getTotal();
+    const rows = acq.sources.map(s => {
+      const v = contribs[s.idx] | 0;
+      const r = regions[s.idx];
+      return '<div class="row">' +
+        '<span class="lbl">#' + (s.idx+1) + ' (' + r.troops + ' troops, max ' + s.cap + ')</span>' +
+        '<span class="arrow">→</span>' +
+        '<input type="number" min="0" max="' + s.cap + '" value="' + v +
+        '" data-src="' + s.idx + '">' +
+      '</div>';
+    }).join('');
+
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
         '<h3>Territory Conquered! Acquire #' + (acq.defIdx+1) + '?</h3>' +
-        '<div class="modal-info">You eliminated region #' + (acq.defIdx+1) +
-          '. You may place up to <strong>' + acq.maxPlace + '</strong> troops there to claim it (deducted from your attacking territories), or place 0 to leave it gray.</div>' +
-        '<div class="checkbox-row">' +
-          '<input type="range" id="acqRange" min="0" max="' + acq.maxPlace + '" value="' + amt + '">' +
-          '<input type="number" id="acqNum" min="0" max="' + acq.maxPlace + '" value="' + amt +
-          '" style="width:64px; padding:6px 8px; text-align:center; background:rgba(0,0,0,.3); color:#fff; border:1px solid rgba(168,85,247,.3); border-radius:6px; font-family:inherit;font-size:13px;">' +
-        '</div>' +
+        '<div class="modal-info">You wiped region #' + (acq.defIdx+1) +
+          '. Choose how many troops to send from each attacking territory (each up to ⌊troops/2⌋). Total landing: <strong id="acqTotal">' + total + '</strong>.</div>' +
+        '<div class="section-head">Troops to send</div>' +
+        rows +
         '<div class="modal-foot">' +
-          '<button class="actionBtn primary" id="acqOk">Confirm</button>' +
-          '<button class="actionBtn" id="acqSkip">Skip (leave gray)</button>' +
+          '<button class="actionBtn primary" id="acqOk">Place ' + total + ' troops</button>' +
+          '<button class="actionBtn" id="acqNone">Send 0 (leave gray)</button>' +
         '</div>' +
       '</div></div>';
-    const rng = document.getElementById('acqRange');
-    const num = document.getElementById('acqNum');
-    rng.oninput = () => { amt = parseInt(rng.value, 10); num.value = amt; };
-    num.oninput = () => {
-      let v = parseInt(num.value, 10);
-      if (!Number.isFinite(v) || v < 0) v = 0;
-      if (v > acq.maxPlace) v = acq.maxPlace;
-      amt = v; rng.value = amt;
+
+    document.querySelectorAll('input[type=number][data-src]').forEach(inp => {
+      inp.oninput = () => {
+        const idx = parseInt(inp.dataset.src, 10);
+        const src = acq.sources.find(s => s.idx === idx);
+        let v = parseInt(inp.value, 10);
+        if (!Number.isFinite(v) || v < 0) v = 0;
+        if (src && v > src.cap) v = src.cap;
+        contribs[idx] = v;
+        const t = getTotal();
+        const tEl = document.getElementById('acqTotal');
+        if (tEl) tEl.textContent = t;
+        const btn = document.getElementById('acqOk');
+        if (btn) btn.textContent = t > 0 ? 'Place ' + t + ' troops' : 'Leave gray';
+      };
+    });
+    document.getElementById('acqOk').onclick = () => {
+      const t = getTotal();
+      closeAoeModal();
+      if (t > 0) callback(contribs);
+      else callback({});
     };
-    document.getElementById('acqOk').onclick = () => { closeAoeModal(); callback(amt); };
-    document.getElementById('acqSkip').onclick = () => { closeAoeModal(); callback(0); };
+    document.getElementById('acqNone').onclick = () => { closeAoeModal(); callback({}); };
   }
   render2();
 }
@@ -4286,7 +4313,7 @@ function handlePeerData(d) {
       break;
     case 'aoe-acquire':
       if (phase === 'battle' && gameMode === 'aoe' && typeof d.defIdx === 'number') {
-        applyAcquisition({ defIdx: d.defIdx, group: [], player: d.player }, d.amount);
+        applyAcquisitionContribs({ defIdx: d.defIdx, player: d.player }, d.contribs || {});
       }
       break;
     case 'rematch':
