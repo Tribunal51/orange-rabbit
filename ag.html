@@ -550,6 +550,35 @@
     .battle-log-line strong { color: #fde68a; }
     .battle-log-line .neutral { color: rgba(255,255,255,.7); }
 
+    .history-nav {
+      display: none; align-items: center; justify-content: center; gap: 10px;
+      padding: 6px 14px;
+      border-top: 1px solid rgba(168, 85, 247, .2);
+      background: rgba(168, 85, 247, .06);
+    }
+    .history-nav.visible { display: flex; }
+    .history-nav button {
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.85);
+      border: 1px solid rgba(255,255,255,.15); border-radius: 6px;
+      padding: 3px 10px; font-size: 14px; cursor: pointer; min-width: 32px;
+    }
+    .history-nav button:hover:not(:disabled) { background: rgba(255,255,255,.15); color: #fff; }
+    .history-nav button:disabled { opacity: .3; cursor: default; }
+    .history-nav .history-label {
+      font-size: 12px; color: rgba(255,255,255,.7); min-width: 140px; text-align: center;
+    }
+    .history-overlay-banner {
+      display: none; text-align: center; padding: 6px 12px;
+      background: rgba(168, 85, 247, .2); border: 1px solid rgba(168, 85, 247, .4);
+      border-radius: 8px; font-size: 13px; color: #c4b5fd; margin: 8px auto 0;
+      max-width: 720px; cursor: pointer;
+    }
+    .history-overlay-banner.visible { display: block; }
+    .history-overlay-banner:hover { background: rgba(168, 85, 247, .3); }
+    .battle-log-round.history-highlight {
+      background: rgba(168, 85, 247, .15); border-radius: 6px;
+      margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px;
+    }
     .messageBar {
       min-height: 22px; margin-top: 10px;
       font-size: 14px; opacity: .85; text-align: center;
@@ -859,6 +888,29 @@
       <div class="helpText">When on, you only see opponent territories that touch your own. Otherwise the whole map is visible.</div>
     </div>
 
+    <div class="setupSection" id="turnModeSection" style="display:none;">
+      <div class="setupLabel">Win Condition (Age of Empires only)</div>
+      <div id="turnModeToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setTurnMode('dynamic')">Dynamic</button>
+        <button class="modeBtn" onclick="setTurnMode('fixed')">Fixed Turns</button>
+      </div>
+      <div id="turnModeHint" class="helpText"><strong>Dynamic:</strong> game ends after ⌊3N/4⌋ rounds (N = assigned territories), or earlier if all territories hit 1 troop. Most territories wins.</div>
+      <div id="fixedTurnRow" class="numRow hidden" style="margin-top:10px;">
+        <input type="number" id="fixedTurnInput" class="numInput" min="1" max="999" value="0"
+          oninput="onFixedTurnInput()">
+        <span class="helpText" style="margin-top:0;">0 = auto (⌊regions/2⌋)</span>
+      </div>
+    </div>
+
+    <div class="setupSection" id="preAllocSection">
+      <div class="setupLabel">Random Deployment</div>
+      <div id="preAllocToggle" class="modeToggle">
+        <button class="modeBtn selected" onclick="setPreAlloc(false)">Manual</button>
+        <button class="modeBtn" onclick="setPreAlloc(true)">Random for Both</button>
+      </div>
+      <div class="helpText">When random, both players' troops are allocated randomly across the map and the game starts instantly (skips deployment phase).</div>
+    </div>
+
     <button class="startBtn" onclick="launchGame()">Start Game</button>
     <div class="rulesLink" onclick="showRules()">How to Play</div>
   </div>
@@ -908,6 +960,7 @@
       <span class="dlabel">troop(s)</span>
       <button class="max-btn" onclick="setDeployAmount(getCurrentRemaining())">All</button>
       <button class="max-btn" onclick="setDeployAmount(1)">1</button>
+      <button class="max-btn" id="randomAllocBtn" onclick="randomAllocateMyTroops()" style="margin-left:8px; background:rgba(134,239,172,.15); border-color:rgba(134,239,172,.4);">🎲 Random</button>
     </div>
 
     <div id="aoeActionBar" class="aoe-action-bar hidden">
@@ -957,12 +1010,21 @@
 
     <div id="resultArea" class="hidden"></div>
 
+    <div id="historyBanner" class="history-overlay-banner" onclick="historyExit()">Viewing history — click to return to current</div>
+
     <div id="battleLogPanel" class="battle-log-panel hidden">
       <div class="battle-log-head">
         <span class="battle-log-title">Battle Log</span>
         <button class="battle-log-toggle" id="battleLogToggleBtn" onclick="toggleBattleLog()">Hide</button>
       </div>
       <div id="battleLogBody" class="battle-log-body"></div>
+      <div id="historyNav" class="history-nav">
+        <button id="historyFirst" onclick="historyGo(0)">&#x23EE;</button>
+        <button id="historyPrev" onclick="historyStep(-1)">&#x25C0;</button>
+        <span id="historyLabel" class="history-label"></span>
+        <button id="historyNext" onclick="historyStep(1)">&#x25B6;</button>
+        <button id="historyLast" onclick="historyExit()">Live</button>
+      </div>
     </div>
 
     <div class="controls-row">
@@ -994,6 +1056,9 @@ let regionsMode = 'auto';
 let regionsCustomVal = 20;
 let gameMode = 'classic';      // 'classic' | 'aoe'
 let fogOfWar = false;
+let turnMode = 'dynamic';     // 'fixed' | 'dynamic'
+let fixedTurnCount = 0;       // 0 = auto (regions/2), else user-specified
+let preAllocRandom = false;   // both players get random deployment, skip deploy phase
 
 let regions = [];
 let gridSize = 8;
@@ -1013,6 +1078,7 @@ let aoePassFlags = { 1: false, 2: false };
 let aoePlanningPlayer = 1;     // whose plan UI is currently shown (local/cpu/online-self)
 let aoeRevealing = false;
 let aoeHandoffPending = false;
+let aoePendingAttrition = null;
 
 /* Battle log: array of round entries.
    Each entry: { round, kind?, lines: [{ player, text, kind? }] }
@@ -1020,6 +1086,9 @@ let aoeHandoffPending = false;
 */
 let battleLog = [];
 let battleLogCollapsed = false;
+
+let boardHistory = [];
+let historyViewIdx = -1;
 
 /* Working plan currently being built by the active planner */
 let aoeWorking = makeEmptyWorking();
@@ -1029,7 +1098,6 @@ function makeEmptyWorking() {
     attackGroup: new Set(),
     attackDefender: -1,
     attackAutoBleed: true,
-    attackFailManual: null,    // map idx->loss
     attackSuccessManual: null, // map idx->loss
     adjustTransfers: [],
     adjustSourceSel: -1,
@@ -1087,6 +1155,32 @@ function setGameMode(g) {
     b.classList.toggle('selected', which === g);
   });
   document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
+  document.getElementById('turnModeSection').style.display = (g === 'aoe') ? '' : 'none';
+}
+
+function setTurnMode(m) {
+  turnMode = m;
+  document.querySelectorAll('#turnModeToggle .modeBtn').forEach((b, i) => {
+    const which = ['dynamic', 'fixed'][i];
+    b.classList.toggle('selected', which === m);
+  });
+  document.getElementById('fixedTurnRow').classList.toggle('hidden', m !== 'fixed');
+  document.getElementById('turnModeHint').innerHTML = m === 'dynamic'
+    ? '<strong>Dynamic:</strong> game ends after ⌊3N/4⌋ rounds (N = assigned territories), or earlier if all territories hit 1 troop. Most territories wins.'
+    : '<strong>Fixed:</strong> game ends after the specified number of rounds. Set 0 for auto (⌊regions/2⌋).';
+}
+
+function onFixedTurnInput() {
+  const v = parseInt(document.getElementById('fixedTurnInput').value, 10);
+  if (Number.isFinite(v) && v >= 0) fixedTurnCount = Math.min(999, v);
+}
+
+function setPreAlloc(on) {
+  preAllocRandom = !!on;
+  document.querySelectorAll('#preAllocToggle .modeBtn').forEach((b, i) => {
+    const which = [false, true][i];
+    b.classList.toggle('selected', which === preAllocRandom);
+  });
 }
 
 function setCpuDiff(d) {
@@ -1218,6 +1312,43 @@ function aoeResetAll() {
   aoeRevealing = false;
   aoeHandoffPending = false;
   aoeWorking = makeEmptyWorking();
+  aoePendingAttrition = null;
+}
+
+function performRandomAllocation() {
+  const empties = regions.filter(r => r.owner === 0);
+  if (empties.length === 0) return;
+  const shuffled = empties.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t;
+  }
+  // Alternate assignment: P1, P2, P1, P2...
+  for (let i = 0; i < shuffled.length; i++) {
+    shuffled[i].owner = (i % 2 === 0) ? 1 : 2;
+  }
+  // Distribute troops
+  let rem1 = totalTroops, rem2 = totalTroops;
+  const p1Regions = shuffled.filter(r => r.owner === 1);
+  const p2Regions = shuffled.filter(r => r.owner === 2);
+  // Give each region at least 1 troop, then distribute remainder randomly
+  for (const r of p1Regions) { r.troops = 1; rem1--; }
+  for (const r of p2Regions) { r.troops = 1; rem2--; }
+  // Distribute remaining troops randomly
+  while (rem1 > 0) {
+    const r = p1Regions[Math.floor(Math.random() * p1Regions.length)];
+    const add = Math.max(1, Math.floor(Math.random() * Math.min(rem1, Math.ceil(totalTroops / p1Regions.length))));
+    r.troops += add;
+    rem1 -= add;
+  }
+  while (rem2 > 0) {
+    const r = p2Regions[Math.floor(Math.random() * p2Regions.length)];
+    const add = Math.max(1, Math.floor(Math.random() * Math.min(rem2, Math.ceil(totalTroops / p2Regions.length))));
+    r.troops += add;
+    rem2 -= add;
+  }
+  p1Remaining = 0;
+  p2Remaining = 0;
 }
 
 function showRules() {
@@ -1589,12 +1720,24 @@ function startGame(mapData) {
   aoeResetAll();
   closeAoeModal();
   clearBattleLog();
+
+  // Determine turn info for log
+  let turnInfo = '';
+  if (gameMode === 'aoe') {
+    if (turnMode === 'fixed') {
+      const tc = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
+      turnInfo = tc + ' rounds (fixed)';
+    } else {
+      turnInfo = 'dynamic (' + aoeMaxRounds + ' rounds, ⌊3N/4⌋)';
+    }
+  }
+
   appendLogEntry({
     title: 'Game started',
     lines: [{
       kind: 'system',
       html: gameMode === 'aoe'
-        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + Math.floor(regions.length / 2) + ' rounds' + (fogOfWar ? ' · Fog of War on' : '')
+        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '')
         : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
     }]
   });
@@ -1617,6 +1760,41 @@ function startGame(mapData) {
   }
 
   buildMapDom();
+
+  // Handle pre-allocation random deployment
+  if (preAllocRandom) {
+    performRandomAllocation();
+    phase = 'deploy'; // afterDeployMove will transition
+    // Simulate end of deployment
+    if (gameMode === 'aoe') {
+      phase = 'battle';
+      aoeRound = 0;
+      { const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
+      if (turnMode === 'fixed') {
+        aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
+      } else {
+        aoeMaxRounds = Math.floor(3 * owned / 4);
+      }}
+      appendLogEntry({
+        title: 'Deployment',
+        lines: [{ kind: 'system', html: 'Troops randomly allocated. Battle begins!' }]
+      });
+      render();
+      aoeStartRound();
+      return;
+    } else {
+      phase = 'attack';
+      currentPlayer = firstPlayer;
+      appendLogEntry({
+        title: 'Deployment',
+        lines: [{ kind: 'system', html: 'Troops randomly allocated. Aggression begins!' }]
+      });
+      render();
+      checkClassicProgress();
+      return;
+    }
+  }
+
   updateDeployBar();
   render();
   maybeTriggerCpuTurn();
@@ -1732,6 +1910,47 @@ function setDeployAmount(n) {
   r.value = v; document.getElementById('deployAmount').textContent = v;
 }
 
+function randomAllocateMyTroops() {
+  if (phase !== 'deploy') return;
+  if (!canIControlCurrentTurn()) return;
+  const me = currentPlayer;
+  let remaining = me === 1 ? p1Remaining : p2Remaining;
+  if (remaining <= 0) return;
+  const empties = regions.filter(r => r.owner === 0);
+  if (empties.length === 0) return;
+  // Shuffle empties
+  const shuffled = empties.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t;
+  }
+  // Take roughly half the empties (since opponent gets the other half)
+  const mySlots = [];
+  for (let i = 0; i < shuffled.length && remaining > 0; i += 2) {
+    mySlots.push(shuffled[i]);
+  }
+  if (mySlots.length === 0) return;
+  // Pre-compute amounts: 1 per slot first, then distribute remainder
+  const amounts = {};
+  for (const r of mySlots) amounts[r.id] = 1;
+  let leftover = remaining - mySlots.length;
+  while (leftover > 0) {
+    const r = mySlots[Math.floor(Math.random() * mySlots.length)];
+    const add = Math.max(1, Math.floor(Math.random() * Math.min(leftover, Math.ceil(leftover / mySlots.length) + 1)));
+    amounts[r.id] += add;
+    leftover -= add;
+  }
+  // Apply all at once
+  for (const r of mySlots) {
+    const amt = amounts[r.id];
+    applyDeploy(r.id, me, amt);
+    if (mode === 'online' && conn && conn.open) {
+      conn.send({ type: 'deploy', idx: r.id, player: me, amount: amt });
+    }
+  }
+  afterDeployMove();
+}
+
 function canIControlCurrentTurn() {
   if (phase === 'over') return false;
   if (mode === 'local') return true;
@@ -1797,7 +2016,12 @@ function afterDeployMove() {
     if (gameMode === 'aoe') {
       phase = 'battle';
       aoeRound = 0;
-      aoeMaxRounds = Math.floor(regions.length / 2);
+      { const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
+      if (turnMode === 'fixed') {
+        aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
+      } else {
+        aoeMaxRounds = Math.floor(3 * owned / 4);
+      }}
       flashMessage('Deployment done. Battle begins!', 'good');
       render();
       aoeStartRound();
@@ -2123,29 +2347,7 @@ function resolveSingleAttack(plan, post, rng) {
     return { effects, log: attLog };
   }
 
-  // Branch 2: 1v1 coin-flip (G.length===1 && attacker.troops === def.troops)
-  if (G.length === 1 && post[G[0]].troops === def.troops) {
-    const coin = rng() < 0.5;
-    attLog.outcome = coin ? 'coinWin' : 'coinLose';
-    attLog.coin = coin;
-    if (coin) {
-      const L = Math.ceil(def.troops / 2);
-      effects.push({ kind: 'wipeDef', idx: D, newOwner: 0, newTroops: 0 });
-      const cur = post[G[0]].troops;
-      const rem = Math.max(0, cur - L);
-      if (rem <= 0) effects.push({ kind: 'wipeAtt', idx: G[0], newOwner: 0, newTroops: 0 });
-      else effects.push({ kind: 'attLoss', idx: G[0], newOwner: post[G[0]].owner, newTroops: rem });
-    } else {
-      const attCur = post[G[0]].troops;
-      const defLoss = Math.ceil(attCur / 2);
-      effects.push({ kind: 'wipeAtt', idx: G[0], newOwner: 0, newTroops: 0 });
-      const defRem = Math.max(0, def.troops - defLoss);
-      effects.push({ kind: 'defDamage', idx: D, newOwner: post[D].owner, newTroops: defRem });
-    }
-    return { effects, log: attLog };
-  }
-
-  // Branch 3: fail
+  // Branch 2: fail (power <= defense) — mutual damage, no territory change
   const attackerDmg = Math.ceil(def.troops / 2);
   const defenderDmg = Math.floor(def.troops / 2);
   let dist;
@@ -2361,46 +2563,38 @@ function isMutualAttackClash(planA, planB) {
 function resolveMutualClash(planA, planB, post) {
   const pwrA = aoePowerFromState(planA.group, post);
   const pwrB = aoePowerFromState(planB.group, post);
-  // Floor power to integer before halving so the tiny coop-bonus fraction
-  // (e.g. 1+1 → power 2.01) doesn't get rounded up by ceil and double the damage.
-  // Coop bonus still affects the comparison branch in normal attacks; it just
-  // doesn't contaminate damage in mutual clashes.
   const dmgToA = Math.ceil(Math.floor(pwrB.total) / 2);
   const dmgToB = Math.ceil(Math.floor(pwrA.total) / 2);
-
-  function pickDist(plan, totalDmg) {
-    if (plan.failDist && typeof plan.failDist === 'object') {
-      const d = {};
-      for (const g of plan.group) d[g] = (plan.failDist[g] | 0);
-      return d;
-    }
-    return autoBleedDist(plan.group, totalDmg, post, true);
-  }
-  const distA = pickDist(planA, dmgToA);
-  const distB = pickDist(planB, dmgToB);
-
-  const effects = [];
-  function applySide(group, dist) {
-    for (const g of group) {
-      const loss = (dist[g] | 0);
-      const cur = post[g].troops;
-      const remaining = Math.max(0, cur - loss);
-      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
-      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
-    }
-  }
-  applySide(planA.group, distA);
-  applySide(planB.group, distB);
 
   const log = {
     type: 'mutualClash',
     playerA: planA.player, groupA: planA.group.slice(), defenderA: planA.defender,
-    powerA: pwrA.total, dmgToB, lossesA: distA,
+    powerA: pwrA.total, dmgToB,
     playerB: planB.player, groupB: planB.group.slice(), defenderB: planB.defender,
-    powerB: pwrB.total, dmgToA, lossesB: distB,
+    powerB: pwrB.total, dmgToA,
     outcome: 'mutualClash'
   };
-  return { effects, log };
+  // Effects deferred — each player distributes attrition manually via modal.
+  // Return pending info for the distribution step.
+  const pending = {
+    sides: [
+      { player: planA.player, group: planA.group.slice(), totalDmg: dmgToA },
+      { player: planB.player, group: planB.group.slice(), totalDmg: dmgToB }
+    ]
+  };
+  return { effects: [], log, pending };
+}
+
+function buildAttritionEffects(group, dist, stateSource) {
+  const effects = [];
+  for (const g of group) {
+    const loss = (dist[g] | 0);
+    const cur = stateSource[g].troops;
+    const remaining = Math.max(0, cur - loss);
+    if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+    else effects.push({ kind: 'attLoss', idx: g, newOwner: stateSource[g].owner, newTroops: remaining });
+  }
+  return effects;
 }
 
 /* The full round resolve. plans = { 1, 2 } each a committed plan or null.
@@ -2418,10 +2612,12 @@ function resolveAoeRound(planA, planB, rngSeed) {
   const rng = mulberry32(rngSeed | 0);
   const attackLogs = [];
   let allEffects = [];
+  let mutualClashPending = null;
   if (isMutualAttackClash(planA, planB)) {
-    const { effects, log } = resolveMutualClash(planA, planB, postSnap);
+    const { effects, log, pending } = resolveMutualClash(planA, planB, postSnap);
     attackLogs.push(log);
     allEffects = allEffects.concat(effects);
+    mutualClashPending = pending;
   } else {
     // Ordered resolution: if A attacks B and B is in the other's attacking group,
     // the attack whose defender is an attacker in the other resolves second.
@@ -2469,10 +2665,19 @@ function resolveAoeRound(planA, planB, rngSeed) {
 
   applyAoeEffects(allEffects);
 
-  return { attackLogs, claimLogs: claimRes.logs, postSnap };
+  return { attackLogs, claimLogs: claimRes.logs, postSnap, mutualClashPending };
 }
 
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
+
+function captureBoardSnapshot(label) {
+  boardHistory.push({
+    label: label || ('Round ' + aoeRound),
+    round: aoeRound,
+    state: regions.map(r => ({ owner: r.owner, troops: r.troops }))
+  });
+  renderHistoryNav();
+}
 
 function aoeStartRound() {
   aoeRound++;
@@ -2482,9 +2687,10 @@ function aoeStartRound() {
   aoeWorking = makeEmptyWorking();
   aoeRevealing = false;
   aoeHandoffPending = false;
+  captureBoardSnapshot('Start of Round ' + aoeRound);
 
-  // Turn limit check
-  if (aoeRound > aoeMaxRounds) { endGame(); return; }
+  // Turn limit check (fixed mode only; dynamic mode has no round cap)
+  if (aoeMaxRounds > 0 && aoeRound > aoeMaxRounds) { endGame(); return; }
 
   // Termination check (before plans this round): a player with 0 territories loses
   const p1Own = aoePlayerOwnedCount(1);
@@ -2543,7 +2749,7 @@ function buildPlanFromWorking(player) {
     const group = Array.from(w.attackGroup);
     const plan = { type: 'attack', player, group, defender: w.attackDefender,
                    autoBleed: !!w.attackAutoBleed,
-                   failDist: w.attackAutoBleed ? null : (w.attackFailManual || null),
+                   failDist: null,
                    successDist: w.attackAutoBleed ? null : (w.attackSuccessManual || null) };
     return plan;
   }
@@ -2684,40 +2890,185 @@ function aoePerformResolutionWithSeed(rngSeed) {
   setTimeout(() => {
     const planA = aoePlans[1], planB = aoePlans[2];
     const thisRound = aoeRound;
+    const preSnap = regions.map(r => r.troops);
     const res = resolveAoeRound(planA, planB, rngSeed);
     flashOutcomes(res);
-    appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res));
+    appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
     setTimeout(() => {
       clearIntentArrows();
       render();
-      // Check for territory acquisition opportunities (successful attacks that wiped a defender)
-      const acquisitions = [];
-      for (const log of res.attackLogs) {
-        if (log.outcome === 'win' || log.outcome === 'coinWin') {
-          const attacker = log.player;
-          const defIdx = log.defender;
-          if (regions[defIdx].owner === 0) {
-            // Each surviving attacker territory can contribute up to floor(troops/2)
-            const sources = [];
-            for (const g of log.group) {
-              if (regions[g].owner === attacker && regions[g].troops >= 2) {
-                sources.push({ idx: g, cap: Math.floor(regions[g].troops / 2) });
+
+      function proceedToAcquisitions() {
+        const acquisitions = [];
+        for (const log of res.attackLogs) {
+          if (log.outcome === 'win') {
+            const attacker = log.player;
+            const defIdx = log.defender;
+            if (regions[defIdx].owner === 0) {
+              const sources = [];
+              for (const g of log.group) {
+                if (regions[g].owner === attacker && regions[g].troops >= 2) {
+                  sources.push({ idx: g, cap: Math.floor(regions[g].troops / 2) });
+                }
               }
-            }
-            const maxPlace = sources.reduce((s, c) => s + c.cap, 0);
-            if (maxPlace > 0) {
-              acquisitions.push({ player: attacker, defIdx, group: log.group, sources, maxPlace });
+              const maxPlace = sources.reduce((s, c) => s + c.cap, 0);
+              if (maxPlace > 0) {
+                acquisitions.push({ player: attacker, defIdx, group: log.group, sources, maxPlace });
+              }
             }
           }
         }
+        if (acquisitions.length > 0) {
+          processAcquisitions(acquisitions, 0);
+        } else {
+          aoePostResolution();
+        }
       }
-      if (acquisitions.length > 0) {
-        processAcquisitions(acquisitions, 0);
+
+      if (res.mutualClashPending) {
+        processAttritionDistribution(res.mutualClashPending, res.attackLogs[0], proceedToAcquisitions);
       } else {
-        aoePostResolution();
+        proceedToAcquisitions();
       }
     }, 1800);
   }, 1500);
+}
+
+function processAttritionDistribution(pending, clashLog, callback) {
+  // Process each side sequentially; each player distributes their own attrition.
+  let sideIdx = 0;
+  function nextSide() {
+    if (sideIdx >= pending.sides.length) {
+      // Update the clash log with final loss distributions
+      render();
+      callback();
+      return;
+    }
+    const side = pending.sides[sideIdx];
+    sideIdx++;
+    if (side.totalDmg <= 0) { nextSide(); return; }
+
+    if (mode === 'cpu' && side.player !== myPlayer) {
+      const dist = autoBleedDist(side.group, side.totalDmg, regions, true);
+      applyAttritionDist(side, dist, clashLog);
+      nextSide();
+    } else if (mode === 'online' && side.player !== myPlayer) {
+      // Opponent distributes on their end; skip (their message applies it)
+      nextSide();
+    } else {
+      openAttritionModal(side, function(dist) {
+        applyAttritionDist(side, dist, clashLog);
+        if (mode === 'online' && conn && conn.open) {
+          conn.send({ type: 'aoe-attrition', player: side.player, dist });
+        }
+        nextSide();
+      });
+    }
+  }
+  nextSide();
+}
+
+function applyAttritionDist(side, dist, clashLog) {
+  const effects = buildAttritionEffects(side.group, dist, regions);
+  for (const e of effects) {
+    if (e.idx !== undefined && regions[e.idx]) {
+      regions[e.idx].owner = e.newOwner;
+      regions[e.idx].troops = e.newTroops;
+    }
+  }
+  // Store losses in the clash log for display
+  if (clashLog) {
+    if (side.player === clashLog.playerA) clashLog.lossesA = dist;
+    else clashLog.lossesB = dist;
+  }
+}
+
+function openAttritionModal(side, callback) {
+  const dist = {};
+  const minEach = side.totalDmg >= side.group.length ? 1 : 0;
+  for (const g of side.group) dist[g] = minEach;
+  // Spread the remainder across the first territories
+  let remainder = side.totalDmg - side.group.reduce((s, g) => s + dist[g], 0);
+  for (const g of side.group) {
+    if (remainder <= 0) break;
+    const maxForThis = regions[g].troops - 1;
+    const add = Math.min(remainder, Math.max(0, maxForThis - dist[g]));
+    dist[g] += add;
+    remainder -= add;
+  }
+  // If remainder still > 0 (can exceed troops-1), dump on first
+  if (remainder > 0) {
+    for (const g of side.group) {
+      const add = Math.min(remainder, regions[g].troops - dist[g]);
+      dist[g] += add;
+      remainder -= add;
+      if (remainder <= 0) break;
+    }
+  }
+
+  function getTotal() {
+    let t = 0;
+    for (const g of side.group) t += (dist[g] | 0);
+    return t;
+  }
+
+  function renderModal() {
+    const host = document.getElementById('aoeModalHost');
+    const total = getTotal();
+    const diff = side.totalDmg - total;
+    const rows = side.group.map(g => {
+      const v = dist[g] | 0;
+      const r = regions[g];
+      const maxV = r.troops;
+      return '<div class="row">' +
+        '<span class="lbl">#' + (g+1) + ' (' + r.troops + ' troops)</span>' +
+        '<span class="arrow">→ −</span>' +
+        '<input type="number" min="0" max="' + maxV + '" value="' + v +
+        '" data-gidx="' + g + '">' +
+        '<span class="sub" style="margin-left:6px;">→ ' + Math.max(0, r.troops - v) + ' left</span>' +
+      '</div>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="aoe-modal"><div class="aoe-modal-card">' +
+        '<h3>Mutual Clash — Distribute Attrition</h3>' +
+        '<div class="modal-info">' + playerName(side.player) + ': your forces took <strong>' + side.totalDmg +
+          '</strong> total damage. Distribute it across your attacking territories (min ' + minEach + ' each).' +
+          (diff !== 0 ? ' <span style="color:#fca5a5;">Remaining: ' + diff + '</span>' : ' <span style="color:#86efac;">✓ Fully distributed</span>') +
+        '</div>' +
+        '<div class="section-head">Damage per territory</div>' +
+        rows +
+        '<div class="modal-foot">' +
+          '<button class="actionBtn primary" id="attrOk"' + (diff !== 0 ? ' disabled' : '') + '>Confirm</button>' +
+          '<button class="actionBtn" id="attrAuto">Auto-distribute</button>' +
+        '</div>' +
+      '</div></div>';
+
+    host.querySelectorAll('input[type=number][data-gidx]').forEach(inp => {
+      inp.oninput = () => {
+        const g = parseInt(inp.dataset.gidx, 10);
+        let v = parseInt(inp.value, 10);
+        if (!Number.isFinite(v) || v < 0) v = 0;
+        v = Math.min(v, regions[g].troops);
+        dist[g] = v;
+        renderModal();
+      };
+    });
+
+    const okBtn = document.getElementById('attrOk');
+    if (okBtn) okBtn.onclick = () => {
+      host.innerHTML = '';
+      callback(dist);
+    };
+    const autoBtn = document.getElementById('attrAuto');
+    if (autoBtn) autoBtn.onclick = () => {
+      const autoDist = autoBleedDist(side.group, side.totalDmg, regions, true);
+      for (const g of side.group) dist[g] = autoDist[g] || 0;
+      host.innerHTML = '';
+      callback(dist);
+    };
+  }
+  renderModal();
 }
 
 function processAcquisitions(acquisitions, idx) {
@@ -2832,11 +3183,12 @@ function aoePostResolution() {
   if (bothPlayersStuckAtOnes()) {
     appendLogEntry({
       title: null,
-      lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — counting phase begins.' }]
+      lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — no further moves possible.' }]
     });
     endGame();
     return;
   }
+
   // Otherwise next round
   aoeStartRound();
 }
@@ -2844,6 +3196,7 @@ function aoePostResolution() {
 /* ═══════════════════════════ AoE — ACTION-PICKER UI ═══════════════════════════ */
 
 function setAoeUiAction(action) {
+  if (historyViewIdx >= 0) historyExit();
   if (phase !== 'battle') return;
   if (!canIControlAoePlan()) {
     flashMessage('Wait for your plan step.', 'warn'); return;
@@ -2867,6 +3220,7 @@ function aoeClearWorking() {
 }
 
 function onRegionClickAoe(idx) {
+  if (historyViewIdx >= 0) historyExit();
   if (!canIControlAoePlan()) { flashMessage('Wait for your turn.', 'warn'); return; }
   // If fog hides this region, ignore
   if (fogOfWar && !regionVisibleTo(idx, aoePlanningPlayer)) {
@@ -2993,34 +3347,21 @@ function openAttackConfirmModal(G, defenderIdx) {
   const pwr = aoePower(G);
   const defenseValue = def.troops;
   const successAttrition = Math.ceil(def.troops / 2);
-  const failDmg = Math.ceil(def.troops / 2);
   let autoBleed = true;
   let successManual = autoBleedDist(G, successAttrition, regions, false);
-  let failManual = autoBleedDist(G, failDmg, regions, true);
-
-  function isOneVsOneCoin() {
-    return G.length === 1 && regions[G[0]].troops === def.troops;
-  }
 
   function render2() {
     const host = document.getElementById('aoeModalHost');
     let projection;
-    const isWeak = (pwr.total <= defenseValue) && !isOneVsOneCoin();
+    const isWeak = (pwr.total <= defenseValue);
     if (pwr.total > defenseValue) projection = 'win';
-    else if (isOneVsOneCoin()) projection = '50/50 coin flip';
-    else projection = '<span class="weak">attack will fail</span> — used as a "softening" strike to bleed the defender (defender will still take ' + Math.floor(defenseValue/2) + ' damage)';
+    else projection = '<span class="weak">attack will fail</span> — mutual damage (softening strike)';
 
     const successRows = G.map(idx => {
       const v = successManual[idx] || 0;
       return '<div class="row"><span class="lbl">#' + (idx+1) + ' (' + regions[idx].troops + ')</span>' +
              '<input type="number" min="0" max="' + regions[idx].troops + '" value="' + v +
              '" data-idx="' + idx + '" data-dist="success" ' + (autoBleed ? 'disabled' : '') + '></div>';
-    }).join('');
-    const failRows = G.map(idx => {
-      const v = failManual[idx] || 0;
-      return '<div class="row"><span class="lbl">#' + (idx+1) + ' (' + regions[idx].troops + ')</span>' +
-             '<input type="number" min="0" value="' + v +
-             '" data-idx="' + idx + '" data-dist="fail" ' + (autoBleed ? 'disabled' : '') + '></div>';
     }).join('');
 
     host.innerHTML =
@@ -3030,18 +3371,17 @@ function openAttackConfirmModal(G, defenderIdx) {
           'Attack power: <strong' + (isWeak ? ' class="weak"' : '') + '>' + pwr.total.toFixed(1) + '</strong> ' +
           'vs Defense: <strong>' + defenseValue + '</strong> ' +
           '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span>.<br>' +
-          'Projected: ' + projection + '.<br>' +
-          'On success: attackers lose <strong>' + successAttrition + '</strong> total attrition.<br>' +
-          'On failure: attackers lose <strong>' + failDmg + '</strong> total; defender takes minor damage.<br>' +
-          '<em>If the opponent counter-attacks into this group, both sides will take damage and no territory changes hands.</em>' +
+          'Projected (based on current troops): ' + projection + '.<br>' +
+          'On success: attackers lose <strong>⌈defender/2⌉</strong> total attrition (currently ' + successAttrition + ').<br>' +
+          'On failure: attackers lose <strong>⌈defender/2⌉</strong> total, auto-distributed at resolution.<br>' +
+          '<em>Defender may adjust troops before resolution — actual damage is based on final defender count.</em><br>' +
+          '<em>If the opponent counter-attacks into this group, both sides take damage and no territory changes hands.</em>' +
         '</div>' +
         '<div class="checkbox-row">' +
           '<label><input type="checkbox" id="autoBleedChk" ' + (autoBleed ? 'checked' : '') + '> Auto-bleed (even split)</label>' +
         '</div>' +
-        '<div class="section-head">Success-case attrition (total ' + successAttrition + ')</div>' +
+        '<div class="section-head">Success-case attrition (currently ' + successAttrition + ', may change)</div>' +
         successRows +
-        '<div class="section-head">Failure-case damage (total ' + failDmg + ', overflow wipes)</div>' +
-        failRows +
         '<div class="err" id="atkErr"></div>' +
         '<div class="modal-foot">' +
           '<button class="actionBtn primary" id="atkOk">Confirm Plan</button>' +
@@ -3053,7 +3393,6 @@ function openAttackConfirmModal(G, defenderIdx) {
       autoBleed = e.target.checked;
       if (autoBleed) {
         successManual = autoBleedDist(G, successAttrition, regions, false);
-        failManual = autoBleedDist(G, failDmg, regions, true);
       }
       render2();
     };
@@ -3063,7 +3402,6 @@ function openAttackConfirmModal(G, defenderIdx) {
       render();
     };
     document.getElementById('atkOk').onclick = () => {
-      // Validate success-distribution sums to successAttrition
       if (!autoBleed) {
         let sSum = 0;
         for (const idx of G) sSum += successManual[idx] || 0;
@@ -3074,7 +3412,6 @@ function openAttackConfirmModal(G, defenderIdx) {
       }
       aoeWorking.attackAutoBleed = autoBleed;
       aoeWorking.attackSuccessManual = autoBleed ? null : { ...successManual };
-      aoeWorking.attackFailManual = autoBleed ? null : { ...failManual };
       closeAoeModal();
       flashMessage('Attack plan ready. Click Submit Plan.', 'good');
       render();
@@ -3083,11 +3420,9 @@ function openAttackConfirmModal(G, defenderIdx) {
       document.querySelectorAll('input[type=number][data-idx]').forEach(inp => {
         inp.oninput = () => {
           const idx = parseInt(inp.dataset.idx, 10);
-          const dist = inp.dataset.dist;
           let v = parseInt(inp.value, 10);
           if (!Number.isFinite(v) || v < 0) v = 0;
-          if (dist === 'success') successManual[idx] = v;
-          else failManual[idx] = v;
+          successManual[idx] = v;
         };
       });
     }
@@ -3251,7 +3586,10 @@ function drawIntentArrows() {
 /* ═══════════════════════════ BATTLE LOG ═══════════════════════════ */
 function clearBattleLog() {
   battleLog = [];
+  boardHistory = [];
+  historyViewIdx = -1;
   renderBattleLog();
+  renderHistoryNav();
 }
 
 function appendLogEntry(entry) {
@@ -3276,7 +3614,8 @@ function renderBattleLog() {
   panel.classList.remove('hidden');
   body.classList.toggle('collapsed', battleLogCollapsed);
 
-  const html = battleLog.map(entry => {
+  const html = battleLog.map((entry, i) => {
+    const hl = (historyViewIdx >= 0 && i === historyLogIndex()) ? ' history-highlight' : '';
     const title = entry.title
       ? '<div class="battle-log-roundTitle">' + escapeHtml(entry.title) + '</div>'
       : '';
@@ -3284,12 +3623,116 @@ function renderBattleLog() {
       const cls = 'battle-log-line ' + (L.kind || '');
       return '<div class="' + cls + '">' + L.html + '</div>';
     }).join('');
-    return '<div class="battle-log-round">' + title + lines + '</div>';
+    return '<div class="battle-log-round' + hl + '" data-logidx="' + i + '">' + title + lines + '</div>';
   }).join('');
   body.innerHTML = html;
-  // Auto-scroll to bottom
-  body.scrollTop = body.scrollHeight;
+  if (historyViewIdx >= 0) {
+    const target = body.querySelector('.history-highlight');
+    if (target) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } else {
+    body.scrollTop = body.scrollHeight;
+  }
 }
+
+function historyLogIndex() {
+  if (historyViewIdx < 0 || historyViewIdx >= boardHistory.length) return -1;
+  const snap = boardHistory[historyViewIdx];
+  // Battle log entries with titles that contain "Round N" map to snapshots.
+  // The snapshot at index i corresponds to round i+1 start → the log entry for round i (previous round's result).
+  // Snapshot 0 = start of round 1 = before any resolution → no log entry to highlight (return -1).
+  // Snapshot k (k>=1) = start of round k+1 = after round k resolved → highlight log entry for round k.
+  if (historyViewIdx === 0) return 0; // highlight the game-start log entry
+  // Find the battle log entry whose title contains "Round <round>"
+  const roundNum = snap.round - 1; // the round that just resolved
+  for (let i = battleLog.length - 1; i >= 0; i--) {
+    if (battleLog[i].title && battleLog[i].title.indexOf('Round ' + roundNum) >= 0) return i;
+  }
+  return Math.min(historyViewIdx, battleLog.length - 1);
+}
+
+function renderHistoryNav() {
+  const nav = document.getElementById('historyNav');
+  const banner = document.getElementById('historyBanner');
+  if (!nav) return;
+  if (boardHistory.length < 2) {
+    nav.classList.remove('visible');
+    if (banner) banner.classList.remove('visible');
+    return;
+  }
+  nav.classList.add('visible');
+  const viewing = historyViewIdx >= 0;
+  if (banner) banner.classList.toggle('visible', viewing);
+  document.getElementById('historyFirst').disabled = viewing && historyViewIdx === 0;
+  document.getElementById('historyPrev').disabled = viewing && historyViewIdx === 0;
+  document.getElementById('historyNext').disabled = viewing && historyViewIdx >= boardHistory.length - 1;
+  const label = document.getElementById('historyLabel');
+  if (viewing) {
+    label.textContent = boardHistory[historyViewIdx].label + ' (' + (historyViewIdx + 1) + '/' + boardHistory.length + ')';
+  } else {
+    label.textContent = 'Current (Live)';
+  }
+}
+
+function historyStep(delta) {
+  if (boardHistory.length < 2) return;
+  if (historyViewIdx < 0) {
+    // Enter history mode from live — start at most recent snapshot
+    historyViewIdx = delta < 0 ? boardHistory.length - 1 : 0;
+  } else {
+    historyViewIdx = Math.max(0, Math.min(boardHistory.length - 1, historyViewIdx + delta));
+  }
+  applyHistoryView();
+}
+
+function historyGo(idx) {
+  if (idx < 0 || idx >= boardHistory.length) return;
+  historyViewIdx = idx;
+  applyHistoryView();
+}
+
+function historyExit() {
+  if (historyViewIdx < 0) return;
+  historyViewIdx = -1;
+  renderHistoryNav();
+  renderBattleLog();
+  render();
+}
+
+function applyHistoryView() {
+  const snap = boardHistory[historyViewIdx];
+  if (!snap) return;
+  renderHistoryNav();
+  renderBattleLog();
+  // Overlay snapshot onto map cells without mutating regions[]
+  const cells = document.querySelectorAll('#mapContainer .region');
+  cells.forEach(el => {
+    const idx = parseInt(el.dataset.idx, 10);
+    const s = snap.state[idx];
+    if (!s) return;
+    let cls = 'region';
+    if (regions[idx].tiny) cls += ' tiny';
+    if (s.owner === -1) cls += ' eliminated';
+    else if (s.owner === 1) cls += ' p1';
+    else if (s.owner === 2) cls += ' p2';
+    else cls += ' empty unoccupied';
+    el.setAttribute('class', cls);
+    const tEl = el.querySelector('.region-troops');
+    if (s.owner <= 0) tEl.textContent = '';
+    else tEl.textContent = s.troops > 0 ? s.troops : '';
+  });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (boardHistory.length < 2) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); historyStep(-1); }
+  else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (historyViewIdx >= 0 && historyViewIdx >= boardHistory.length - 1) historyExit();
+    else if (historyViewIdx >= 0) historyStep(1);
+  }
+  else if (e.key === 'Escape' && historyViewIdx >= 0) { e.preventDefault(); historyExit(); }
+});
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -3309,9 +3752,11 @@ function classOfPlayer(p) {
   return p === 1 ? 'p1' : (p === 2 ? 'p2' : 'system');
 }
 
-/* Build human-readable lines for an AoE round. */
-function buildAoeRoundLog(roundNum, planA, planB, res) {
+/* Build human-readable lines for an AoE round.
+   preSnap = array of troop counts indexed by region id, captured BEFORE resolution. */
+function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
   const lines = [];
+  const pre = preSnap || regions.map(r => r.troops);
 
   // Per-player action descriptions (with outcomes inline)
   function describePlan(plan, attackLog, mutualLog) {
@@ -3325,16 +3770,13 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
     const cls = classOfPlayer(p);
     if (plan.type === 'adjust') {
       const moves = plan.transfers.map(t =>
-        regionRef(t.source) + '→' + regionRef(t.dest) + ' (' + t.amount + ')'
+        regionRef(t.source) + ' <span class="neutral">(' + pre[t.source] + ')</span>→' +
+        regionRef(t.dest) + ' <span class="neutral">(' + pre[t.dest] + ')</span> (' + t.amount + ')'
       ).join(', ');
       return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> adjusted: ' + (moves || '(no transfers)') + '.' }];
     }
     if (plan.type === 'claim') {
-      // Multi-source claim log shapes:
-      //   uncontested: { player, contributions, target, amount, outcome:'win', uncontested:true }
-      //   contested:   { playerA, contributionsA, powerA, playerB, contributionsB, powerB, target,
-      //                  outcome:'win-A'|'win-B'|'stalemate', winner?, pwrWinner?, pwrLoser?, damageLoser?, damageA?, damageB? }
-      const contribStr = plan.contributions.map(c => regionRef(c.source) + ' (' + c.amount + ')').join(', ');
+      const contribStr = plan.contributions.map(c => regionRef(c.source) + ' <span class="neutral">(' + pre[c.source] + ' troops, sent ' + c.amount + ')</span>').join(', ');
       const totalSent = plan.contributions.reduce((s, c) => s + c.amount, 0);
       let outcomeTxt = '';
       const myClaim = res.claimLogs.find(c =>
@@ -3366,39 +3808,35 @@ function buildAoeRoundLog(roundNum, planA, planB, res) {
       }];
     }
     if (plan.type === 'attack') {
-      const grpStr = plan.group.map(regionRef).join(', ');
-      const head = '<strong>' + playerName(p) + '</strong> attacked ' + regionRef(plan.defender) +
-                   ' with [' + grpStr + ']';
+      const grpDetail = plan.group.map(idx => regionRef(idx) + ' <span class="neutral">(' + pre[idx] + ')</span>').join(', ');
+      const defDetail = regionRef(plan.defender) + ' <span class="neutral">(' + pre[plan.defender] + ')</span>';
+      const head = '<strong>' + playerName(p) + '</strong> attacked ' + defDetail +
+                   ' with [' + grpDetail + ']';
 
-      // Mutual clash supersedes individual attack logs
       if (mutualLog) {
-        const totLoss = (mutualLog.playerA === p ? Object.values(mutualLog.lossesA || {}) :
-                         Object.values(mutualLog.lossesB || {})).reduce((a,b) => a + (b|0), 0);
+        const totDmg = (mutualLog.playerA === p ? mutualLog.dmgToA : mutualLog.dmgToB);
         const oppPwr = (mutualLog.playerA === p ? mutualLog.powerB : mutualLog.powerA);
         return [{
           kind: cls,
-          html: head + '. <em>Mutual clash</em> with opponent (no territory changes). Took <strong>' + totLoss +
-                '</strong> total damage (½ of opponent\'s power ' + oppPwr.toFixed(1) + ').'
+          html: head + '. <em>Mutual clash</em> (no territory changes). Takes <strong>' + totDmg +
+                '</strong> total attrition (½ of opponent\'s power ' + oppPwr.toFixed(1) + '). Distribution chosen by player.'
         }];
       }
 
       // Individual attack outcome
       if (!attackLog) return [{ kind: cls, html: head + '.' }];
-      const totLoss = Object.values(attackLog.attackerLosses || {}).reduce((a,b) => a + (b|0), 0);
+      const losses = attackLog.attackerLosses || {};
+      const totLoss = Object.values(losses).reduce((a,b) => a + (b|0), 0);
+      const lossDetail = plan.group.map(idx => regionRef(idx) + ': −' + (losses[idx] || 0)).join(', ');
       let outcomeLine;
       if (attackLog.outcome === 'win') {
         outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
-                      ' wiped. Attackers lost <strong>' + totLoss + '</strong>.';
+                      ' wiped. Attacker losses: <strong>' + totLoss + '</strong> [' + lossDetail + '].';
       } else if (attackLog.outcome === 'fail') {
         outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
                       ' vs defense ' + attackLog.defense +
-                      '). Attackers lost <strong>' + (attackLog.attackerDmg || totLoss) + '</strong>; defender lost ' +
-                      (attackLog.defenderDmg || 0) + '.';
-      } else if (attackLog.outcome === 'coinWin') {
-        outcomeLine = ' → coin flip <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
-                      ' wiped. Attacker lost <strong>' + totLoss + '</strong>.';
-      } else if (attackLog.outcome === 'coinLose') {
-        outcomeLine = ' → coin flip <span style="color:#fca5a5;">lost</span>. Attacker territory wiped.';
+                      '). Attacker losses: <strong>' + (attackLog.attackerDmg || totLoss) + '</strong> [' + lossDetail +
+                      ']; defender ' + regionRef(plan.defender) + ' lost ' + (attackLog.defenderDmg || 0) + '.';
       } else {
         outcomeLine = '.';
       }
@@ -3435,8 +3873,8 @@ function flashOutcomes(res) {
   for (const log of res.attackLogs) {
     const cell = document.querySelector('#mapContainer .region[data-idx="' + log.defender + '"]');
     if (!cell) continue;
-    if (log.outcome === 'win' || log.outcome === 'coinWin') cell.classList.add('flash-success');
-    else if (log.outcome === 'fail' || log.outcome === 'coinLose') cell.classList.add('flash-fail');
+    if (log.outcome === 'win') cell.classList.add('flash-success');
+    else if (log.outcome === 'fail') cell.classList.add('flash-fail');
     setTimeout(() => { cell.classList.remove('flash-success','flash-fail'); }, 1400);
   }
   for (const log of res.claimLogs) {
@@ -3476,6 +3914,8 @@ function viewerForFog() {
 
 /* ═══════════════════════════ RENDER ═══════════════════════════ */
 function render() {
+  if (historyViewIdx >= 0 && !aoeRevealing && phase !== 'over') { applyHistoryView(); return; }
+  if (historyViewIdx >= 0) { historyViewIdx = -1; renderHistoryNav(); renderBattleLog(); }
   const cells = document.querySelectorAll('#mapContainer .region');
 
   const validTargets = (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn())
@@ -3920,7 +4360,6 @@ function enumerateAttackCandidates(player) {
       const defenseNoHunk = def.troops;
       let kind;
       if (pwr.total > defenseNoHunk) kind = 'win';
-      else if (G.length === 1 && regions[G[0]].troops === def.troops) kind = 'coin';
       else kind = 'fail';
       out.push({
         group: G, defender: def.id,
@@ -4015,7 +4454,6 @@ function scoreAttack(c, player) {
   // kill_value − failure_risk * failure_damage
   let risk;
   if (c.kind === 'win') risk = 0.05;
-  else if (c.kind === 'coin') risk = 0.5;
   else risk = 0.95;
   const score = c.killValue * (1 - risk) - c.failDmg * risk - c.group.length * 0.5;
   return score;
@@ -4243,6 +4681,7 @@ async function createRoom() {
         guestPlayer: myPlayer === 1 ? 2 : 1,
         firstPlayer: 1,
         totalTroops, gameMode, fogOfWar,
+        turnMode, fixedTurnCount, preAllocRandom,
         map: serializeMap(map)
       });
       startGame(map);
@@ -4277,6 +4716,9 @@ function handlePeerData(d) {
       if (typeof d.totalTroops === 'number') totalTroops = d.totalTroops;
       if (typeof d.gameMode === 'string') gameMode = d.gameMode;
       if (typeof d.fogOfWar === 'boolean') fogOfWar = d.fogOfWar;
+      if (typeof d.turnMode === 'string') turnMode = d.turnMode;
+      if (typeof d.fixedTurnCount === 'number') fixedTurnCount = d.fixedTurnCount;
+      if (typeof d.preAllocRandom === 'boolean') preAllocRandom = d.preAllocRandom;
       if (d.map) {
         startGame(deserializeMap(d.map));
       }
@@ -4316,6 +4758,13 @@ function handlePeerData(d) {
         applyAcquisitionContribs({ defIdx: d.defIdx, player: d.player }, d.contribs || {});
       }
       break;
+    case 'aoe-attrition':
+      if (phase === 'battle' && gameMode === 'aoe' && d.dist) {
+        const side = { player: d.player, group: Object.keys(d.dist).map(Number) };
+        applyAttritionDist(side, d.dist, null);
+        render();
+      }
+      break;
     case 'rematch':
       if (d.map) {
         startGame(deserializeMap(d.map));
@@ -4341,6 +4790,7 @@ function copyLink() {
 
 /* ═══════════════════════════ END GAME / RESULTS ═══════════════════════════ */
 function endGame() {
+  captureBoardSnapshot('Game Over');
   phase = 'over';
   render();
   let p1Regs = 0, p1Tr = 0, p2Regs = 0, p2Tr = 0;
@@ -4372,7 +4822,8 @@ function endGame() {
 
   let reason;
   if (p1Regs === 0 || p2Regs === 0) reason = 'One side has no territories left.';
-  else if (aoeRound > aoeMaxRounds && aoeMaxRounds > 0) reason = 'Turn limit reached (' + aoeMaxRounds + ' rounds).';
+  else if (bothPlayersStuckAtOnes && bothPlayersStuckAtOnes()) reason = 'All territories at 1 troop — no further moves possible.';
+  else if (aoeMaxRounds > 0 && aoeRound > aoeMaxRounds) reason = 'Turn limit reached (' + aoeMaxRounds + ' rounds).';
   else if (p1Regs !== p2Regs) reason = 'Most regions controlled.';
   else if (p1Tr !== p2Tr) reason = 'Region tie — won on troop count.';
   else reason = 'Same regions and troops on both sides.';
@@ -4454,8 +4905,7 @@ function renderRulesCard() {
         '<li>Power = sum(troops in G) + Σ_{i&lt;j} (g<sub>i</sub>/10)·(g<sub>j</sub>/10) (cooperation bonus).</li>' +
         '<li>Defense = D.troops.</li>' +
         '<li><strong>Power &gt; Defense → win:</strong> D wiped. Attackers pay ceil(D/2) attrition. You may then place up to ⌊remaining_troops/2⌋ into the conquered territory to claim it.</li>' +
-        '<li><strong>|G|=1, equal troops → coin flip:</strong> 50/50. Winner-attacker wipes D + pays ceil(D/2). Winner-defender wipes attacker territory; D loses ceil(att/2).</li>' +
-        '<li><strong>Else (incl. exact equality) → fail:</strong> attackers take ceil(def/2); damage distributed and wipes overflowing tiles. Defender takes floor(def/2) but survives.</li>' +
+        '<li><strong>Else (power ≤ defense) → fail:</strong> attackers take ceil(def/2) attrition distributed across attacking group. Defender takes floor(def/2) but survives. No territorial change.</li>' +
         '<li><strong>1v1 attacks are not allowed</strong> — a single 1-troop attacker on a 1-troop defender is forbidden.</li>' +
       '</ul>' +
       '<p><strong>Attack chain:</strong> if A attacks B and B attacks C, then B→C resolves first, then A→B resolves against updated state.</p>' +
@@ -4484,7 +4934,10 @@ function renderRulesCard() {
       '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 2 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts use pre-round source counts as cap.</p>' +
       (fogOfWar ? '<h3>Fog of War (enabled)</h3><p>You only see your own territories, gray ruins, and enemy territories adjacent to yours. Everything else renders as a fog tile until it borders you.</p>' : '') +
       '<h3>Victory</h3>' +
-      '<ul><li>Game ends after ⌊total_regions / 2⌋ rounds, or when both players Pass in the same round, or one player has zero territories.</li>' +
+      '<ul>' +
+      (turnMode === 'dynamic'
+        ? '<li><strong>Dynamic mode:</strong> game ends after ⌊3N/4⌋ rounds (N = assigned territories), or earlier if all territories hit 1 troop, both players Pass, or one player has zero territories.</li>'
+        : '<li><strong>Fixed mode:</strong> game ends after ' + (fixedTurnCount > 0 ? fixedTurnCount : '⌊total_regions / 2⌋') + ' rounds, or when both players Pass in the same round, or one player has zero territories.</li>') +
       '<li>Most owned regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
       mapBlock;
   } else {
