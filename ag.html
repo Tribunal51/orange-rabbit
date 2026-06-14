@@ -156,7 +156,14 @@
     .deploy-bar .max-btn:hover { background: rgba(168,85,247,.3); }
 
     /* map */
-    .board-wrap { width: 100%; display: flex; justify-content: center; margin: 0 auto; }
+    .board-wrap { width: 100%; display: flex; justify-content: center; margin: 0 auto; transition: justify-content .2s, padding-left .2s; }
+    body:has(#aoeModalHost > .aoe-modal) .board-wrap {
+      justify-content: flex-start;
+      padding-left: 24px;
+    }
+    @media (max-width: 900px) {
+      body:has(#aoeModalHost > .aoe-modal) .board-wrap { justify-content: center; padding-left: 0; }
+    }
     .map-container {
       position: relative;
       width: min(620px, calc(100vw - 40px));
@@ -235,6 +242,23 @@
     .region.unbeatable { outline: 2px dashed rgba(248,113,113,.7); outline-offset: -4px; opacity: .55; }
     .region.unbeatable .region-troops { color: #f87171; }
 
+    .region.acquireFocus {
+      outline: 3px dashed #86efac;
+      outline-offset: -4px;
+      box-shadow: 0 0 24px rgba(134,239,172,.6);
+      z-index: 8;
+      animation: acquirePulse 1.2s ease-in-out infinite;
+    }
+    @keyframes acquirePulse {
+      0%, 100% { box-shadow: 0 0 18px rgba(134,239,172,.45); }
+      50%      { box-shadow: 0 0 36px rgba(134,239,172,.85); }
+    }
+    .map-container.geo-map g.region.acquireFocus polygon {
+      stroke: #86efac;
+      stroke-width: 2.4;
+      stroke-dasharray: 4 2;
+      filter: drop-shadow(0 0 6px rgba(134,239,172,.7));
+    }
     .region.adjustSource {
       outline: 3px solid #fde68a; outline-offset: -4px; z-index: 6;
       animation: attackerPulse 1.4s ease-in-out infinite;
@@ -301,17 +325,25 @@
 
     /* AoE modal */
     .aoe-modal {
-      position: fixed; inset: 0; z-index: 250;
-      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
-      display: flex; align-items: center; justify-content: center;
+      position: fixed; top: 0; right: 0; bottom: 0; left: auto;
+      z-index: 250;
+      background: transparent; backdrop-filter: none;
+      display: flex; align-items: center; justify-content: flex-end;
       padding: 20px;
+      pointer-events: none;
+      width: min(520px, 100vw);
     }
     .aoe-modal-card {
-      background: linear-gradient(135deg, #1e1b4b, #0b0a1f);
-      border: 1px solid rgba(168,85,247,.3); border-radius: 18px;
+      pointer-events: auto;
+      background: linear-gradient(135deg, rgba(30,27,75,.97), rgba(11,10,31,.97));
+      border: 1px solid rgba(168,85,247,.45); border-radius: 18px;
       padding: 24px; max-width: 480px; width: 100%;
       max-height: 86vh; overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      box-shadow: 0 20px 60px rgba(0,0,0,.75), 0 0 0 1px rgba(0,0,0,.4);
+      backdrop-filter: blur(6px);
+    }
+    @media (max-width: 640px) {
+      .aoe-modal { width: 100vw; padding: 12px; }
     }
     .aoe-modal-card h3 { margin-bottom: 12px; font-size: 18px; }
     .aoe-modal-card .row {
@@ -1079,6 +1111,7 @@ let aoePlanningPlayer = 1;     // whose plan UI is currently shown (local/cpu/on
 let aoeRevealing = false;
 let aoeHandoffPending = false;
 let aoePendingAttrition = null;
+let aoePendingRoundSummary = null;
 
 /* Battle log: array of round entries.
    Each entry: { round, kind?, lines: [{ player, text, kind? }] }
@@ -1101,10 +1134,31 @@ function makeEmptyWorking() {
     attackSuccessManual: null, // map idx->loss
     adjustTransfers: [],
     adjustSourceSel: -1,
-    claimTarget: -1,
-    claimContribs: [],     // [{source, amount}]
+    claims: [],            // [{target, contributions: [{source, amount}]}]
+    claimTargetSel: -1,    // currently-focused target idx (the gray)
     claimSourceSel: -1     // own territory currently pending an amount input
   };
+}
+function workingHasClaimSource(w, sourceIdx) {
+  for (const cl of w.claims) {
+    for (const c of cl.contributions) if (c.source === sourceIdx) return cl.target;
+  }
+  return -1;
+}
+function workingFindClaim(w, targetIdx) {
+  return w.claims.find(cl => cl.target === targetIdx) || null;
+}
+function workingRemoveClaim(w, targetIdx) {
+  w.claims = w.claims.filter(cl => cl.target !== targetIdx);
+  if (w.claimTargetSel === targetIdx) w.claimTargetSel = -1;
+}
+function planClaimList(plan) {
+  if (!plan) return [];
+  if (Array.isArray(plan.claims)) return plan.claims;
+  if (typeof plan.target === 'number' && Array.isArray(plan.contributions)) {
+    return [{ target: plan.target, contributions: plan.contributions }];
+  }
+  return [];
 }
 
 /* Online */
@@ -2131,6 +2185,33 @@ function aoePowerFromState(group, state) {
 }
 function aoePower(group) { return aoePowerFromState(group, regions); }
 
+/* Min-spread validator for attrition. Each eligible territory (troops > 0)
+   must take at least 1 damage IF possible — i.e. the number of eligibles with
+   dist >= 1 must equal min(totalDmg, n_eligible). Surplus damage above that
+   minimum may pile freely. Each dist value capped by available troops. */
+function attritionSpreadCheck(group, dist, totalDmg, regs) {
+  const eligible = group.filter(g => regs[g].troops > 0);
+  const n = eligible.length;
+  if (n === 0) return { ok: totalDmg === 0, violators: [], requiredHit: 0, n: 0 };
+  const requiredHit = Math.min(totalDmg, n);
+  const violators = [];
+  let hitCount = 0;
+  for (const g of eligible) {
+    const d = dist[g] || 0;
+    const cap = regs[g].troops;
+    if (d > cap) violators.push({ idx: g, reason: 'over-troops', cap });
+    if (d >= 1) hitCount++;
+  }
+  if (hitCount < requiredHit) {
+    // Find candidates that took 0 but could absorb 1
+    const zero = eligible.filter(g => (dist[g] || 0) === 0 && regs[g].troops >= 1);
+    for (const g of zero.slice(0, requiredHit - hitCount)) {
+      violators.push({ idx: g, reason: 'too-low' });
+    }
+  }
+  return { ok: violators.length === 0, violators, requiredHit, n };
+}
+
 /* Auto-bleed: distribute integer total L across attackers in G evenly,
    respecting each attacker's available troops. Returns map idx->loss.
    If overflowAllowed, losses can exceed a region's troops (cap-and-wipe);
@@ -2293,6 +2374,30 @@ function claimPlanValid(player, targetIdx, contributions) {
   return true;
 }
 
+/* Multi-claim plan validity: each sub-claim valid, no source used in two claims,
+   no two claims for same target, sum of source contributions across claims ≤ floor/2 cap. */
+function claimsPlanValid(player, claims) {
+  if (!Array.isArray(claims) || claims.length === 0) return false;
+  const seenTargets = new Set();
+  const sourceTotals = new Map();
+  for (const cl of claims) {
+    if (!cl || typeof cl.target !== 'number') return false;
+    if (seenTargets.has(cl.target)) return false;
+    seenTargets.add(cl.target);
+    if (!claimPlanValid(player, cl.target, cl.contributions)) return false;
+    for (const c of cl.contributions) {
+      const prev = sourceTotals.get(c.source) || 0;
+      sourceTotals.set(c.source, prev + c.amount);
+    }
+  }
+  for (const [src, total] of sourceTotals) {
+    const s = regions[src];
+    if (!s) return false;
+    if (total > Math.floor(s.troops / 2)) return false;
+  }
+  return true;
+}
+
 /* ═══════════════════════════ AoE — RESOLUTION ═══════════════════════════ */
 
 /* Apply Step 1: adjustments. Mutates state-in-place. State is array of plain {owner,troops,neighbors,...}. */
@@ -2397,7 +2502,7 @@ function distributeClaimDamage(contribs, totalDmg) {
 }
 
 /* Resolve simultaneous multi-source claims (both players may claim same gray).
-   Plans of shape { type:'claim', player, target, contributions:[{source,amount},...] }.
+   Plans of shape { type:'claim', player, claims:[{target, contributions:[{source,amount},...]}, ...] }.
    Returns { effects: [{...}], logs: [{...}] }. */
 function resolveClaims(planA, planB, post) {
   const effects = [];
@@ -2406,25 +2511,33 @@ function resolveClaims(planA, planB, post) {
   const cB = (planB && planB.type === 'claim') ? planB : null;
   if (!cA && !cB) return { effects, logs };
 
-  function pushSource(idx, ownerIfAlive, newTroops) {
-    const nt = Math.max(0, newTroops);
-    effects.push({
-      kind: 'claimSource',
-      idx,
-      newOwner: nt <= 0 ? 0 : ownerIfAlive,
-      newTroops: nt
-    });
+  // Aggregate per-source deductions across multiple sub-claims for the same
+  // source on the same plan, so the final claimSource effect reflects the sum.
+  const sourceDeducts = new Map(); // sourceIdx -> { owner, total }
+  function recordSource(idx, owner, dedAmount) {
+    if (dedAmount <= 0) return;
+    if (!sourceDeducts.has(idx)) sourceDeducts.set(idx, { owner, total: 0 });
+    sourceDeducts.get(idx).total += dedAmount;
+  }
+  function flushSourceEffects() {
+    for (const [idx, info] of sourceDeducts) {
+      const nt = Math.max(0, post[idx].troops - info.total);
+      effects.push({
+        kind: 'claimSource',
+        idx,
+        newOwner: nt <= 0 ? 0 : info.owner,
+        newTroops: nt
+      });
+    }
   }
 
-  function uncontested(plan, tIdx) {
-    const total = plan.contributions.reduce((s, c) => s + c.amount, 0);
-    for (const c of plan.contributions) {
-      pushSource(c.source, plan.player, post[c.source].troops - c.amount);
-    }
-    effects.push({ kind: 'claimTake', idx: tIdx, newOwner: plan.player, newTroops: total });
+  function uncontested(player, contributions, tIdx) {
+    const total = contributions.reduce((s, c) => s + c.amount, 0);
+    for (const c of contributions) recordSource(c.source, player, c.amount);
+    effects.push({ kind: 'claimTake', idx: tIdx, newOwner: player, newTroops: total });
     logs.push({
-      player: plan.player,
-      contributions: plan.contributions.slice(),
+      player,
+      contributions: contributions.slice(),
       target: tIdx,
       amount: total,
       outcome: 'win',
@@ -2432,43 +2545,36 @@ function resolveClaims(planA, planB, post) {
     });
   }
 
-  // Group by target. claimContribs by player.
+  // Group by target across both players' sub-claims.
   const byTarget = {};
-  if (cA) { byTarget[cA.target] = byTarget[cA.target] || {}; byTarget[cA.target].a = cA; }
-  if (cB) { byTarget[cB.target] = byTarget[cB.target] || {}; byTarget[cB.target].b = cB; }
+  const subA = cA ? planClaimList(cA) : [];
+  const subB = cB ? planClaimList(cB) : [];
+  for (const cl of subA) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].a = { player: cA.player, contributions: cl.contributions }; }
+  for (const cl of subB) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].b = { player: cB.player, contributions: cl.contributions }; }
 
   for (const tIdxStr in byTarget) {
     const tIdx = parseInt(tIdxStr, 10);
     const entry = byTarget[tIdxStr];
     const a = entry.a, b = entry.b;
-    if (a && !b) { uncontested(a, tIdx); continue; }
-    if (b && !a) { uncontested(b, tIdx); continue; }
+    if (a && !b) { uncontested(a.player, a.contributions, tIdx); continue; }
+    if (b && !a) { uncontested(b.player, b.contributions, tIdx); continue; }
 
     // Contested mutual claim
     const pwrA = a.contributions.reduce((s, c) => s + c.amount, 0);
     const pwrB = b.contributions.reduce((s, c) => s + c.amount, 0);
 
     if (pwrA === pwrB) {
-      // Stalemate: each side takes ceil(power/2) damage distributed across its
-      // contributions; remaining troops return to sources. Target stays gray.
       const dmgEach = Math.ceil(pwrA / 2);
       const dmgsA = distributeClaimDamage(a.contributions, dmgEach);
       const dmgsB = distributeClaimDamage(b.contributions, dmgEach);
-      for (let i = 0; i < a.contributions.length; i++) {
-        const c = a.contributions[i];
-        pushSource(c.source, a.player, post[c.source].troops - dmgsA[i]);
-      }
-      for (let i = 0; i < b.contributions.length; i++) {
-        const c = b.contributions[i];
-        pushSource(c.source, b.player, post[c.source].troops - dmgsB[i]);
-      }
+      for (let i = 0; i < a.contributions.length; i++) recordSource(a.contributions[i].source, a.player, dmgsA[i]);
+      for (let i = 0; i < b.contributions.length; i++) recordSource(b.contributions[i].source, b.player, dmgsB[i]);
       logs.push({
         playerA: a.player, contributionsA: a.contributions.slice(), powerA: pwrA, damageA: dmgsA,
         playerB: b.player, contributionsB: b.contributions.slice(), powerB: pwrB, damageB: dmgsB,
         target: tIdx, outcome: 'stalemate'
       });
     } else {
-      // Winner/loser
       const aWins = pwrA > pwrB;
       const winner = aWins ? a : b;
       const loser  = aWins ? b : a;
@@ -2476,17 +2582,9 @@ function resolveClaims(planA, planB, post) {
       const pwrL = aWins ? pwrB : pwrA;
       const dmgToLoser = Math.ceil(pwrL / 2);
 
-      // Winner's sources lose the full amount each (target absorbs the cost as
-      // reduced troops landed). No troops return to winner sources.
-      for (const c of winner.contributions) {
-        pushSource(c.source, winner.player, post[c.source].troops - c.amount);
-      }
-      // Loser's sources take a proportional share of ceil(pwrL/2) damage.
+      for (const c of winner.contributions) recordSource(c.source, winner.player, c.amount);
       const dmgsLoser = distributeClaimDamage(loser.contributions, dmgToLoser);
-      for (let i = 0; i < loser.contributions.length; i++) {
-        const c = loser.contributions[i];
-        pushSource(c.source, loser.player, post[c.source].troops - dmgsLoser[i]);
-      }
+      for (let i = 0; i < loser.contributions.length; i++) recordSource(loser.contributions[i].source, loser.player, dmgsLoser[i]);
       const tTroops = Math.max(0, pwrW - dmgToLoser);
       effects.push({ kind: 'claimTake', idx: tIdx, newOwner: winner.player, newTroops: tTroops });
       logs.push({
@@ -2500,6 +2598,7 @@ function resolveClaims(planA, planB, post) {
       });
     }
   }
+  flushSourceEffects();
   return { effects, logs };
 }
 
@@ -2670,12 +2769,16 @@ function resolveAoeRound(planA, planB, rngSeed) {
 
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
 
-function captureBoardSnapshot(label) {
-  boardHistory.push({
+function captureBoardSnapshot(label, plans) {
+  const snap = {
     label: label || ('Round ' + aoeRound),
     round: aoeRound,
-    state: regions.map(r => ({ owner: r.owner, troops: r.troops }))
-  });
+    state: regions.map(r => ({ owner: r.owner, troops: r.troops })),
+    priorPlans: plans || null,
+    deploy: { p1: typeof p1Remaining === 'number' ? p1Remaining : null,
+              p2: typeof p2Remaining === 'number' ? p2Remaining : null }
+  };
+  boardHistory.push(snap);
   renderHistoryNav();
 }
 
@@ -2758,12 +2861,14 @@ function buildPlanFromWorking(player) {
     return { type: 'adjust', player, transfers: w.adjustTransfers.slice() };
   }
   if (w.action === 'claim') {
-    if (w.claimTarget < 0) return null;
-    if (!Array.isArray(w.claimContribs) || w.claimContribs.length === 0) return null;
+    const valid = (w.claims || []).filter(cl => cl && cl.contributions && cl.contributions.length > 0);
+    if (valid.length === 0) return null;
     return {
       type: 'claim', player,
-      target: w.claimTarget,
-      contributions: w.claimContribs.map(c => ({ source: c.source, amount: c.amount }))
+      claims: valid.map(cl => ({
+        target: cl.target,
+        contributions: cl.contributions.map(c => ({ source: c.source, amount: c.amount }))
+      }))
     };
   }
   return null;
@@ -2784,8 +2889,9 @@ function validatePlan(plan) {
     return null;
   }
   if (plan.type === 'claim') {
-    if (!Array.isArray(plan.contributions)) return 'Invalid claim plan format.';
-    if (!claimPlanValid(plan.player, plan.target, plan.contributions)) return 'Invalid claim.';
+    const list = planClaimList(plan);
+    if (list.length === 0) return 'Invalid claim plan format.';
+    if (!claimsPlanValid(plan.player, list)) return 'Invalid claim.';
     return null;
   }
   return 'Unknown action.';
@@ -2803,8 +2909,10 @@ function serializePlan(plan) {
   } else if (plan.type === 'adjust') {
     out.transfers = plan.transfers.map(t => ({ source: t.source, dest: t.dest, amount: t.amount }));
   } else if (plan.type === 'claim') {
-    out.target = plan.target;
-    out.contributions = plan.contributions.map(c => ({ source: c.source, amount: c.amount }));
+    out.claims = planClaimList(plan).map(cl => ({
+      target: cl.target,
+      contributions: cl.contributions.map(c => ({ source: c.source, amount: c.amount }))
+    }));
   }
   return out;
 }
@@ -2890,7 +2998,12 @@ function aoePerformResolutionWithSeed(rngSeed) {
   setTimeout(() => {
     const planA = aoePlans[1], planB = aoePlans[2];
     const thisRound = aoeRound;
+    // Snapshot the pre-resolution state with plans attached — this is the
+    // "attack pattern" view in history (board still untouched, arrows drawn).
+    captureBoardSnapshot('Plans for Round ' + thisRound, { 1: planA, 2: planB });
     const preSnap = regions.map(r => r.troops);
+    const preOwners = regions.map(r => r.owner);
+    aoePendingRoundSummary = { round: thisRound, preOwners };
     const res = resolveAoeRound(planA, planB, rngSeed);
     flashOutcomes(res);
     appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
@@ -2985,26 +3098,9 @@ function applyAttritionDist(side, dist, clashLog) {
 
 function openAttritionModal(side, callback) {
   const dist = {};
-  const minEach = side.totalDmg >= side.group.length ? 1 : 0;
-  for (const g of side.group) dist[g] = minEach;
-  // Spread the remainder across the first territories
-  let remainder = side.totalDmg - side.group.reduce((s, g) => s + dist[g], 0);
-  for (const g of side.group) {
-    if (remainder <= 0) break;
-    const maxForThis = regions[g].troops - 1;
-    const add = Math.min(remainder, Math.max(0, maxForThis - dist[g]));
-    dist[g] += add;
-    remainder -= add;
-  }
-  // If remainder still > 0 (can exceed troops-1), dump on first
-  if (remainder > 0) {
-    for (const g of side.group) {
-      const add = Math.min(remainder, regions[g].troops - dist[g]);
-      dist[g] += add;
-      remainder -= add;
-      if (remainder <= 0) break;
-    }
-  }
+  // Pre-fill with the canonical even spread so the modal opens valid.
+  const autoDist = autoBleedDist(side.group, side.totalDmg, regions, true);
+  for (const g of side.group) dist[g] = autoDist[g] || 0;
 
   function getTotal() {
     let t = 0;
@@ -3016,30 +3112,39 @@ function openAttritionModal(side, callback) {
     const host = document.getElementById('aoeModalHost');
     const total = getTotal();
     const diff = side.totalDmg - total;
+    const spread = attritionSpreadCheck(side.group, dist, side.totalDmg, regions);
     const rows = side.group.map(g => {
       const v = dist[g] | 0;
       const r = regions[g];
       const maxV = r.troops;
+      const mustHit = r.troops >= 1;
       return '<div class="row">' +
         '<span class="lbl">#' + (g+1) + ' (' + r.troops + ' troops)</span>' +
         '<span class="arrow">→ −</span>' +
         '<input type="number" min="0" max="' + maxV + '" value="' + v +
         '" data-gidx="' + g + '">' +
-        '<span class="sub" style="margin-left:6px;">→ ' + Math.max(0, r.troops - v) + ' left</span>' +
+        '<span class="sub" style="margin-left:6px;">→ ' + Math.max(0, r.troops - v) + ' left' +
+          (mustHit ? ' · should take ≥ 1' : '') + '</span>' +
       '</div>';
     }).join('');
+
+    const spreadMsg = spread.ok
+      ? ''
+      : '<div class="err">' + spread.requiredHit + ' of ' + spread.n + ' territories must take ≥ 1 damage.</div>';
 
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
         '<h3>Mutual Clash — Distribute Attrition</h3>' +
         '<div class="modal-info">' + playerName(side.player) + ': your forces took <strong>' + side.totalDmg +
-          '</strong> total damage. Distribute it across your attacking territories (min ' + minEach + ' each).' +
+          '</strong> total damage. At least <strong>' + spread.requiredHit + '</strong> of <strong>' + spread.n +
+          '</strong> attackers must take ≥ 1 (pile surplus where you want).' +
           (diff !== 0 ? ' <span style="color:#fca5a5;">Remaining: ' + diff + '</span>' : ' <span style="color:#86efac;">✓ Fully distributed</span>') +
         '</div>' +
         '<div class="section-head">Damage per territory</div>' +
         rows +
+        spreadMsg +
         '<div class="modal-foot">' +
-          '<button class="actionBtn primary" id="attrOk"' + (diff !== 0 ? ' disabled' : '') + '>Confirm</button>' +
+          '<button class="actionBtn primary" id="attrOk"' + (diff !== 0 || !spread.ok ? ' disabled' : '') + '>Confirm</button>' +
           '<button class="actionBtn" id="attrAuto">Auto-distribute</button>' +
         '</div>' +
       '</div></div>';
@@ -3057,6 +3162,8 @@ function openAttritionModal(side, callback) {
 
     const okBtn = document.getElementById('attrOk');
     if (okBtn) okBtn.onclick = () => {
+      const finalSpread = attritionSpreadCheck(side.group, dist, side.totalDmg, regions);
+      if (!finalSpread.ok || getTotal() !== side.totalDmg) return;
       host.innerHTML = '';
       callback(dist);
     };
@@ -3110,10 +3217,19 @@ function applyAcquisitionContribs(acq, contribs) {
   render();
 }
 
+function setAcquireFocus(idx) {
+  document.querySelectorAll('.region.acquireFocus').forEach(el => el.classList.remove('acquireFocus'));
+  if (idx < 0) return;
+  const cell = document.querySelector('#mapContainer .region[data-idx="' + idx + '"]')
+            || document.querySelector('#mapContainer g.region[data-idx="' + idx + '"]');
+  if (cell) cell.classList.add('acquireFocus');
+}
+
 function openAcquisitionModal(acq, callback) {
   // Per-source contribution amounts, default to each source's max (floor(troops/2))
   const contribs = {};
   for (const s of acq.sources) contribs[s.idx] = s.cap;
+  setAcquireFocus(acq.defIdx);
 
   function getTotal() {
     let t = 0;
@@ -3166,15 +3282,21 @@ function openAcquisitionModal(acq, callback) {
     document.getElementById('acqOk').onclick = () => {
       const t = getTotal();
       closeAoeModal();
+      setAcquireFocus(-1);
       if (t > 0) callback(contribs);
       else callback({});
     };
-    document.getElementById('acqNone').onclick = () => { closeAoeModal(); callback({}); };
+    document.getElementById('acqNone').onclick = () => {
+      closeAoeModal();
+      setAcquireFocus(-1);
+      callback({});
+    };
   }
   render2();
 }
 
 function aoePostResolution() {
+  appendRoundOwnerSummary();
   // Termination: both pass in same round?
   if (aoePassFlags[1] && aoePassFlags[2]) { endGame(); return; }
   // Or someone has 0 territories?
@@ -3290,19 +3412,20 @@ function onRegionClickAoe(idx) {
 
   if (act === 'claim') {
     if (r.owner === 0) {
-      // Toggle target off if clicked again
-      if (aoeWorking.claimTarget === idx) {
-        aoeWorking.claimTarget = -1;
-        aoeWorking.claimContribs = [];
-        aoeWorking.claimSourceSel = -1;
+      // If this gray is the focused target with no contributions yet, clicking
+      // it again unfocuses + removes it. Otherwise, focus it (adding if new).
+      const existing = workingFindClaim(aoeWorking, idx);
+      if (existing && aoeWorking.claimTargetSel === idx) {
+        // Clicking focused target: if empty, remove; if has contribs, just unfocus.
+        if (existing.contributions.length === 0) {
+          workingRemoveClaim(aoeWorking, idx);
+        } else {
+          aoeWorking.claimTargetSel = -1;
+        }
         render(); return;
       }
-      // Switching target: clear existing contributions
-      if (aoeWorking.claimTarget >= 0 && aoeWorking.claimTarget !== idx) {
-        aoeWorking.claimContribs = [];
-      }
-      aoeWorking.claimTarget = idx;
-      // If a source is queued and adjacent to this gray, open the amount modal immediately
+      if (!existing) aoeWorking.claims.push({ target: idx, contributions: [] });
+      aoeWorking.claimTargetSel = idx;
       if (aoeWorking.claimSourceSel >= 0 && isAdjacent(aoeWorking.claimSourceSel, idx)) {
         const src = aoeWorking.claimSourceSel;
         openClaimAmountModal(src, idx);
@@ -3311,25 +3434,25 @@ function onRegionClickAoe(idx) {
       render(); return;
     }
     if (r.owner === player) {
-      // Click own territory: toggle remove if already in contributions
-      const existingIdx = aoeWorking.claimContribs.findIndex(c => c.source === idx);
-      if (existingIdx >= 0) {
-        aoeWorking.claimContribs.splice(existingIdx, 1);
+      // If this source is already a contribution somewhere, toggle it off.
+      const usedFor = workingHasClaimSource(aoeWorking, idx);
+      if (usedFor >= 0) {
+        const cl = workingFindClaim(aoeWorking, usedFor);
+        cl.contributions = cl.contributions.filter(c => c.source !== idx);
         render(); return;
       }
       if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops (cap is floor/2).', 'warn'); return; }
-      if (aoeWorking.claimTarget < 0) {
-        // No target yet — queue this source and require an adjacent gray
+      if (aoeWorking.claimTargetSel < 0) {
         const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
         if (!hasGrayAdj) { flashMessage('That territory has no adjacent gray.', 'warn'); return; }
         aoeWorking.claimSourceSel = idx;
         render(); return;
       }
-      if (!isAdjacent(idx, aoeWorking.claimTarget)) {
-        flashMessage('Source must be adjacent to the selected gray target.', 'warn'); return;
+      if (!isAdjacent(idx, aoeWorking.claimTargetSel)) {
+        flashMessage('Source must be adjacent to the focused gray target.', 'warn'); return;
       }
       aoeWorking.claimSourceSel = idx;
-      openClaimAmountModal(idx, aoeWorking.claimTarget);
+      openClaimAmountModal(idx, aoeWorking.claimTargetSel);
       return;
     }
     flashMessage('Click your own territory or an adjacent gray.', 'warn'); return;
@@ -3409,6 +3532,17 @@ function openAttackConfirmModal(G, defenderIdx) {
           document.getElementById('atkErr').textContent = 'Success attrition must sum to ' + successAttrition + ' (got ' + sSum + ').';
           return;
         }
+        const spread = attritionSpreadCheck(G, successManual, successAttrition, regions);
+        if (!spread.ok) {
+          const lowList = spread.violators.filter(v => v.reason === 'too-low').map(v => '#' + (v.idx+1));
+          const overList = spread.violators.filter(v => v.reason === 'over-troops').map(v => '#' + (v.idx+1));
+          const parts = [];
+          if (lowList.length) parts.push(lowList.join(', ') + ' must take ≥ 1');
+          if (overList.length) parts.push(overList.join(', ') + ' exceeds troops');
+          document.getElementById('atkErr').textContent =
+            spread.requiredHit + ' of ' + spread.n + ' attackers must take ≥ 1 damage. ' + parts.join('; ') + '.';
+          return;
+        }
       }
       aoeWorking.attackAutoBleed = autoBleed;
       aoeWorking.attackSuccessManual = autoBleed ? null : { ...successManual };
@@ -3471,22 +3605,27 @@ function openAdjustAmountModal(sourceIdx, destIdx) {
 
 function openClaimAmountModal(sourceIdx, targetIdx) {
   const src = regions[sourceIdx];
-  const cap = Math.floor(src.troops / 2);
-  if (cap < 1) { flashMessage('Source must have ≥ 2 troops.', 'warn'); return; }
-  // If this source already has a pending contribution, prefill its current amount.
-  const existing = aoeWorking.claimContribs.find(c => c.source === sourceIdx);
+  const targetClaim = workingFindClaim(aoeWorking, targetIdx);
+  if (!targetClaim) { flashMessage('No active claim target.', 'warn'); return; }
+  // Cap considers troops already pledged from this source to OTHER targets.
+  const pledgedElsewhere = aoeWorking.claims
+    .filter(cl => cl.target !== targetIdx)
+    .reduce((s, cl) => s + cl.contributions.filter(c => c.source === sourceIdx).reduce((a, c) => a + c.amount, 0), 0);
+  const cap = Math.floor(src.troops / 2) - pledgedElsewhere;
+  if (cap < 1) { flashMessage('Source has no spare troops to contribute (cap = floor/2 minus already pledged).', 'warn'); return; }
+  const existing = targetClaim.contributions.find(c => c.source === sourceIdx);
   let amt = existing ? Math.max(1, Math.min(cap, existing.amount))
-                     : Math.max(1, Math.min(cap, Math.floor(src.troops / 2)));
+                     : Math.max(1, Math.min(cap, Math.floor(src.troops / 2) - pledgedElsewhere));
   function render2() {
     const host = document.getElementById('aoeModalHost');
-    const otherTotal = aoeWorking.claimContribs
+    const otherTotal = targetClaim.contributions
       .filter(c => c.source !== sourceIdx)
       .reduce((s, c) => s + c.amount, 0);
-    const listHtml = aoeWorking.claimContribs.length === 0
+    const listHtml = targetClaim.contributions.length === 0
       ? ''
-      : '<div class="modal-info">Already added: ' +
-        aoeWorking.claimContribs.map(c => '#' + (c.source+1) + ' (' + c.amount + ')').join(', ') +
-        ' (sum ' + aoeWorking.claimContribs.reduce((s, c) => s + c.amount, 0) + ').</div>';
+      : '<div class="modal-info">Already on this target: ' +
+        targetClaim.contributions.map(c => '#' + (c.source+1) + ' (' + c.amount + ')').join(', ') +
+        ' (sum ' + targetClaim.contributions.reduce((s, c) => s + c.amount, 0) + ').</div>';
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
         '<h3>' + (existing ? 'Edit contribution' : 'Add contribution') + ': #' + (sourceIdx+1) + ' → gray #' + (targetIdx+1) + '</h3>' +
@@ -3515,9 +3654,9 @@ function openClaimAmountModal(sourceIdx, targetIdx) {
       render();
     };
     document.getElementById('clmOk').onclick = () => {
-      const i = aoeWorking.claimContribs.findIndex(c => c.source === sourceIdx);
-      if (i >= 0) aoeWorking.claimContribs[i] = { source: sourceIdx, amount: amt };
-      else aoeWorking.claimContribs.push({ source: sourceIdx, amount: amt });
+      const i = targetClaim.contributions.findIndex(c => c.source === sourceIdx);
+      if (i >= 0) targetClaim.contributions[i] = { source: sourceIdx, amount: amt };
+      else targetClaim.contributions.push({ source: sourceIdx, amount: amt });
       aoeWorking.claimSourceSel = -1;
       closeAoeModal();
       render();
@@ -3578,7 +3717,9 @@ function drawIntentArrows() {
     } else if (plan.type === 'adjust') {
       for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
     } else if (plan.type === 'claim') {
-      for (const c of plan.contributions) draw(c.source, plan.target, '#86efac', 'arrowhead-green');
+      for (const cl of planClaimList(plan)) {
+        for (const c of cl.contributions) draw(c.source, cl.target, '#86efac', 'arrowhead-green');
+      }
     }
   };
   showPlan(aoePlans[1]); showPlan(aoePlans[2]);
@@ -3693,6 +3834,12 @@ function historyGo(idx) {
 function historyExit() {
   if (historyViewIdx < 0) return;
   historyViewIdx = -1;
+  const ti = document.getElementById('turnIndicator');
+  if (ti) ti.removeAttribute('style');
+  const g = document.getElementById('aoeArrowsG');
+  if (g) g.innerHTML = '';
+  const overlay = document.getElementById('aoeArrowsOverlay');
+  if (overlay) overlay.classList.add('hidden');
   renderHistoryNav();
   renderBattleLog();
   render();
@@ -3720,6 +3867,68 @@ function applyHistoryView() {
     if (s.owner <= 0) tEl.textContent = '';
     else tEl.textContent = s.troops > 0 ? s.troops : '';
   });
+
+  // Override score panel with snapshot stats
+  let p1Regs = 0, p1Tr = 0, p2Regs = 0, p2Tr = 0;
+  for (const s of snap.state) {
+    if (s.owner === 1) { p1Regs++; p1Tr += s.troops; }
+    else if (s.owner === 2) { p2Regs++; p2Tr += s.troops; }
+  }
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setEl('p1Regions', p1Regs);
+  setEl('p1Troops', p1Tr);
+  setEl('p2Regions', p2Regs);
+  setEl('p2Troops', p2Tr);
+  setEl('p1Remaining', snap.deploy && typeof snap.deploy.p1 === 'number' ? snap.deploy.p1 : '–');
+  setEl('p2Remaining', snap.deploy && typeof snap.deploy.p2 === 'number' ? snap.deploy.p2 : '–');
+
+  // Replay intent arrows from the plans that produced this snapshot
+  drawHistoryArrows(snap.priorPlans);
+
+  // Show the snapshot label as a banner hint
+  const ti = document.getElementById('turnIndicator');
+  if (ti && snap.label) {
+    ti.className = 'turn-indicator';
+    ti.style.background = 'rgba(168,85,247,.2)';
+    ti.style.color = '#e9d5ff';
+    ti.style.borderColor = 'rgba(168,85,247,.4)';
+    ti.textContent = 'History: ' + snap.label;
+  }
+}
+
+function drawHistoryArrows(priorPlans) {
+  const g = document.getElementById('aoeArrowsG');
+  const overlay = document.getElementById('aoeArrowsOverlay');
+  if (!g || !overlay) return;
+  g.innerHTML = '';
+  if (!priorPlans) { overlay.classList.add('hidden'); return; }
+  const draw = (a, b, color, marker) => {
+    if (!regions[a] || !regions[b]) return;
+    const ac = regionCenterPct(regions[a]);
+    const bc = regionCenterPct(regions[b]);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', ac.cx); line.setAttribute('y1', ac.cy);
+    line.setAttribute('x2', bc.cx); line.setAttribute('y2', bc.cy);
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '0.7');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('marker-end', 'url(#' + marker + ')');
+    g.appendChild(line);
+  };
+  const showPlan = (plan) => {
+    if (!plan) return;
+    if (plan.type === 'attack') {
+      for (const a of plan.group) draw(a, plan.defender, '#ef4444', 'arrowhead-red');
+    } else if (plan.type === 'adjust') {
+      for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
+    } else if (plan.type === 'claim') {
+      for (const cl of planClaimList(plan)) {
+        for (const c of cl.contributions) draw(c.source, cl.target, '#86efac', 'arrowhead-green');
+      }
+    }
+  };
+  showPlan(priorPlans[1]); showPlan(priorPlans[2]);
+  overlay.classList.remove('hidden');
 }
 
 document.addEventListener('keydown', function(e) {
@@ -3742,6 +3951,49 @@ function escapeHtml(s) {
 
 function regionRef(idx) {
   return '#' + (idx + 1);
+}
+
+function appendRoundOwnerSummary() {
+  const ctx = aoePendingRoundSummary;
+  aoePendingRoundSummary = null;
+  if (!ctx || !Array.isArray(ctx.preOwners)) return;
+  const changes = [];
+  for (let i = 0; i < regions.length; i++) {
+    const was = ctx.preOwners[i];
+    const now = regions[i].owner;
+    if (was === now) continue;
+    if (now === -1) continue;
+    changes.push({ idx: i, from: was, to: now });
+  }
+  if (changes.length === 0) return;
+  const ownerLabel = (o) => o === 0 ? '⬜' : o === 1 ? 'P1' : o === 2 ? 'P2' : '·';
+  const colorFor = (o) => o === 1 ? '#93c5fd' : o === 2 ? '#fca5a5' : 'rgba(255,255,255,.7)';
+  const parts = changes.map(ch => {
+    const html = regionRef(ch.idx) + ' ' + ownerLabel(ch.from) + '→' + ownerLabel(ch.to);
+    return '<span style="color:' + colorFor(ch.to) + '">' + html + '</span>';
+  });
+  // Also tally gains/losses per player for a quick read.
+  const gains = { 1: [], 2: [] }, losses = { 1: [], 2: [] };
+  for (const ch of changes) {
+    if (ch.to === 1 || ch.to === 2) gains[ch.to].push(regionRef(ch.idx));
+    if (ch.from === 1 || ch.from === 2) losses[ch.from].push(regionRef(ch.idx));
+  }
+  const tally = [];
+  for (const p of [1, 2]) {
+    const g = gains[p], l = losses[p];
+    if (g.length === 0 && l.length === 0) continue;
+    const seg = [];
+    if (g.length) seg.push('+' + g.join(','));
+    if (l.length) seg.push('−' + l.join(','));
+    tally.push('<span style="color:' + colorFor(p) + '"><strong>' + playerName(p) + '</strong> ' + seg.join(' ') + '</span>');
+  }
+  const entry = battleLog.find(e => e.title && e.title.indexOf('Round ' + ctx.round) >= 0);
+  if (!entry) return;
+  entry.lines.push({
+    kind: 'system',
+    html: 'Round summary: ' + parts.join(', ') + (tally.length ? ' · ' + tally.join(' · ') : '') + '.'
+  });
+  renderBattleLog();
 }
 
 function playerName(p) {
@@ -3776,36 +4028,39 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> adjusted: ' + (moves || '(no transfers)') + '.' }];
     }
     if (plan.type === 'claim') {
-      const contribStr = plan.contributions.map(c => regionRef(c.source) + ' <span class="neutral">(' + pre[c.source] + ' troops, sent ' + c.amount + ')</span>').join(', ');
-      const totalSent = plan.contributions.reduce((s, c) => s + c.amount, 0);
-      let outcomeTxt = '';
-      const myClaim = res.claimLogs.find(c =>
-        (c.player === p && c.target === plan.target) ||
-        ((c.playerA === p || c.playerB === p) && c.target === plan.target)
-      );
-      if (myClaim) {
-        if (myClaim.uncontested && myClaim.outcome === 'win') {
-          outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + totalSent + ' troops landed.';
-        } else if (myClaim.outcome === 'win-A' || myClaim.outcome === 'win-B') {
-          if (myClaim.winner === p) {
-            const lossDmg = Math.ceil(myClaim.pwrLoser / 2);
-            const landed = Math.max(0, totalSent - lossDmg);
-            outcomeTxt = ' → <span style="color:#86efac;">captured</span> after clash (sent ' + totalSent +
-                         ', took ' + lossDmg + ' damage; landed with ' + landed + ' troops).';
-          } else {
-            outcomeTxt = ' → <span style="color:#fca5a5;">outpowered</span> by opponent\'s claim.';
+      const subClaims = planClaimList(plan);
+      return subClaims.map(cl => {
+        const contribStr = cl.contributions.map(c => regionRef(c.source) + ' <span class="neutral">(' + pre[c.source] + ' troops, sent ' + c.amount + ')</span>').join(', ');
+        const totalSent = cl.contributions.reduce((s, c) => s + c.amount, 0);
+        let outcomeTxt = '';
+        const myClaim = res.claimLogs.find(c =>
+          (c.player === p && c.target === cl.target) ||
+          ((c.playerA === p || c.playerB === p) && c.target === cl.target)
+        );
+        if (myClaim) {
+          if (myClaim.uncontested && myClaim.outcome === 'win') {
+            outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + totalSent + ' troops landed.';
+          } else if (myClaim.outcome === 'win-A' || myClaim.outcome === 'win-B') {
+            if (myClaim.winner === p) {
+              const lossDmg = Math.ceil(myClaim.pwrLoser / 2);
+              const landed = Math.max(0, totalSent - lossDmg);
+              outcomeTxt = ' → <span style="color:#86efac;">captured</span> after clash (sent ' + totalSent +
+                           ', took ' + lossDmg + ' damage; landed with ' + landed + ' troops).';
+            } else {
+              outcomeTxt = ' → <span style="color:#fca5a5;">outpowered</span> by opponent\'s claim.';
+            }
+          } else if (myClaim.outcome === 'stalemate') {
+            const halfTotal = Math.ceil(totalSent / 2);
+            outcomeTxt = ' → <span style="color:#c4b5fd;">stalemate</span>: contributions took ' + halfTotal +
+                         ' total damage, gray remains.';
           }
-        } else if (myClaim.outcome === 'stalemate') {
-          const halfTotal = Math.ceil(totalSent / 2);
-          outcomeTxt = ' → <span style="color:#c4b5fd;">stalemate</span>: contributions took ' + halfTotal +
-                       ' total damage, gray remains.';
         }
-      }
-      return [{
-        kind: cls,
-        html: '<strong>' + playerName(p) + '</strong> sent ' + totalSent +
-              ' troops from ' + contribStr + ' to claim gray ' + regionRef(plan.target) + outcomeTxt
-      }];
+        return {
+          kind: cls,
+          html: '<strong>' + playerName(p) + '</strong> sent ' + totalSent +
+                ' troops from ' + contribStr + ' to claim gray ' + regionRef(cl.target) + outcomeTxt
+        };
+      });
     }
     if (plan.type === 'attack') {
       const grpDetail = plan.group.map(idx => regionRef(idx) + ' <span class="neutral">(' + pre[idx] + ')</span>').join(', ');
@@ -3828,15 +4083,17 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       const losses = attackLog.attackerLosses || {};
       const totLoss = Object.values(losses).reduce((a,b) => a + (b|0), 0);
       const lossDetail = plan.group.map(idx => regionRef(idx) + ': −' + (losses[idx] || 0)).join(', ');
+      const defOwner = 3 - p;
+      const defTag = ' <span class="neutral">(' + playerName(defOwner) + '\'s)</span>';
       let outcomeLine;
       if (attackLog.outcome === 'win') {
-        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) +
+        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) + defTag +
                       ' wiped. Attacker losses: <strong>' + totLoss + '</strong> [' + lossDetail + '].';
       } else if (attackLog.outcome === 'fail') {
         outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
                       ' vs defense ' + attackLog.defense +
                       '). Attacker losses: <strong>' + (attackLog.attackerDmg || totLoss) + '</strong> [' + lossDetail +
-                      ']; defender ' + regionRef(plan.defender) + ' lost ' + (attackLog.defenderDmg || 0) + '.';
+                      ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) + '.';
       } else {
         outcomeLine = '.';
       }
@@ -3945,18 +4202,20 @@ function render() {
           : null
       };
     } else if (aoeWorking.action === 'claim') {
+      const allClaimTargets = new Set((aoeWorking.claims || []).map(cl => cl.target));
+      const allContribSrcs = new Set();
+      for (const cl of (aoeWorking.claims || [])) for (const c of cl.contributions) allContribSrcs.add(c.source);
+      const focused = aoeWorking.claimTargetSel;
       claimHighlights = {
         srcSel: aoeWorking.claimSourceSel,
-        target: aoeWorking.claimTarget,
-        contribSrcs: new Set((aoeWorking.claimContribs || []).map(c => c.source)),
-        // If target chosen: highlight adjacent own territories that haven't contributed yet.
-        validSources: aoeWorking.claimTarget >= 0
-          ? new Set(regions[aoeWorking.claimTarget].neighbors.filter(n =>
-              regions[n] && regions[n].owner === planner &&
-              !(aoeWorking.claimContribs || []).some(c => c.source === n)))
+        target: focused,
+        allTargets: allClaimTargets,
+        contribSrcs: allContribSrcs,
+        validSources: focused >= 0
+          ? new Set(regions[focused].neighbors.filter(n =>
+              regions[n] && regions[n].owner === planner && !allContribSrcs.has(n)))
           : null,
-        // If a source is queued without target: highlight adjacent grays.
-        validTargets: (aoeWorking.claimSourceSel >= 0 && aoeWorking.claimTarget < 0)
+        validTargets: (aoeWorking.claimSourceSel >= 0 && focused < 0)
           ? new Set(regions[aoeWorking.claimSourceSel].neighbors.filter(n => regions[n].owner === 0))
           : null
       };
@@ -4019,8 +4278,11 @@ function render() {
           if (claimHighlights.validSources && claimHighlights.validSources.has(idx)) cls += ' adjustDest';
         }
         if (r.owner === 0) {
-          if (idx === claimHighlights.target) { cls += ' claimTargetCand'; clickable = true; }
-          else if (claimHighlights.validTargets && claimHighlights.validTargets.has(idx)) {
+          if (claimHighlights.allTargets && claimHighlights.allTargets.has(idx)) {
+            cls += ' claimTargetCand';
+            if (idx === claimHighlights.target) cls += ' adjustSource';
+            clickable = true;
+          } else if (claimHighlights.validTargets && claimHighlights.validTargets.has(idx)) {
             cls += ' claimTargetCand'; clickable = true;
           } else {
             clickable = true;
@@ -4154,19 +4416,28 @@ function render() {
         else html += '<div class="sub">Add more transfers or Submit Plan.</div>';
       }
     } else if (w.action === 'claim') {
-      const contribs = w.claimContribs || [];
-      const total = contribs.reduce((s, c) => s + c.amount, 0);
-      if (w.claimTarget < 0 && contribs.length === 0 && w.claimSourceSel < 0) {
-        html = '<div class="sub">Click an adjacent gray to set the target, then click your own territories (≥ 2 troops each) to stack contributions. Max per source = floor(troops/2).</div>';
-      } else if (w.claimTarget < 0) {
-        html = '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to set the target.</div>';
-      } else if (contribs.length === 0) {
-        html = '<div>Claim target: gray #' + (w.claimTarget+1) + '.</div>' +
-               '<div class="sub">Click any adjacent own territory (≥ 2 troops) to add a contribution.</div>';
+      const allClaims = w.claims || [];
+      const nonEmpty = allClaims.filter(cl => cl.contributions.length > 0);
+      const grandTotal = nonEmpty.reduce((s, cl) => s + cl.contributions.reduce((a, c) => a + c.amount, 0), 0);
+      const focused = w.claimTargetSel;
+      if (allClaims.length === 0 && w.claimSourceSel < 0) {
+        html = '<div class="sub">Click adjacent grays to add claim targets. For each, click your own territories (≥ 2 troops) to stack troops. You can claim multiple grays in one turn.</div>';
+      } else if (focused < 0 && w.claimSourceSel >= 0) {
+        html = '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to add a claim target.</div>';
       } else {
-        const list = contribs.map(c => '#' + (c.source+1) + ' (' + c.amount + ')').join(', ');
-        html = '<div>Claim gray #' + (w.claimTarget+1) + ' with total <span class="pwr">' + total + '</span> troops</div>' +
-               '<div class="sub">From ' + list + '. Click another adjacent own territory to stack more, or click a contributor to remove it.</div>';
+        const summary = nonEmpty.length === 0
+          ? '<div class="sub">No contributions yet. Click adjacent own territories (≥ 2 troops) to fund your claim.</div>'
+          : '<div>Claiming ' + nonEmpty.length + ' gray' + (nonEmpty.length === 1 ? '' : 's') +
+            ' (<span class="pwr">' + grandTotal + '</span> troops total):</div>' +
+            '<div class="sub">' +
+              nonEmpty.map(cl => 'gray #' + (cl.target+1) + ' ← ' +
+                cl.contributions.map(c => '#' + (c.source+1) + '(' + c.amount + ')').join('+')
+              ).join('; ') +
+            '</div>';
+        const focusInfo = focused >= 0
+          ? '<div class="sub">Focused: gray #' + (focused+1) + '. Click own territory to add to it, click another gray to switch focus.</div>'
+          : '<div class="sub">Click a gray to focus it and add contributors.</div>';
+        html = summary + focusInfo;
       }
     } else if (w.action === 'pass') {
       html = '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
@@ -4181,7 +4452,7 @@ function render() {
     const canSubmit = (w.action === 'pass')
       || (w.action === 'attack' && w.attackGroup.size > 0 && w.attackDefender >= 0)
       || (w.action === 'adjust' && w.adjustTransfers.length > 0)
-      || (w.action === 'claim'  && w.claimTarget >= 0 && (w.claimContribs || []).length > 0);
+      || (w.action === 'claim'  && (w.claims || []).some(cl => cl.contributions.length > 0));
     submitBtn.disabled = !canSubmit;
     clearBtn.style.display = w.action ? '' : 'none';
   } else if (gameMode === 'aoe' && phase === 'battle') {
@@ -4440,7 +4711,7 @@ function randomEasyPlan(player, attacks, claims, adjusts) {
   if (pick === 'claim') {
     const c = claims[Math.floor(Math.random() * claims.length)];
     const amt = Math.max(1, Math.floor(c.cap / 2));
-    return { type: 'claim', player, target: c.target, contributions: [{ source: c.source, amount: amt }] };
+    return { type: 'claim', player, claims: [{ target: c.target, contributions: [{ source: c.source, amount: amt }] }] };
   }
   if (pick === 'adjust') {
     const c = adjusts[Math.floor(Math.random() * adjusts.length)];
@@ -4469,18 +4740,18 @@ function bestAttack(attacks, player) {
 }
 
 function bestClaim(claims, player) {
-  // Group flat (source,target,cap) candidates by target → list of source options.
+  // Group flat (source,target,cap) candidates by target.
   const byTarget = new Map();
   for (const c of claims) {
     if (!byTarget.has(c.target)) byTarget.set(c.target, []);
     byTarget.get(c.target).push(c);
   }
-  let bestTarget = -1, bestS = -Infinity, bestContribs = null;
-  // Difficulty caps how many sources we stack. Multi-source helps win contested
-  // grays and lets us land more troops on uncontested ones.
+  // Difficulty caps how many sources we stack PER target.
   const maxK = cpuDifficulty === 'hard' ? 3
             : cpuDifficulty === 'medium' ? 2
             : 1;
+  // Score each candidate target individually.
+  const scoredTargets = [];
   for (const [tIdx, opts] of byTarget) {
     const t = regions[tIdx];
     let adjFriendly = 0;
@@ -4489,21 +4760,36 @@ function bestClaim(claims, player) {
     const k = Math.min(sorted.length, maxK);
     const chosen = sorted.slice(0, k);
     const totalCap = chosen.reduce((s, o) => s + o.cap, 0);
-    // Score: prefer big grays, more friendlies, more stack potential.
-    const s = t.w * t.h * 1.5 + adjFriendly * 0.5 + totalCap * 0.4 + chosen.length * 0.3;
-    if (s > bestS) {
-      bestS = s;
-      bestTarget = tIdx;
-      bestContribs = chosen.map(o => ({
+    const score = t.w * t.h * 1.5 + adjFriendly * 0.5 + totalCap * 0.4 + chosen.length * 0.3;
+    scoredTargets.push({ tIdx, chosen, score });
+  }
+  scoredTargets.sort((a, b) => b.score - a.score);
+  // Greedy: pick targets in score order, skipping any whose sources are already claimed.
+  const usedSources = new Set();
+  const picked = [];
+  let totalScore = 0;
+  // Easy CPU only grabs 1, medium up to 2, hard up to 4.
+  const maxClaims = cpuDifficulty === 'hard' ? 4
+                : cpuDifficulty === 'medium' ? 2
+                : 1;
+  for (const st of scoredTargets) {
+    if (picked.length >= maxClaims) break;
+    const freshSources = st.chosen.filter(o => !usedSources.has(o.source));
+    if (freshSources.length === 0) continue;
+    for (const o of freshSources) usedSources.add(o.source);
+    picked.push({
+      target: st.tIdx,
+      contributions: freshSources.map(o => ({
         source: o.source,
         amount: Math.max(1, Math.min(o.cap, Math.ceil(o.cap * 0.8)))
-      }));
-    }
+      }))
+    });
+    totalScore += st.score;
   }
-  if (bestTarget < 0 || !bestContribs || bestContribs.length === 0) return null;
+  if (picked.length === 0) return null;
   return {
-    plan: { type: 'claim', player, target: bestTarget, contributions: bestContribs },
-    score: bestS
+    plan: { type: 'claim', player, claims: picked },
+    score: totalScore
   };
 }
 
@@ -4545,7 +4831,7 @@ function hardPlan(player, attacks, claims, adjusts) {
   }
   for (const c of oppClaims.slice(0, 2)) {
     const amt = Math.max(1, Math.ceil(c.cap * 0.8));
-    oppCands.push({ type: 'claim', player: opp, target: c.target, contributions: [{ source: c.source, amount: amt }] });
+    oppCands.push({ type: 'claim', player: opp, claims: [{ target: c.target, contributions: [{ source: c.source, amount: amt }] }] });
   }
 
   const ourCands = [];
@@ -4735,9 +5021,12 @@ function handlePeerData(d) {
       break;
     case 'aoe-plan':
       if (phase === 'battle' && gameMode === 'aoe' && typeof d.player === 'number' && d.plan) {
-        if (d.plan.type === 'claim' && !Array.isArray(d.plan.contributions)) {
-          flashMessage('Invalid claim plan format from peer.', 'bad');
-          break;
+        if (d.plan.type === 'claim') {
+          const list = planClaimList(d.plan);
+          if (list.length === 0) {
+            flashMessage('Invalid claim plan format from peer.', 'bad');
+            break;
+          }
         }
         aoePlans[d.player] = d.plan;
         aoeSubmitted[d.player] = true;
