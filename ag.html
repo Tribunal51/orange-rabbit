@@ -2374,26 +2374,21 @@ function claimPlanValid(player, targetIdx, contributions) {
   return true;
 }
 
-/* Multi-claim plan validity: each sub-claim valid, no source used in two claims,
-   no two claims for same target, sum of source contributions across claims ≤ floor/2 cap. */
+/* Multi-claim plan validity: each sub-claim valid, no two claims for same target,
+   and each source territory contributes to AT MOST ONE target this round. */
 function claimsPlanValid(player, claims) {
   if (!Array.isArray(claims) || claims.length === 0) return false;
   const seenTargets = new Set();
-  const sourceTotals = new Map();
+  const seenSources = new Set();
   for (const cl of claims) {
     if (!cl || typeof cl.target !== 'number') return false;
     if (seenTargets.has(cl.target)) return false;
     seenTargets.add(cl.target);
     if (!claimPlanValid(player, cl.target, cl.contributions)) return false;
     for (const c of cl.contributions) {
-      const prev = sourceTotals.get(c.source) || 0;
-      sourceTotals.set(c.source, prev + c.amount);
+      if (seenSources.has(c.source)) return false;
+      seenSources.add(c.source);
     }
-  }
-  for (const [src, total] of sourceTotals) {
-    const s = regions[src];
-    if (!s) return false;
-    if (total > Math.floor(s.troops / 2)) return false;
   }
   return true;
 }
@@ -3607,15 +3602,17 @@ function openClaimAmountModal(sourceIdx, targetIdx) {
   const src = regions[sourceIdx];
   const targetClaim = workingFindClaim(aoeWorking, targetIdx);
   if (!targetClaim) { flashMessage('No active claim target.', 'warn'); return; }
-  // Cap considers troops already pledged from this source to OTHER targets.
-  const pledgedElsewhere = aoeWorking.claims
-    .filter(cl => cl.target !== targetIdx)
-    .reduce((s, cl) => s + cl.contributions.filter(c => c.source === sourceIdx).reduce((a, c) => a + c.amount, 0), 0);
-  const cap = Math.floor(src.troops / 2) - pledgedElsewhere;
-  if (cap < 1) { flashMessage('Source has no spare troops to contribute (cap = floor/2 minus already pledged).', 'warn'); return; }
+  const usedFor = workingHasClaimSource(aoeWorking, sourceIdx);
+  if (usedFor >= 0 && usedFor !== targetIdx) {
+    flashMessage('#' + (sourceIdx+1) + ' is already supplying gray #' + (usedFor+1) + '. A territory can only feed one claim per round.', 'warn');
+    aoeWorking.claimSourceSel = -1;
+    return;
+  }
+  const cap = Math.floor(src.troops / 2);
+  if (cap < 1) { flashMessage('Source has no spare troops to contribute (cap = floor/2).', 'warn'); return; }
   const existing = targetClaim.contributions.find(c => c.source === sourceIdx);
   let amt = existing ? Math.max(1, Math.min(cap, existing.amount))
-                     : Math.max(1, Math.min(cap, Math.floor(src.troops / 2) - pledgedElsewhere));
+                     : Math.max(1, cap);
   function render2() {
     const host = document.getElementById('aoeModalHost');
     const otherTotal = targetClaim.contributions
@@ -4421,7 +4418,7 @@ function render() {
       const grandTotal = nonEmpty.reduce((s, cl) => s + cl.contributions.reduce((a, c) => a + c.amount, 0), 0);
       const focused = w.claimTargetSel;
       if (allClaims.length === 0 && w.claimSourceSel < 0) {
-        html = '<div class="sub">Click adjacent grays to add claim targets. For each, click your own territories (≥ 2 troops) to stack troops. You can claim multiple grays in one turn.</div>';
+        html = '<div class="sub">Click adjacent grays to add claim targets. For each, click your own territories (≥ 2 troops) to stack troops. You can claim multiple grays in one turn, but each of your territories can supply only ONE gray.</div>';
       } else if (focused < 0 && w.claimSourceSel >= 0) {
         html = '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to add a claim target.</div>';
       } else {
