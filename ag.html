@@ -401,6 +401,21 @@
     .region.tiny .region-troops { font-size: 16px; }
     .region.tiny .region-label { font-size: 9px; letter-spacing: .5px; }
 
+    /* Defense base (AoE) */
+    .region-base {
+      position: absolute; top: 3px; right: 4px;
+      font-size: 13px; line-height: 1; display: none;
+      filter: drop-shadow(0 0 2px rgba(0,0,0,.7));
+      pointer-events: none; z-index: 6;
+    }
+    .region.base .region-base, .region.baseSel .region-base { display: block; }
+    .region.base { box-shadow: inset 0 0 0 2px rgba(251,191,36,.85), 0 0 14px rgba(251,191,36,.35); }
+    .region.baseSel { outline: 2px dashed #fbbf24; outline-offset: -4px; }
+    .region.baseCand { outline: 2px dotted rgba(251,191,36,.55); outline-offset: -4px; cursor: pointer; }
+    /* Go-like deployment legality */
+    .region.deployIllegal { opacity: .4; cursor: not-allowed; }
+    .region.deployLegal { outline: 2px dashed rgba(134,239,172,.7); outline-offset: -4px; cursor: pointer; }
+
     /* arrows overlay (AoE intent reveal) */
     .aoe-arrows-overlay {
       position: absolute; inset: 0;
@@ -725,6 +740,15 @@
     .map-container.geo-map g.region.fogged text.region-mark.mark-fog {
       display: block; fill: rgba(168,85,247,.7); font-size: 6.5px;
     }
+    .map-container.geo-map g.region.base text.region-mark.mark-base,
+    .map-container.geo-map g.region.baseSel text.region-mark.mark-base {
+      display: block; fill: #fbbf24; font-size: 5.5px;
+    }
+    .map-container.geo-map g.region.base polygon { stroke: #fbbf24; stroke-width: 0.9; }
+    .map-container.geo-map g.region.baseSel polygon { stroke: #fbbf24; stroke-width: 0.7; stroke-dasharray: 1.5 1; }
+    .map-container.geo-map g.region.baseCand polygon { stroke: rgba(251,191,36,.6); stroke-width: 0.5; }
+    .map-container.geo-map g.region.deployLegal polygon { stroke: rgba(134,239,172,.8); stroke-width: 0.6; }
+    .map-container.geo-map g.region.deployIllegal { opacity: .4; }
     .map-container.geo-map g.region.clickable { cursor: pointer; }
     .map-container.geo-map g.region.clickable:hover polygon {
       fill: rgba(168,85,247,.22);
@@ -993,6 +1017,7 @@
       <button class="max-btn" onclick="setDeployAmount(getCurrentRemaining())">All</button>
       <button class="max-btn" onclick="setDeployAmount(1)">1</button>
       <button class="max-btn" id="randomAllocBtn" onclick="randomAllocateMyTroops()" style="margin-left:8px; background:rgba(134,239,172,.15); border-color:rgba(134,239,172,.4);">🎲 Random</button>
+      <span id="deployQuotaLabel" class="dlabel" style="margin-left:10px;"></span>
     </div>
 
     <div id="aoeActionBar" class="aoe-action-bar hidden">
@@ -1134,6 +1159,8 @@ function makeEmptyWorking() {
     attackSuccessManual: null, // map idx->loss
     adjustTransfers: [],
     adjustSourceSel: -1,
+    adjustBases: null,      // Set of region idx designated as defense bases (lazy init on entering adjust)
+    adjustBaseMode: false,  // when true, clicks toggle bases instead of transfers
     claims: [],            // [{target, contributions: [{source, amount}]}]
     claimTargetSel: -1,    // currently-focused target idx (the gray)
     claimSourceSel: -1     // own territory currently pending an amount input
@@ -1762,7 +1789,7 @@ function startGame(mapData) {
     tiny: !!r.tiny,
     isGeo: !!r.isGeo,
     neighbors: r.neighbors.slice(),
-    owner: 0, troops: 0
+    owner: 0, troops: 0, isBase: false
   }));
   // Sync mapType from incoming map data (important for online guest).
   mapType = (regions[0] && regions[0].isGeo) ? 'geo' : 'matrix';
@@ -1877,7 +1904,8 @@ function buildMatrixMapDom(container) {
     div.style.height = (r.h * cellPct) + '%';
     if (r.tiny) div.classList.add('tiny');
     div.innerHTML = '<div class="region-label">' + (r.id + 1) + '</div>' +
-                    '<div class="region-troops"></div>';
+                    '<div class="region-troops"></div>' +
+                    '<div class="region-base">🛡️</div>';
     div.onclick = () => onRegionClick(r.id);
     container.appendChild(div);
   }
@@ -1913,8 +1941,9 @@ function buildGeoMapDom(container) {
     g.appendChild(lbl);
 
     const marks = [
-      { cls: 'mark-elim',   ch: '\u2715', dy: 0   },
-      { cls: 'mark-fog',    ch: '?',      dy: 0   }
+      { cls: 'mark-elim',   ch: '\u2715', dy: 0    },
+      { cls: 'mark-fog',    ch: '?',      dy: 0    },
+      { cls: 'mark-base',   ch: '\ud83d\udee1', dy: -2.6 }
     ];
     for (const m of marks) {
       const t = document.createElementNS(NS, 'text');
@@ -1947,6 +1976,8 @@ function updateDeployBar() {
   const target = Math.min(remaining, Math.max(1, cur > 0 ? Math.min(cur, remaining) : expected));
   range.value = target;
   document.getElementById('deployAmount').textContent = target;
+  const ql = document.getElementById('deployQuotaLabel');
+  if (ql) ql.textContent = 'Place anywhere';
 }
 function onDeployRangeInput() {
   const r = document.getElementById('deployRange');
@@ -2030,6 +2061,14 @@ function onRegionClick(idx) {
     if (region.owner !== 0) { flashMessage('Region already occupied', 'warn'); return; }
     const remaining = getCurrentRemaining();
     if (remaining <= 0) return;
+    const legal = legalDeployInfo(currentPlayer);
+    if (!legal.set.has(idx)) {
+      const why = legal.tier === 1 ? 'place on an isolated territory (touching nothing yet)'
+                : legal.tier === 2 ? 'place touching only your own territory — not the opponent'
+                : 'place on an available territory';
+      flashMessage('Go rule: you must ' + why + '.', 'warn');
+      return;
+    }
     let amt = parseInt(document.getElementById('deployRange').value, 10) || 1;
     if (amt > remaining) amt = remaining;
     if (amt < 1) amt = 1;
@@ -2063,32 +2102,33 @@ function onRegionClick(idx) {
   }
 }
 
-function afterDeployMove() {
-  // End of deploy phase?
-  const empties = regions.some(r => r.owner === 0);
-  if ((p1Remaining === 0 && p2Remaining === 0) || !empties) {
-    if (gameMode === 'aoe') {
-      phase = 'battle';
-      aoeRound = 0;
-      { const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
-      if (turnMode === 'fixed') {
-        aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
-      } else {
-        aoeMaxRounds = Math.floor(3 * owned / 4);
-      }}
-      flashMessage('Deployment done. Battle begins!', 'good');
-      render();
-      aoeStartRound();
+/* Transition out of deployment into the battle/attack phase. */
+function finishDeploy() {
+  if (gameMode === 'aoe') {
+    phase = 'battle';
+    aoeRound = 0;
+    { const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
+    if (turnMode === 'fixed') {
+      aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
     } else {
-      phase = 'attack';
-      currentPlayer = firstPlayer;
-      flashMessage('Deployment done. Aggression begins!', 'good');
-      updateDeployBar(); render();
-      checkClassicProgress();
-    }
-    return;
+      aoeMaxRounds = Math.floor(3 * owned / 4);
+    }}
+    flashMessage('Deployment done. Battle begins!', 'good');
+    render();
+    aoeStartRound();
+  } else {
+    phase = 'attack';
+    currentPlayer = firstPlayer;
+    flashMessage('Deployment done. Aggression begins!', 'good');
+    updateDeployBar(); render();
+    checkClassicProgress();
   }
-  // Continue deploy
+}
+
+/* End the current player's labelling turn and hand off to the opponent. */
+/* Hand the labelling turn to the opponent (strict one-territory-each alternation). */
+function endDeployTurn() {
+  if ((p1Remaining === 0 && p2Remaining === 0) || !regions.some(r => r.owner === 0)) { finishDeploy(); return; }
   const next = otherPlayer(currentPlayer);
   const nextRem = next === 1 ? p1Remaining : p2Remaining;
   const curRem  = currentPlayer === 1 ? p1Remaining : p2Remaining;
@@ -2096,6 +2136,15 @@ function afterDeployMove() {
   else if (curRem === 0) currentPlayer = next;
   updateDeployBar(); render();
   maybeTriggerCpuTurn();
+}
+
+function afterDeployMove() {
+  // One placement per turn — alternate players after every labelled territory.
+  if ((p1Remaining === 0 && p2Remaining === 0) || !regions.some(r => r.owner === 0)) {
+    finishDeploy();
+    return;
+  }
+  endDeployTurn();
 }
 
 /* ═══════════════════════════ CLASSIC ENGINE ═══════════════════════════ */
@@ -2288,6 +2337,161 @@ function bothPlayersStuckAtOnes() {
 
 function isAdjacent(aIdx, bIdx) { return regions[aIdx].neighbors.includes(bIdx); }
 
+/* ═══════════════════════════ DEFENSE BASES + GO-LIKE DEPLOY ═══════════════════════════ */
+
+/* Connected components of a player's owned territory, walking adjacency through
+   that player's own territories only. Returns an array of Sets of indices. */
+function playerComponents(player, state) {
+  state = state || regions;
+  const comps = [];
+  const seen = new Set();
+  for (let i = 0; i < state.length; i++) {
+    if (!state[i] || state[i].owner !== player || seen.has(i)) continue;
+    const comp = new Set();
+    const stack = [i];
+    seen.add(i);
+    while (stack.length) {
+      const cur = stack.pop();
+      comp.add(cur);
+      for (const n of state[cur].neighbors) {
+        if (state[n] && state[n].owner === player && !seen.has(n)) { seen.add(n); stack.push(n); }
+      }
+    }
+    comps.push(comp);
+  }
+  return comps;
+}
+
+/* A territory is on the border if any neighbour is not owned by `player`. Only
+   border territories may be designated as defense bases. */
+function isBorderTerritory(idx, player, state) {
+  state = state || regions;
+  const r = state[idx];
+  if (!r || r.owner !== player) return false;
+  for (const n of r.neighbors) {
+    const nb = state[n];
+    if (nb && nb.owner !== player) return true;
+  }
+  return false;
+}
+
+/* A base set is valid when each base is owned, on the border, distinct, and no
+   two bases share a connected component (multiple bases only across separate
+   isolated groups). An empty set is valid (clears all bases). */
+function basesValidForPlayer(player, bases, state) {
+  state = state || regions;
+  if (!Array.isArray(bases)) return false;
+  const comps = playerComponents(player, state);
+  const seen = new Set();
+  const usedComp = new Set();
+  for (const b of bases) {
+    if (typeof b !== 'number' || seen.has(b)) return false;
+    seen.add(b);
+    if (!state[b] || state[b].owner !== player) return false;
+    // A brand-new base must be on the border; an already-held base stays valid
+    // even if territory growth has since made it interior.
+    if (!isBorderTerritory(b, player, state) && !state[b].isBase) return false;
+    const ci = comps.findIndex(c => c.has(b));
+    if (ci < 0 || usedComp.has(ci)) return false;
+    usedComp.add(ci);
+  }
+  return true;
+}
+
+/* Coerce a desired base selection into a valid one (drops bases that aren't
+   owned/eligible and keeps at most one per connected group). Used at plan-build
+   time so committing an adjust can never dead-end on a stale base. */
+function sanitizeBaseSelection(player, baseIdxs) {
+  const comps = playerComponents(player);
+  const out = [];
+  const usedComp = new Set();
+  for (const b of baseIdxs) {
+    const r = regions[b];
+    if (!r || r.owner !== player) continue;
+    if (!isBorderTerritory(b, player) && !r.isBase) continue;
+    const ci = comps.findIndex(c => c.has(b));
+    if (ci < 0 || usedComp.has(ci)) continue;
+    usedComp.add(ci);
+    out.push(b);
+  }
+  return out;
+}
+
+/* Per-region defensive benefit factor (0..1) contributed by `player`'s bases.
+   Each base radiates 0.5^distance through the player's own connected territory.
+   Total benefit divides evenly across all of the player's bases. */
+function computeBaseBenefits(player, state) {
+  state = state || regions;
+  const bases = [];
+  for (let i = 0; i < state.length; i++) {
+    if (state[i] && state[i].owner === player && state[i].isBase) bases.push(i);
+  }
+  const benefit = new Map();
+  if (bases.length === 0) return benefit;
+  const share = 1 / bases.length;
+  for (const b of bases) {
+    const dist = new Map([[b, 0]]);
+    const q = [b];
+    while (q.length) {
+      const cur = q.shift();
+      const d = dist.get(cur);
+      for (const n of state[cur].neighbors) {
+        if (state[n] && state[n].owner === player && !dist.has(n)) { dist.set(n, d + 1); q.push(n); }
+      }
+    }
+    for (const [idx, d] of dist) {
+      const f = share * Math.pow(0.5, d);
+      benefit.set(idx, Math.max(benefit.get(idx) || 0, f));
+    }
+  }
+  return benefit;
+}
+
+/* Round x with "floor up if fractional part > 0.5" (half rounds down). */
+function baseRound(x) {
+  const frac = x - Math.floor(x);
+  return frac > 0.5 ? Math.ceil(x) : Math.floor(x);
+}
+
+/* Inflated defensive value of a territory, accounting for its owner's base
+   benefit. Plain troop count when there's no benefit. */
+function effectiveDefenseForState(idx, state, benefitMaps) {
+  state = state || regions;
+  const r = state[idx];
+  if (!r || (r.owner !== 1 && r.owner !== 2)) return r ? r.troops : 0;
+  const bm = (benefitMaps && benefitMaps[r.owner]) || computeBaseBenefits(r.owner, state);
+  const benefit = bm.get(idx) || 0;
+  if (benefit <= 0) return r.troops;
+  return baseRound(r.troops * (1 + 0.5 * benefit));
+}
+function effectiveDefense(idx) { return effectiveDefenseForState(idx, regions); }
+function baseBenefitAtState(idx, state) {
+  state = state || regions;
+  const r = state[idx];
+  if (!r || (r.owner !== 1 && r.owner !== 2)) return 0;
+  return computeBaseBenefits(r.owner, state).get(idx) || 0;
+}
+
+/* Set `player`'s bases to exactly `bases` on the live regions[]. */
+function applyBasesForPlayer(player, bases) {
+  if (!Array.isArray(bases)) return;
+  for (const r of regions) if (r.owner === player) r.isBase = false;
+  for (const b of bases) if (regions[b] && regions[b].owner === player) regions[b].isBase = true;
+}
+/* A base only survives on an owned territory; clear stale bases after combat. */
+function sanitizeBases() {
+  for (const r of regions) if (r.owner !== 1 && r.owner !== 2) r.isBase = false;
+}
+
+/* Placement legality for `player` during deployment. Restrictions are
+   currently disabled — every empty region is a legal placement (players take
+   turns placing anywhere). Returns { tier, set }; tier 0 = "anywhere". */
+function legalDeployInfo(player) {
+  const set = new Set();
+  for (const r of regions) if (r.owner === 0) set.add(r.id);
+  return { tier: 0, set };
+}
+
 /* Validity of an Attack plan against current (live) state.
    `attackers` = array of region indices. `defender` = index. */
 function attackPlanValid(player, attackers, defender) {
@@ -2330,7 +2534,12 @@ function isTrivialOneVsOne(player, attackers, defender) {
    - amount <= floor(source.troops_pre / 2)
    - each source appears in <= 1 transfer
    - dest may receive multiple */
-function adjustPlanValid(player, transfers) {
+function adjustPlanValid(player, transfers, bases) {
+  const hasTransfers = Array.isArray(transfers) && transfers.length > 0;
+  const hasBases = bases !== undefined && bases !== null;
+  if (!hasTransfers && !hasBases) return false;
+  if (hasBases && !basesValidForPlayer(player, bases, regions)) return false;
+  if (!hasTransfers) return true;
   if (!Array.isArray(transfers) || transfers.length === 0) return false;
   const sourcesSeen = new Set();
   for (const t of transfers) {
@@ -2417,16 +2626,19 @@ function resolveSingleAttack(plan, post, rng) {
   const D = plan.defender;
   const def = post[D];
 
-  const defenseValue = def.troops;
+  // Inflated defensive value when the defender is a fortified base.
+  const benefit = baseBenefitAtState(D, post);
+  const defenseValue = effectiveDefenseForState(D, post);
   const pwr = aoePowerFromState(G, post);
   const effects = [];
 
   const attLog = { player, group: G.slice(), defender: D, power: pwr.total, defense: defenseValue,
-                   outcome: null };
+                   rawDefense: def.troops, isBase: benefit > 0, outcome: null };
 
   if (pwr.total > defenseValue) {
-    // Branch 1: success → defender wiped.
-    const L = Math.ceil(def.troops / 2);
+    // Branch 1: success → defender wiped. Attacker attrition scales with the
+    // inflated score they had to overcome.
+    const L = Math.ceil(defenseValue / 2);
     let dist;
     if (plan.successDist) {
       let sum = 0; for (const g of G) sum += (plan.successDist[g] | 0);
@@ -2447,9 +2659,13 @@ function resolveSingleAttack(plan, post, rng) {
     return { effects, log: attLog };
   }
 
-  // Branch 2: fail (power <= defense) — mutual damage, no territory change
-  const attackerDmg = Math.ceil(def.troops / 2);
-  const defenderDmg = Math.floor(def.troops / 2);
+  // Branch 2: fail (power <= inflated defense) — mutual damage, no territory change.
+  // Attacker bleed scales with the inflated score; a base defender keeps more
+  // of its troops (attrition reduced by 25% × benefit).
+  const attackerDmg = Math.ceil(defenseValue / 2);
+  const defenderDmg = benefit > 0
+    ? Math.round(Math.floor(def.troops / 2) * (1 - 0.25 * benefit))
+    : Math.floor(def.troops / 2);
   let dist;
   if (plan.failDist) {
     let sum = 0; for (const g of G) sum += (plan.failDist[g] | 0);
@@ -2698,11 +2914,14 @@ function resolveAoeRound(planA, planB, rngSeed) {
   // Step 1: adjustments against pre-round (current regions)
   if (planA && planA.type === 'adjust') applyAdjustmentsToState(planA, regions);
   if (planB && planB.type === 'adjust') applyAdjustmentsToState(planB, regions);
+  // Base designations take effect this round (a fortified base defends immediately).
+  if (planA && planA.type === 'adjust' && planA.bases !== undefined && planA.bases !== null) applyBasesForPlayer(planA.player, planA.bases);
+  if (planB && planB.type === 'adjust' && planB.bases !== undefined && planB.bases !== null) applyBasesForPlayer(planB.player, planB.bases);
 
   // Step 2: attacks + claims against post-adjust snapshot
   const postSnap = regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
                                        neighbors: r.neighbors.slice(),
-                                       owner: r.owner, troops: r.troops }));
+                                       owner: r.owner, troops: r.troops, isBase: r.isBase }));
   const rng = mulberry32(rngSeed | 0);
   const attackLogs = [];
   let allEffects = [];
@@ -2758,6 +2977,7 @@ function resolveAoeRound(planA, planB, rngSeed) {
   allEffects = allEffects.concat(claimRes.effects);
 
   applyAoeEffects(allEffects);
+  sanitizeBases();
 
   return { attackLogs, claimLogs: claimRes.logs, postSnap, mutualClashPending };
 }
@@ -2768,7 +2988,7 @@ function captureBoardSnapshot(label, plans) {
   const snap = {
     label: label || ('Round ' + aoeRound),
     round: aoeRound,
-    state: regions.map(r => ({ owner: r.owner, troops: r.troops })),
+    state: regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase })),
     priorPlans: plans || null,
     deploy: { p1: typeof p1Remaining === 'number' ? p1Remaining : null,
               p2: typeof p2Remaining === 'number' ? p2Remaining : null }
@@ -2852,8 +3072,12 @@ function buildPlanFromWorking(player) {
     return plan;
   }
   if (w.action === 'adjust') {
-    if (w.adjustTransfers.length === 0) return null;
-    return { type: 'adjust', player, transfers: w.adjustTransfers.slice() };
+    const bases = w.adjustBases ? sanitizeBaseSelection(player, Array.from(w.adjustBases)) : null;
+    const curBases = new Set(regions.map((r, i) => i).filter(i => regions[i].owner === player && regions[i].isBase));
+    const baseChanged = bases !== null &&
+      (bases.length !== curBases.size || bases.some(b => !curBases.has(b)));
+    if (w.adjustTransfers.length === 0 && !baseChanged) return null;
+    return { type: 'adjust', player, transfers: w.adjustTransfers.slice(), bases };
   }
   if (w.action === 'claim') {
     const valid = (w.claims || []).filter(cl => cl && cl.contributions && cl.contributions.length > 0);
@@ -2880,7 +3104,7 @@ function validatePlan(plan) {
     return null;
   }
   if (plan.type === 'adjust') {
-    if (!adjustPlanValid(plan.player, plan.transfers)) return 'Invalid adjust transfers.';
+    if (!adjustPlanValid(plan.player, plan.transfers, plan.bases)) return 'Invalid adjust transfers or base placement.';
     return null;
   }
   if (plan.type === 'claim') {
@@ -2903,6 +3127,7 @@ function serializePlan(plan) {
     out.successDist = plan.successDist ? { ...plan.successDist } : null;
   } else if (plan.type === 'adjust') {
     out.transfers = plan.transfers.map(t => ({ source: t.source, dest: t.dest, amount: t.amount }));
+    out.bases = (plan.bases === undefined || plan.bases === null) ? null : plan.bases.slice();
   } else if (plan.type === 'claim') {
     out.claims = planClaimList(plan).map(cl => ({
       target: cl.target,
@@ -3320,10 +3545,27 @@ function setAoeUiAction(action) {
   }
   aoeWorking = makeEmptyWorking();
   aoeWorking.action = action;
+  if (action === 'adjust') {
+    // Seed the base selection from the player's current bases so committing an
+    // adjust without touching bases preserves them.
+    aoeWorking.adjustBases = new Set(
+      regions.map((r, i) => i).filter(i => regions[i].owner === aoePlanningPlayer && regions[i].isBase)
+    );
+  }
   if (action === 'pass') {
     // Submit immediately after a brief confirm
     openPassConfirmModal();
     return;
+  }
+  render();
+}
+
+function toggleAdjustBaseMode() {
+  if (aoeWorking.action !== 'adjust') return;
+  aoeWorking.adjustBaseMode = !aoeWorking.adjustBaseMode;
+  aoeWorking.adjustSourceSel = -1;
+  if (aoeWorking.adjustBaseMode) {
+    flashMessage('Base mode: click your border territory to fortify it. One base per isolated group.', 'good');
   }
   render();
 }
@@ -3333,6 +3575,11 @@ function aoeClearWorking() {
   const a = aoeWorking.action;
   aoeWorking = makeEmptyWorking();
   aoeWorking.action = a;
+  if (a === 'adjust') {
+    aoeWorking.adjustBases = new Set(
+      regions.map((r, i) => i).filter(i => regions[i].owner === aoePlanningPlayer && regions[i].isBase)
+    );
+  }
   render();
 }
 
@@ -3378,6 +3625,24 @@ function onRegionClickAoe(idx) {
   }
 
   if (act === 'adjust') {
+    if (aoeWorking.adjustBaseMode) {
+      if (r.owner !== player) { flashMessage('Pick your own border territory to set a base.', 'warn'); return; }
+      if (!aoeWorking.adjustBases) aoeWorking.adjustBases = new Set();
+      if (aoeWorking.adjustBases.has(idx)) { aoeWorking.adjustBases.delete(idx); render(); return; }
+      if (!isBorderTerritory(idx, player)) {
+        flashMessage('A base must be on your border (next to a gray or enemy territory).', 'warn'); return;
+      }
+      const comps = playerComponents(player);
+      const ci = comps.findIndex(c => c.has(idx));
+      for (const b of aoeWorking.adjustBases) {
+        if (ci >= 0 && comps[ci].has(b)) {
+          flashMessage('Only one base per connected group — that group already has a base (#' + (b+1) + ').', 'warn');
+          return;
+        }
+      }
+      aoeWorking.adjustBases.add(idx);
+      render(); return;
+    }
     if (r.owner !== player) { flashMessage('Pick your own territory.', 'warn'); return; }
     // If we already have a source selected and click an adjacent friendly: dest
     if (aoeWorking.adjustSourceSel >= 0 && aoeWorking.adjustSourceSel !== idx) {
@@ -3463,8 +3728,9 @@ function closeAoeModal() {
 function openAttackConfirmModal(G, defenderIdx) {
   const def = regions[defenderIdx];
   const pwr = aoePower(G);
-  const defenseValue = def.troops;
-  const successAttrition = Math.ceil(def.troops / 2);
+  const defenseValue = effectiveDefense(defenderIdx);
+  const isBaseDef = def.isBase && (def.owner === 1 || def.owner === 2);
+  const successAttrition = Math.ceil(defenseValue / 2);
   let autoBleed = true;
   let successManual = autoBleedDist(G, successAttrition, regions, false);
 
@@ -3484,15 +3750,16 @@ function openAttackConfirmModal(G, defenderIdx) {
 
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
-        '<h3>Attack Region #' + (defenderIdx+1) + ' — defender: ' + def.troops + '</h3>' +
+        '<h3>Attack Region #' + (defenderIdx+1) + ' — defender: ' + def.troops + (isBaseDef ? ' 🛡 (inflated ' + defenseValue + ')' : '') + '</h3>' +
         '<div class="modal-info">' +
           'Attack power: <strong' + (isWeak ? ' class="weak"' : '') + '>' + pwr.total.toFixed(1) + '</strong> ' +
           'vs Defense: <strong>' + defenseValue + '</strong> ' +
+          (isBaseDef ? '<span class="weak">(🛡 fortified base — defense inflated from ' + def.troops + ', and it bleeds less on a failed attack)</span> ' : '') +
           '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span>.<br>' +
           'Projected (based on current troops): ' + projection + '.<br>' +
-          'On success: attackers lose <strong>⌈defender/2⌉</strong> total attrition (currently ' + successAttrition + ').<br>' +
-          'On failure: attackers lose <strong>⌈defender/2⌉</strong> total, auto-distributed at resolution.<br>' +
-          '<em>Defender may adjust troops before resolution — actual damage is based on final defender count.</em><br>' +
+          'On success: attackers lose <strong>⌈defense/2⌉</strong> total attrition (currently ' + successAttrition + ').<br>' +
+          'On failure: attackers lose <strong>⌈defense/2⌉</strong> total, auto-distributed at resolution.<br>' +
+          '<em>Defender may adjust troops or set a base before resolution — actual damage is based on final defender state.</em><br>' +
           '<em>If the opponent counter-attacks into this group, both sides take damage and no territory changes hands.</em>' +
         '</div>' +
         '<div class="checkbox-row">' +
@@ -3859,6 +4126,7 @@ function applyHistoryView() {
     else if (s.owner === 1) cls += ' p1';
     else if (s.owner === 2) cls += ' p2';
     else cls += ' empty unoccupied';
+    if (s.isBase && (s.owner === 1 || s.owner === 2)) cls += ' base';
     el.setAttribute('class', cls);
     const tEl = el.querySelector('.region-troops');
     if (s.owner <= 0) tEl.textContent = '';
@@ -4022,7 +4290,14 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
         regionRef(t.source) + ' <span class="neutral">(' + pre[t.source] + ')</span>→' +
         regionRef(t.dest) + ' <span class="neutral">(' + pre[t.dest] + ')</span> (' + t.amount + ')'
       ).join(', ');
-      return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> adjusted: ' + (moves || '(no transfers)') + '.' }];
+      let baseTxt = '';
+      if (plan.bases !== undefined && plan.bases !== null) {
+        baseTxt = plan.bases.length
+          ? ' 🛡 set base' + (plan.bases.length === 1 ? '' : 's') + ' at ' + plan.bases.map(b => regionRef(b)).join(', ')
+          : ' 🛡 cleared bases';
+      }
+      const body = (plan.transfers.length ? 'adjusted: ' + moves : 'fortified') + baseTxt;
+      return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> ' + body + '.' }];
     }
     if (plan.type === 'claim') {
       const subClaims = planClaimList(plan);
@@ -4082,15 +4357,20 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       const lossDetail = plan.group.map(idx => regionRef(idx) + ': −' + (losses[idx] || 0)).join(', ');
       const defOwner = 3 - p;
       const defTag = ' <span class="neutral">(' + playerName(defOwner) + '\'s)</span>';
+      const baseTag = attackLog.isBase
+        ? ' <span style="color:#fbbf24;">🛡 base, defense inflated to ' + attackLog.defense +
+          (typeof attackLog.rawDefense === 'number' ? ' from ' + attackLog.rawDefense : '') + '</span>'
+        : '';
       let outcomeLine;
       if (attackLog.outcome === 'win') {
-        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) + defTag +
+        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) + defTag + baseTag +
                       ' wiped. Attacker losses: <strong>' + totLoss + '</strong> [' + lossDetail + '].';
       } else if (attackLog.outcome === 'fail') {
         outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
-                      ' vs defense ' + attackLog.defense +
+                      ' vs defense ' + attackLog.defense + baseTag +
                       '). Attacker losses: <strong>' + (attackLog.attackerDmg || totLoss) + '</strong> [' + lossDetail +
-                      ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) + '.';
+                      ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) +
+                      (attackLog.isBase ? ' (attrition reduced)' : '') + '.';
       } else {
         outcomeLine = '.';
       }
@@ -4175,6 +4455,9 @@ function render() {
   const validTargets = (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn())
     ? new Set(validTargetsForPlayer(currentPlayer)) : null;
 
+  const deployLegal = (phase === 'deploy' && canIControlCurrentTurn())
+    ? legalDeployInfo(currentPlayer).set : null;
+
   const aoeUiVisible = (gameMode === 'aoe' && phase === 'battle' && canIControlAoePlan());
   const planner = aoePlanningPlayer;
   const fogViewer = viewerForFog();
@@ -4190,12 +4473,18 @@ function render() {
         targets: computeAttackTargets(planner, Array.from(aoeWorking.attackGroup))
       };
     } else if (aoeWorking.action === 'adjust') {
+      const baseMode = !!aoeWorking.adjustBaseMode;
       adjustHighlights = {
         srcSel: aoeWorking.adjustSourceSel,
         srcs: new Set(aoeWorking.adjustTransfers.map(t => t.source)),
         dsts: new Set(aoeWorking.adjustTransfers.map(t => t.dest)),
         validDests: aoeWorking.adjustSourceSel >= 0
           ? new Set(regions[aoeWorking.adjustSourceSel].neighbors.filter(n => regions[n].owner === planner && !aoeWorking.adjustTransfers.some(t => t.source === n)))
+          : null,
+        baseMode,
+        bases: aoeWorking.adjustBases || new Set(),
+        baseCands: baseMode
+          ? new Set(regions.map((r, i) => i).filter(i => regions[i].owner === planner && isBorderTerritory(i, planner)))
           : null
       };
     } else if (aoeWorking.action === 'claim') {
@@ -4243,7 +4532,14 @@ function render() {
     if (idx === lastMoveRegion && r.owner !== -1) cls += ' lastMove';
 
     let clickable = false;
-    if (phase === 'deploy' && canIControlCurrentTurn() && r.owner === 0) clickable = true;
+    if (phase === 'deploy' && canIControlCurrentTurn() && r.owner === 0) {
+      if (deployLegal && deployLegal.has(idx)) { cls += ' deployLegal'; clickable = true; }
+      else cls += ' deployIllegal';
+    }
+    // Committed base badge — suppressed while editing bases in adjust mode so
+    // the planned (baseSel) selection previews instead.
+    const editingBases = aoeUiVisible && aoeWorking.action === 'adjust' && aoeWorking.adjustBases;
+    if ((r.owner === 1 || r.owner === 2) && r.isBase && !editingBases) cls += ' base';
     if (validTargets && validTargets.has(idx)) { cls += ' target'; clickable = true; }
     if (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn() && validTargets) {
       const opp = otherPlayer(currentPlayer);
@@ -4263,10 +4559,15 @@ function render() {
         }
       } else if (adjustHighlights) {
         if (r.owner === planner) clickable = true;
-        if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
-        if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
-        if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
-        if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
+        if (adjustHighlights.bases.has(idx)) cls += ' baseSel';
+        if (adjustHighlights.baseMode) {
+          if (adjustHighlights.baseCands && adjustHighlights.baseCands.has(idx) && !adjustHighlights.bases.has(idx)) cls += ' baseCand';
+        } else {
+          if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
+          if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
+          if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
+          if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
+        }
       } else if (claimHighlights) {
         if (r.owner === planner) {
           clickable = true;
@@ -4391,10 +4692,13 @@ function render() {
           pwrCls = 'pwr weak';
           weakHint = ' <span class="bad">(can\'t attack a 1-troop alone — need coop or more troops)</span>';
         } else if (w.attackDefender >= 0 && regions[w.attackDefender]) {
-          const defT = regions[w.attackDefender].troops;
+          const defT = effectiveDefense(w.attackDefender);
+          const baseNote = regions[w.attackDefender].isBase ? ' 🛡 base, inflated to ' + defT : '';
           if (pwr.total <= defT) {
             pwrCls = 'pwr weak';
-            weakHint = ' <span class="bad">(weaker than defender ' + defT + ' — attack will fail; useful to soften them up)</span>';
+            weakHint = ' <span class="bad">(weaker than defender ' + defT + baseNote + ' — attack will fail; useful to soften them up)</span>';
+          } else if (regions[w.attackDefender].isBase) {
+            weakHint = ' <span class="sub">(defender 🛡 base, inflated to ' + defT + ')</span>';
           }
         }
         html = '<div>Attack power: <span class="' + pwrCls + '">' + pwr.total.toFixed(1) + '</span>' + weakHint + ' ' +
@@ -4404,7 +4708,12 @@ function render() {
       }
     } else if (w.action === 'adjust') {
       const n = w.adjustTransfers.length;
-      if (n === 0 && w.adjustSourceSel < 0) {
+      if (w.adjustBaseMode) {
+        const bl = (w.adjustBases && w.adjustBases.size)
+          ? [...w.adjustBases].map(i => '#' + (i+1)).join(', ') : 'none';
+        html = '<div>🛡 <strong>Base mode</strong> — click a border territory to fortify it (toggle to remove). One base per isolated group; benefit (+50% defense, −25% attrition) halves with graph distance and divides across bases.</div>' +
+               '<div class="sub">Bases: <span class="pwr">' + bl + '</span></div>';
+      } else if (n === 0 && w.adjustSourceSel < 0) {
         html = '<div class="sub">Click a source you own (≥ 2 troops), then an adjacent own territory to set a transfer. Cap = floor(source/2). One source per transfer.</div>';
       } else {
         const list = w.adjustTransfers.map(t => '#' + (t.source+1) + '→#' + (t.dest+1) + ' (' + t.amount + ')').join(', ');
@@ -4412,6 +4721,10 @@ function render() {
         if (w.adjustSourceSel >= 0) html += '<div class="sub">Source #' + (w.adjustSourceSel+1) + ' selected. Click an adjacent friendly destination.</div>';
         else html += '<div class="sub">Add more transfers or Submit Plan.</div>';
       }
+      const baseBtnLabel = w.adjustBaseMode ? '✓ Done setting bases' : '🛡 Set defense base';
+      const curBaseTxt = (w.adjustBases && w.adjustBases.size)
+        ? ' <span class="sub">(' + w.adjustBases.size + ' base' + (w.adjustBases.size === 1 ? '' : 's') + ' set)</span>' : '';
+      html += '<div class="sub" style="margin-top:6px;"><button class="actionBtn" style="padding:4px 10px; font-size:12px; background:rgba(251,191,36,.18); border-color:rgba(251,191,36,.5);" onclick="toggleAdjustBaseMode()">' + baseBtnLabel + '</button>' + curBaseTxt + '</div>';
     } else if (w.action === 'claim') {
       const allClaims = w.claims || [];
       const nonEmpty = allClaims.filter(cl => cl.contributions.length > 0);
@@ -4446,9 +4759,14 @@ function render() {
     submitBar.classList.remove('hidden');
     const submitBtn = document.getElementById('aoeSubmitBtn');
     const clearBtn = document.getElementById('aoeClearBtn');
+    let adjustBaseChanged = false;
+    if (w.action === 'adjust' && w.adjustBases) {
+      const curBases = new Set(regions.map((r, i) => i).filter(i => regions[i].owner === planner && regions[i].isBase));
+      adjustBaseChanged = (w.adjustBases.size !== curBases.size) || [...w.adjustBases].some(b => !curBases.has(b));
+    }
     const canSubmit = (w.action === 'pass')
       || (w.action === 'attack' && w.attackGroup.size > 0 && w.attackDefender >= 0)
-      || (w.action === 'adjust' && w.adjustTransfers.length > 0)
+      || (w.action === 'adjust' && (w.adjustTransfers.length > 0 || adjustBaseChanged))
       || (w.action === 'claim'  && (w.claims || []).some(cl => cl.contributions.length > 0));
     submitBtn.disabled = !canSubmit;
     clearBtn.style.display = w.action ? '' : 'none';
@@ -4499,7 +4817,7 @@ function computeAttackTargets(player, group) {
     const allAdj = group.every(g => isAdjacent(g, idx));
     if (!allAdj) { map.set(idx, { beatable: false }); continue; }
     const pwr = aoePower(group);
-    map.set(idx, { beatable: pwr.total > def.troops });
+    map.set(idx, { beatable: pwr.total > effectiveDefense(idx) });
   }
   return map;
 }
@@ -4522,9 +4840,12 @@ function cpuTakeTurn() {
 function cpuDeploy() {
   const me = currentPlayer;
   const remaining = me === 1 ? p1Remaining : p2Remaining;
-  if (remaining <= 0) { afterDeployMove(); return; }
-  const empties = regions.filter(r => r.owner === 0);
-  if (empties.length === 0) { afterDeployMove(); return; }
+  if (remaining <= 0) { endDeployTurn(); return; }
+  const allEmpties = regions.filter(r => r.owner === 0);
+  if (allEmpties.length === 0) { afterDeployMove(); return; }
+  const legal = legalDeployInfo(me);
+  const empties = allEmpties.filter(r => legal.set.has(r.id));
+  if (empties.length === 0) { endDeployTurn(); return; }
   let chosen;
   if (cpuDifficulty === 'easy') chosen = empties[Math.floor(Math.random() * empties.length)];
   else {
@@ -4545,14 +4866,14 @@ function cpuDeploy() {
     }
     chosen = best || empties[0];
   }
-  const myExpectedPlacements = Math.max(1, Math.ceil(empties.length / 2));
+  const myExpectedPlacements = Math.max(1, Math.ceil(allEmpties.length / 2));
   let amt = Math.max(1, Math.round(remaining / myExpectedPlacements));
   if (cpuDifficulty === 'hard') {
     const opp = otherPlayer(me);
     const oppAdj = chosen.neighbors.reduce((acc, n) => acc + (regions[n] && regions[n].owner === opp ? 1 : 0), 0);
     amt = Math.max(1, Math.round(amt * (1 + oppAdj * 0.25)));
   }
-  if (empties.length - 1 <= 1) amt = remaining;
+  if (allEmpties.length - 1 <= 1) amt = remaining;
   amt = Math.min(remaining, Math.max(1, amt));
   applyDeploy(chosen.id, me, amt);
   flashMessage('CPU deployed ' + amt + ' to #' + (chosen.id+1));
@@ -4625,16 +4946,16 @@ function enumerateAttackCandidates(player) {
       // Skip forbidden trivial 1v1 (1-troop solo attacker vs 1-troop defender).
       if (G.length === 1 && regions[G[0]] && regions[G[0]].troops === 1 && def.troops === 1) continue;
       const pwr = aoePower(G);
-      const defenseNoHunk = def.troops;
+      const defenseVal = effectiveDefense(def.id);
       let kind;
-      if (pwr.total > defenseNoHunk) kind = 'win';
+      if (pwr.total > defenseVal) kind = 'win';
       else kind = 'fail';
       out.push({
         group: G, defender: def.id,
-        pwr, defense: defenseNoHunk, kind,
+        pwr, defense: defenseVal, kind,
         killValue: def.troops,
-        successAttrition: Math.ceil(def.troops / 2),
-        failDmg: Math.ceil(def.troops / 2)
+        successAttrition: Math.ceil(defenseVal / 2),
+        failDmg: Math.ceil(defenseVal / 2)
       });
     }
   }
@@ -4790,6 +5111,27 @@ function bestClaim(claims, player) {
   };
 }
 
+/* One base per connected group, placed on the most enemy-exposed border
+   territory. Returns [] when no worthwhile base exists. */
+function cpuPickBases(player) {
+  const comps = playerComponents(player);
+  const opp = otherPlayer(player);
+  const picks = [];
+  for (const comp of comps) {
+    let best = -1, bestS = -Infinity;
+    for (const idx of comp) {
+      if (!isBorderTerritory(idx, player)) continue;
+      const r = regions[idx];
+      let enemyAdj = 0;
+      for (const n of r.neighbors) if (regions[n] && regions[n].owner === opp) enemyAdj++;
+      const s = enemyAdj * 2 + r.troops * 0.3;
+      if (s > bestS) { bestS = s; best = idx; }
+    }
+    if (best >= 0 && bestS > 0) picks.push(best);
+  }
+  return picks;
+}
+
 function bestAdjust(adjusts, player) {
   // Pick transfer to consolidate near border: dest adjacent to enemy, source not
   const opp = otherPlayer(player);
@@ -4801,9 +5143,22 @@ function bestAdjust(adjusts, player) {
     let s = (dstEnemy - srcEnemy) * 2 + c.cap * 0.3;
     if (s > bestS) { bestS = s; best = c; }
   }
-  if (!best || bestS <= 0) return null;
+  // Medium/hard CPU fortifies a base when it doesn't already hold one and is
+  // established enough to spare a turn (bases persist across rounds).
+  let bases = null;
+  if (cpuDifficulty !== 'easy' && aoePlayerOwnedCount(player) >= 3 &&
+      !regions.some(r => r.owner === player && r.isBase)) {
+    const picks = cpuPickBases(player);
+    if (picks.length) bases = picks;
+  }
+  if (!best || bestS <= 0) {
+    if (bases) return { plan: { type: 'adjust', player, transfers: [], bases }, score: 1.5 };
+    return null;
+  }
   const amt = Math.max(1, Math.min(best.cap, Math.ceil(best.cap * 0.9)));
-  return { plan: { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }] }, score: bestS };
+  const plan = { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }] };
+  if (bases) { plan.bases = bases; bestS += 1.5; }
+  return { plan, score: bestS };
 }
 
 function mediumPlan(player, attacks, claims, adjusts) {
@@ -4851,8 +5206,8 @@ function hardPlan(player, attacks, claims, adjusts) {
 }
 
 function simulateScore(myPlan, oppPlan, player) {
-  // Snapshot
-  const snap = regions.map(r => ({ owner: r.owner, troops: r.troops }));
+  // Snapshot (include isBase — resolveAoeRound mutates it via base plans).
+  const snap = regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase }));
   const planA = (myPlan && myPlan.player === 1) ? myPlan : (oppPlan && oppPlan.player === 1 ? oppPlan : null);
   const planB = (myPlan && myPlan.player === 2) ? myPlan : (oppPlan && oppPlan.player === 2 ? oppPlan : null);
   try {
@@ -4865,7 +5220,7 @@ function simulateScore(myPlan, oppPlan, player) {
   }
   // Restore
   for (let i = 0; i < regions.length; i++) {
-    regions[i].owner = snap[i].owner; regions[i].troops = snap[i].troops;
+    regions[i].owner = snap[i].owner; regions[i].troops = snap[i].troops; regions[i].isBase = snap[i].isBase;
   }
   return (myRegs - oppRegs) * 5 + (myTr - oppTr) * 0.5;
 }
