@@ -868,8 +868,8 @@
         <button class="modeBtn" onclick="setGameMode('aoe')">Age of Empires</button>
       </div>
       <div class="helpText" id="gameModeHint">
-        <strong>Classic</strong> — sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> — parallel turns; attack, adjust troops, or claim a gray ruin. Strategy &amp; bluff over many rounds.
+        <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
+        <strong>Age of Empires</strong> - two phases: Assign (alternate fixed placements, Go-style surround captures, pie rule) then Battle (parallel turns; attack, adjust, or claim).
       </div>
     </div>
 
@@ -944,6 +944,16 @@
       <div class="helpText">When on, you only see opponent territories that touch your own. Otherwise the whole map is visible.</div>
     </div>
 
+    <div class="setupSection hidden" id="assignQuantumSection">
+      <div class="setupLabel">Troops per Placement (Age of Empires only)</div>
+      <div class="numRow">
+        <input type="number" id="assignQuantumInput" class="numInput" min="0" max="999" value="0"
+          oninput="onAssignQuantumInput()">
+        <span class="helpText" style="margin-top:0;">0 = auto (<span id="assignQuantumPreview">10</span>)</span>
+      </div>
+      <div class="helpText">Assign phase: players alternate placing this many troops per turn onto an empty region. Auto = total troops / 10.</div>
+    </div>
+
     <div class="setupSection" id="turnModeSection" style="display:none;">
       <div class="setupLabel">Win Condition (Age of Empires only)</div>
       <div id="turnModeToggle" class="modeToggle">
@@ -1014,10 +1024,17 @@
       <input type="range" id="deployRange" min="1" max="100" value="10" oninput="onDeployRangeInput()">
       <span id="deployAmount" class="amt">10</span>
       <span class="dlabel">troop(s)</span>
-      <button class="max-btn" onclick="setDeployAmount(getCurrentRemaining())">All</button>
-      <button class="max-btn" onclick="setDeployAmount(1)">1</button>
+      <button class="max-btn" id="deployAllBtn" onclick="setDeployAmount(getCurrentRemaining())">All</button>
+      <button class="max-btn" id="deployOneBtn" onclick="setDeployAmount(1)">1</button>
       <button class="max-btn" id="randomAllocBtn" onclick="randomAllocateMyTroops()" style="margin-left:8px; background:rgba(134,239,172,.15); border-color:rgba(134,239,172,.4);">🎲 Random</button>
       <span id="deployQuotaLabel" class="dlabel" style="margin-left:10px;"></span>
+    </div>
+
+    <div id="assignSwapBar" class="deploy-bar hidden">
+      <span class="dlabel">Pie Rule</span>
+      <span id="assignSwapText" style="font-size:13px; opacity:.85;">Take over the opening placement, or place your own.</span>
+      <button class="max-btn" onclick="assignTakeSwap()" style="background:rgba(244,114,182,.15); border-color:rgba(244,114,182,.4);">↔ Swap: take it</button>
+      <button class="max-btn" onclick="assignDeclineSwap()">Place my own</button>
     </div>
 
     <div id="aoeActionBar" class="aoe-action-bar hidden">
@@ -1116,6 +1133,13 @@ let fogOfWar = false;
 let turnMode = 'dynamic';     // 'fixed' | 'dynamic'
 let fixedTurnCount = 0;       // 0 = auto (regions/2), else user-specified
 let preAllocRandom = false;   // both players get random deployment, skip deploy phase
+let assignQuantumSetting = 0; // AoE assign phase: troops per placement, 0 = auto (ceil(total/10))
+
+/* AoE assign-phase runtime */
+let assignQuantum = 10;       // resolved troops-per-placement for this game
+let assignCount = 0;          // total placements made so far (both players)
+let assignSwapDecided = false;// pie rule: P2's swap decision made (or N/A)
+let assignFirstIdx = -1;      // region of the opening placement (pie rule target)
 
 let regions = [];
 let gridSize = 8;
@@ -1236,7 +1260,18 @@ function setGameMode(g) {
     b.classList.toggle('selected', which === g);
   });
   document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
+  document.getElementById('assignQuantumSection').classList.toggle('hidden', g !== 'aoe');
   document.getElementById('turnModeSection').style.display = (g === 'aoe') ? '' : 'none';
+}
+
+function autoAssignQuantum(troops) { return Math.max(1, Math.ceil(troops / 10)); }
+function resolvedAssignQuantum() {
+  if (assignQuantumSetting > 0) return Math.min(totalTroops, assignQuantumSetting);
+  return autoAssignQuantum(totalTroops);
+}
+function onAssignQuantumInput() {
+  const v = parseInt(document.getElementById('assignQuantumInput').value, 10);
+  if (Number.isFinite(v) && v >= 0) assignQuantumSetting = Math.min(999, v);
 }
 
 function setTurnMode(m) {
@@ -1331,6 +1366,7 @@ function setFog(on) {
 
 function updateAutoRegionsPreview() {
   document.getElementById('autoRegionsPreview').textContent = autoRegionsForTroops(totalTroops);
+  document.getElementById('assignQuantumPreview').textContent = autoAssignQuantum(totalTroops);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1376,6 +1412,7 @@ function backToSetup() {
   document.getElementById('resultArea').classList.add('hidden');
   document.getElementById('messageBar').textContent = '';
   document.getElementById('aoeActionBar').classList.add('hidden');
+  document.getElementById('assignSwapBar').classList.add('hidden');
   document.getElementById('aoeBanner').classList.add('hidden');
   document.getElementById('aoeSubmitBar').classList.add('hidden');
   document.getElementById('aoeArrowsOverlay').classList.add('hidden');
@@ -1798,6 +1835,11 @@ function startGame(mapData) {
   p1Remaining = totalTroops;
   p2Remaining = totalTroops;
   lastMoveRegion = -1;
+  assignQuantum = resolvedAssignQuantum();
+  assignCount = 0;
+  assignFirstIdx = -1;
+  // Pie rule only applies to the AoE assign phase with manual placement.
+  assignSwapDecided = (gameMode !== 'aoe' || preAllocRandom);
   aoeResetAll();
   closeAoeModal();
   clearBattleLog();
@@ -1818,7 +1860,7 @@ function startGame(mapData) {
     lines: [{
       kind: 'system',
       html: gameMode === 'aoe'
-        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '')
+        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + assignQuantum + ' troops/placement · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '')
         : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
     }]
   });
@@ -1965,10 +2007,38 @@ function getCurrentRemaining() { return currentPlayer === 1 ? p1Remaining : p2Re
 
 function updateDeployBar() {
   const bar = document.getElementById('deployBar');
+  const swapBar = document.getElementById('assignSwapBar');
+  const showSwap = assignSwapOffered() && canIControlCurrentTurn();
+  swapBar.classList.toggle('hidden', !showSwap);
+  if (showSwap) {
+    const amt = regions[assignFirstIdx] ? regions[assignFirstIdx].troops : assignQuantum;
+    document.getElementById('assignSwapText').textContent =
+      playerLabel(1) + ' opened with ' + amt + ' troops on #' + (assignFirstIdx + 1) +
+      '. Take that placement as yours, or place your own.';
+  }
   if (phase !== 'deploy' || !canIControlCurrentTurn()) { bar.classList.add('hidden'); return; }
   bar.classList.remove('hidden');
   const remaining = getCurrentRemaining();
   const range = document.getElementById('deployRange');
+  const allBtn = document.getElementById('deployAllBtn');
+  const oneBtn = document.getElementById('deployOneBtn');
+  const ql = document.getElementById('deployQuotaLabel');
+  if (gameMode === 'aoe') {
+    // Assign phase: fixed quantum, no slider.
+    const amt = Math.min(assignQuantum, remaining);
+    range.style.display = 'none';
+    allBtn.style.display = 'none';
+    oneBtn.style.display = 'none';
+    document.getElementById('deployAmount').textContent = amt;
+    if (ql) {
+      const placementsLeft = Math.ceil(remaining / assignQuantum);
+      ql.textContent = placementsLeft + ' placement' + (placementsLeft === 1 ? '' : 's') + ' left';
+    }
+    return;
+  }
+  range.style.display = '';
+  allBtn.style.display = '';
+  oneBtn.style.display = '';
   range.min = 1; range.max = Math.max(1, remaining);
   const empties = regions.filter(r => r.owner === 0).length || 1;
   const expected = Math.max(1, Math.round(remaining * 2 / empties));
@@ -1976,7 +2046,6 @@ function updateDeployBar() {
   const target = Math.min(remaining, Math.max(1, cur > 0 ? Math.min(cur, remaining) : expected));
   range.value = target;
   document.getElementById('deployAmount').textContent = target;
-  const ql = document.getElementById('deployQuotaLabel');
   if (ql) ql.textContent = 'Place anywhere';
 }
 function onDeployRangeInput() {
@@ -2003,6 +2072,23 @@ function randomAllocateMyTroops() {
   if (remaining <= 0) return;
   const empties = regions.filter(r => r.owner === 0);
   if (empties.length === 0) return;
+  if (gameMode === 'aoe') {
+    // Assign phase: one random quantum placement (captures depend on order,
+    // so bulk allocation would bypass the alternation).
+    if (assignSwapOffered()) assignSwapDecided = true;
+    const legal = legalDeployInfo(me);
+    const cands = empties.filter(r => legal.set.has(r.id));
+    if (cands.length === 0) return;
+    const pick = cands[Math.floor(Math.random() * cands.length)];
+    const amt = Math.min(assignQuantum, remaining);
+    applyDeploy(pick.id, me, amt);
+    postDeployBookkeeping(pick.id, me);
+    if (mode === 'online' && conn && conn.open) {
+      conn.send({ type: 'deploy', idx: pick.id, player: me, amount: amt });
+    }
+    afterDeployMove();
+    return;
+  }
   // Shuffle empties
   const shuffled = empties.slice();
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -2050,6 +2136,116 @@ function applyDeploy(idx, player, amount) {
   lastMoveRegion = idx;
 }
 
+/* ─── AoE Assign phase: Go-style surround capture ───
+   A placement by `placer` at `placedIdx` captures an adjacent enemy territory T
+   when the placer's troops on T's neighbors exceed T's troops plus the troops
+   on T's friendly neighbors. Captures cascade: a wiped territory no longer
+   supports its neighbors, which are then re-checked. Pure function over
+   owners[]/troops[] snapshots; returns the wiped region indices in order. */
+function assignCaptureScan(placer, placedIdx, owners, troops) {
+  const opp = otherPlayer(placer);
+  const wipedSet = new Set();
+  const wiped = [];
+  let frontier = regions[placedIdx].neighbors.filter(n => owners[n] === opp);
+  let safety = 0;
+  while (frontier.length && safety++ < regions.length * 4) {
+    const next = [];
+    for (const t of frontier) {
+      if (wipedSet.has(t) || owners[t] !== opp) continue;
+      let atk = 0, sup = 0;
+      for (const nid of regions[t].neighbors) {
+        if (wipedSet.has(nid)) continue;
+        const o = owners[nid];
+        if (o === placer) atk += troops[nid];
+        else if (o === opp) sup += troops[nid];
+      }
+      if (atk > troops[t] + sup) {
+        wipedSet.add(t); wiped.push(t);
+        for (const nid of regions[t].neighbors) {
+          if (owners[nid] === opp && !wipedSet.has(nid)) next.push(nid);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return wiped;
+}
+
+/* Applies surround captures for a live placement. Wiped territories revert to
+   unclaimed (owner 0) and their troops are lost. Returns the wiped list. */
+function applyAssignCaptures(placer, placedIdx) {
+  const owners = regions.map(r => r.owner);
+  const troops = regions.map(r => r.troops);
+  const wiped = assignCaptureScan(placer, placedIdx, owners, troops);
+  for (const idx of wiped) { regions[idx].owner = 0; regions[idx].troops = 0; }
+  return wiped;
+}
+
+/* Shared bookkeeping for every AoE assign-phase placement (local, CPU, peer). */
+function postDeployBookkeeping(idx, player) {
+  if (gameMode !== 'aoe') return;
+  assignCount++;
+  if (assignCount === 1) assignFirstIdx = idx;
+  const wiped = applyAssignCaptures(player, idx);
+  if (wiped.length > 0) {
+    const lost = wiped.map(i => regionRef(i)).join(', ');
+    appendLogEntry({
+      title: null,
+      lines: [{
+        kind: classOfPlayer(player),
+        html: '<strong>' + playerName(player) + '</strong> surrounded and wiped ' + lost +
+              ' (placement at ' + regionRef(idx) + ').'
+      }]
+    });
+    flashMessage(playerLabel(player) + ' surrounded and wiped ' + wiped.length +
+                 ' territor' + (wiped.length === 1 ? 'y' : 'ies') + '!', 'good');
+  }
+}
+
+/* ─── AoE Assign phase: pie rule (swap) ───
+   P2 may respond to P1's opening placement by taking it over instead of
+   placing. Neutralizes the first-mover advantage: P1 is incentivized to make
+   an opening placement of exactly average value. */
+function assignSwapOffered() {
+  return gameMode === 'aoe' && phase === 'deploy' && !assignSwapDecided &&
+         assignCount === 1 && currentPlayer === 2 && assignFirstIdx >= 0;
+}
+
+/* `auto` = invoked programmatically (peer message or CPU decision) rather than
+   by the local player's button. */
+function assignTakeSwap(auto) {
+  if (!assignSwapOffered()) return;
+  if (!auto && !canIControlCurrentTurn()) return;
+  const r = regions[assignFirstIdx];
+  const amt = r.troops;
+  r.owner = 2;
+  p1Remaining += amt;
+  p2Remaining = Math.max(0, p2Remaining - amt);
+  assignSwapDecided = true;
+  currentPlayer = 1;
+  lastMoveRegion = assignFirstIdx;
+  appendLogEntry({
+    title: null,
+    lines: [{
+      kind: classOfPlayer(2),
+      html: '<strong>' + playerName(2) + '</strong> invoked the pie rule and took over ' +
+            regionRef(assignFirstIdx) + ' (' + amt + ' troops).'
+    }]
+  });
+  flashMessage(playerLabel(2) + ' swapped: opening placement taken over.', 'warn');
+  if (!auto && mode === 'online' && conn && conn.open) {
+    conn.send({ type: 'assign-swap' });
+  }
+  updateDeployBar(); render();
+  maybeTriggerCpuTurn();
+}
+
+function assignDeclineSwap() {
+  if (!assignSwapOffered()) return;
+  assignSwapDecided = true;
+  updateDeployBar(); render();
+}
+
 /* ═══════════════════════════ CLICK ROUTER ═══════════════════════════ */
 function onRegionClick(idx) {
   if (phase === 'over') return;
@@ -2069,10 +2265,19 @@ function onRegionClick(idx) {
       flashMessage('Go rule: you must ' + why + '.', 'warn');
       return;
     }
-    let amt = parseInt(document.getElementById('deployRange').value, 10) || 1;
-    if (amt > remaining) amt = remaining;
-    if (amt < 1) amt = 1;
+    let amt;
+    if (gameMode === 'aoe') {
+      // Assign phase: fixed quantum per placement. Clicking a region while the
+      // pie-rule offer is up counts as declining the swap.
+      if (assignSwapOffered()) assignSwapDecided = true;
+      amt = Math.min(assignQuantum, remaining);
+    } else {
+      amt = parseInt(document.getElementById('deployRange').value, 10) || 1;
+      if (amt > remaining) amt = remaining;
+      if (amt < 1) amt = 1;
+    }
     applyDeploy(idx, currentPlayer, amt);
+    postDeployBookkeeping(idx, currentPlayer);
     if (mode === 'online' && conn && conn.open) {
       conn.send({ type: 'deploy', idx, player: currentPlayer, amount: amt });
     }
@@ -2113,7 +2318,7 @@ function finishDeploy() {
     } else {
       aoeMaxRounds = Math.floor(3 * owned / 4);
     }}
-    flashMessage('Deployment done. Battle begins!', 'good');
+    flashMessage('Assign phase done. Battle begins!', 'good');
     render();
     aoeStartRound();
   } else {
@@ -3565,7 +3770,9 @@ function toggleAdjustBaseMode() {
   aoeWorking.adjustBaseMode = !aoeWorking.adjustBaseMode;
   aoeWorking.adjustSourceSel = -1;
   if (aoeWorking.adjustBaseMode) {
-    flashMessage('Base mode: click your border territory to fortify it. One base per isolated group.', 'good');
+    flashMessage('Base pen on: click a border territory to fortify it. Your transfers are kept.', 'good');
+  } else {
+    flashMessage('Transfer pen on: click a source then a friendly neighbor. Your base is kept.', 'good');
   }
   render();
 }
@@ -3636,7 +3843,7 @@ function onRegionClickAoe(idx) {
       const ci = comps.findIndex(c => c.has(idx));
       for (const b of aoeWorking.adjustBases) {
         if (ci >= 0 && comps[ci].has(b)) {
-          flashMessage('Only one base per connected group — that group already has a base (#' + (b+1) + ').', 'warn');
+          flashMessage('This territory group already has a base (#' + (b+1) + '). You get one base per SEPARATE group; split off a disconnected group to earn another.', 'warn');
           return;
         }
       }
@@ -4559,13 +4766,16 @@ function render() {
         }
       } else if (adjustHighlights) {
         if (r.owner === planner) clickable = true;
+        // Committed transfers and bases stay highlighted in both pens so the
+        // player sees they coexist in one Adjust turn.
         if (adjustHighlights.bases.has(idx)) cls += ' baseSel';
+        if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
+        if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
+        // Active-pen affordances (candidate cells for the current click target).
         if (adjustHighlights.baseMode) {
           if (adjustHighlights.baseCands && adjustHighlights.baseCands.has(idx) && !adjustHighlights.bases.has(idx)) cls += ' baseCand';
         } else {
           if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
-          if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
-          if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
           if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
         }
       } else if (claimHighlights) {
@@ -4659,7 +4869,7 @@ function render() {
       ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
                       : (mode === 'cpu')   ? (currentPlayer === myPlayer ? 'Your turn' : "CPU's turn")
                                             : (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
-      pl.textContent = 'Phase 1 · Deployment';
+      pl.textContent = gameMode === 'aoe' ? 'Phase 1 · Assign' : 'Phase 1 · Deployment';
     }
   }
 
@@ -4708,23 +4918,28 @@ function render() {
       }
     } else if (w.action === 'adjust') {
       const n = w.adjustTransfers.length;
-      if (w.adjustBaseMode) {
-        const bl = (w.adjustBases && w.adjustBases.size)
-          ? [...w.adjustBases].map(i => '#' + (i+1)).join(', ') : 'none';
-        html = '<div>🛡 <strong>Base mode</strong> — click a border territory to fortify it (toggle to remove). One base per isolated group; benefit (+50% defense, −25% attrition) halves with graph distance and divides across bases.</div>' +
-               '<div class="sub">Bases: <span class="pwr">' + bl + '</span></div>';
-      } else if (n === 0 && w.adjustSourceSel < 0) {
-        html = '<div class="sub">Click a source you own (≥ 2 troops), then an adjacent own territory to set a transfer. Cap = floor(source/2). One source per transfer.</div>';
+      const baseMode = !!w.adjustBaseMode;
+      const tList = n ? w.adjustTransfers.map(t => '#' + (t.source+1) + '→#' + (t.dest+1) + ' (' + t.amount + ')').join(', ') : 'none yet';
+      const bl = (w.adjustBases && w.adjustBases.size)
+        ? [...w.adjustBases].map(i => '#' + (i+1)).join(', ') : 'none yet';
+      // Both transfers and base(s) go in the SAME Adjust turn. The pen toggle
+      // only chooses what a map-click adds; each section keeps its own picks.
+      html = '<div class="sub" style="opacity:.85;">One Adjust turn does both: move troops <em>and</em> fortify a base. Toggle the pen to pick what a click adds; both submit together.</div>';
+      html += '<div style="margin-top:5px;">↔ <strong>Transfers</strong> (<span class="pwr">' + n + '</span>): <span class="sub">' + tList + '</span></div>';
+      const groupCount = playerComponents(planner).length;
+      const baseSet = w.adjustBases ? w.adjustBases.size : 0;
+      html += '<div>🛡 <strong>Base(s)</strong>: <span class="pwr">' + bl + '</span> ' +
+              '<span class="sub">(' + baseSet + '/' + groupCount + ' used - one base per separate territory group)</span></div>';
+      if (baseMode) {
+        const perBase = baseSet > 0 ? Math.round(100 / baseSet) : 100;
+        html += '<div class="sub" style="margin-top:4px;">🛡 Base pen ON: click a border territory to fortify it (click again to remove). You have <span class="pwr">' + groupCount + '</span> separate territory group' + (groupCount === 1 ? '' : 's') + ', so up to <span class="pwr">' + groupCount + '</span> base' + (groupCount === 1 ? '' : 's') + ' (one per group). The 100% defense pool splits evenly across bases (now ' + perBase + '% each), and each base\'s benefit falls with graph distance.</div>';
+      } else if (w.adjustSourceSel >= 0) {
+        html += '<div class="sub" style="margin-top:4px;">↔ Source #' + (w.adjustSourceSel+1) + ' selected: click an adjacent friendly destination.</div>';
       } else {
-        const list = w.adjustTransfers.map(t => '#' + (t.source+1) + '→#' + (t.dest+1) + ' (' + t.amount + ')').join(', ');
-        html = '<div>Pending transfers: <span class="pwr">' + n + '</span> <span class="sub">' + list + '</span></div>';
-        if (w.adjustSourceSel >= 0) html += '<div class="sub">Source #' + (w.adjustSourceSel+1) + ' selected. Click an adjacent friendly destination.</div>';
-        else html += '<div class="sub">Add more transfers or Submit Plan.</div>';
+        html += '<div class="sub" style="margin-top:4px;">↔ Transfer pen ON: click a source you own (≥ 2 troops), then an adjacent own territory. Cap = floor(source/2), one transfer per source.</div>';
       }
-      const baseBtnLabel = w.adjustBaseMode ? '✓ Done setting bases' : '🛡 Set defense base';
-      const curBaseTxt = (w.adjustBases && w.adjustBases.size)
-        ? ' <span class="sub">(' + w.adjustBases.size + ' base' + (w.adjustBases.size === 1 ? '' : 's') + ' set)</span>' : '';
-      html += '<div class="sub" style="margin-top:6px;"><button class="actionBtn" style="padding:4px 10px; font-size:12px; background:rgba(251,191,36,.18); border-color:rgba(251,191,36,.5);" onclick="toggleAdjustBaseMode()">' + baseBtnLabel + '</button>' + curBaseTxt + '</div>';
+      const penLabel = baseMode ? '↔ Switch to troop transfers' : '🛡 Switch to base marking';
+      html += '<div class="sub" style="margin-top:6px;"><button class="actionBtn" style="padding:4px 10px; font-size:12px; background:rgba(251,191,36,.18); border-color:rgba(251,191,36,.5);" onclick="toggleAdjustBaseMode()">' + penLabel + '</button></div>';
     } else if (w.action === 'claim') {
       const allClaims = w.claims || [];
       const nonEmpty = allClaims.filter(cl => cl.contributions.length > 0);
@@ -4843,9 +5058,18 @@ function cpuDeploy() {
   if (remaining <= 0) { endDeployTurn(); return; }
   const allEmpties = regions.filter(r => r.owner === 0);
   if (allEmpties.length === 0) { afterDeployMove(); return; }
+
+  // Pie rule: CPU as P2 decides whether to take over P1's opening placement.
+  if (assignSwapOffered() && me === 2) {
+    if (cpuDecideSwap()) { assignTakeSwap(true); return; }
+    assignSwapDecided = true;
+  }
+
   const legal = legalDeployInfo(me);
   const empties = allEmpties.filter(r => legal.set.has(r.id));
   if (empties.length === 0) { endDeployTurn(); return; }
+  const isAoe = (gameMode === 'aoe');
+  const aoeAmt = isAoe ? Math.min(assignQuantum, remaining) : 0;
   let chosen;
   if (cpuDifficulty === 'easy') chosen = empties[Math.floor(Math.random() * empties.length)];
   else {
@@ -4862,22 +5086,68 @@ function cpuDeploy() {
       }
       let s = openAdj * 0.5 + ownAdj * 0.2 + (cpuDifficulty === 'hard' ? oppAdj * 1.2 : oppAdj * 0.4);
       s += (r.w * r.h / (gridSize * gridSize)) * 5; s += Math.random() * 0.2;
+      if (isAoe) {
+        // Reward placements that surround-capture enemy territory.
+        const owners = regions.map(x => x.owner), troops = regions.map(x => x.troops);
+        owners[r.id] = me; troops[r.id] += aoeAmt;
+        const wiped = assignCaptureScan(me, r.id, owners, troops);
+        let capturedTroops = 0;
+        for (const w of wiped) capturedTroops += regions[w].troops;
+        s += capturedTroops * (cpuDifficulty === 'hard' ? 2.0 : 1.2);
+        // Avoid placements the opponent can immediately surround-capture.
+        if (cpuDifficulty === 'hard' && wiped.length === 0) {
+          let oppAtk = 0, mySup = 0;
+          for (const n of r.neighbors) {
+            const nb = regions[n];
+            if (!nb) continue;
+            if (nb.owner === opp) oppAtk += nb.troops;
+            else if (nb.owner === me) mySup += nb.troops;
+          }
+          const oppQuantumNext = Math.min(assignQuantum, opp === 1 ? p1Remaining : p2Remaining);
+          if (oppAtk + oppQuantumNext > aoeAmt + mySup) s -= aoeAmt * 0.8;
+        }
+      }
       if (s > bestScore) { bestScore = s; best = r; }
     }
     chosen = best || empties[0];
   }
-  const myExpectedPlacements = Math.max(1, Math.ceil(allEmpties.length / 2));
-  let amt = Math.max(1, Math.round(remaining / myExpectedPlacements));
-  if (cpuDifficulty === 'hard') {
-    const opp = otherPlayer(me);
-    const oppAdj = chosen.neighbors.reduce((acc, n) => acc + (regions[n] && regions[n].owner === opp ? 1 : 0), 0);
-    amt = Math.max(1, Math.round(amt * (1 + oppAdj * 0.25)));
+  let amt;
+  if (isAoe) {
+    amt = aoeAmt;
+  } else {
+    const myExpectedPlacements = Math.max(1, Math.ceil(allEmpties.length / 2));
+    amt = Math.max(1, Math.round(remaining / myExpectedPlacements));
+    if (cpuDifficulty === 'hard') {
+      const opp = otherPlayer(me);
+      const oppAdj = chosen.neighbors.reduce((acc, n) => acc + (regions[n] && regions[n].owner === opp ? 1 : 0), 0);
+      amt = Math.max(1, Math.round(amt * (1 + oppAdj * 0.25)));
+    }
+    if (allEmpties.length - 1 <= 1) amt = remaining;
+    amt = Math.min(remaining, Math.max(1, amt));
   }
-  if (allEmpties.length - 1 <= 1) amt = remaining;
-  amt = Math.min(remaining, Math.max(1, amt));
   applyDeploy(chosen.id, me, amt);
+  postDeployBookkeeping(chosen.id, me);
   flashMessage('CPU deployed ' + amt + ' to #' + (chosen.id+1));
   afterDeployMove();
+}
+
+/* Pie-rule heuristic: swap when the opening placement ranks in the top third
+   of all regions by the same positional score cpuDeploy uses. */
+function cpuDecideSwap() {
+  if (assignFirstIdx < 0) return false;
+  if (cpuDifficulty === 'easy') return Math.random() < 0.5;
+  const scoreOf = (r) => {
+    let openAdj = 0;
+    for (const n of r.neighbors) {
+      const nb = regions[n];
+      if (nb && nb.owner === 0) openAdj++;
+    }
+    return openAdj * 0.5 + (r.w * r.h / (gridSize * gridSize)) * 5;
+  };
+  const scores = regions.map(scoreOf).sort((a, b) => b - a);
+  const mine = scoreOf(regions[assignFirstIdx]);
+  const cutoff = scores[Math.max(0, Math.floor(scores.length / 3) - 1)];
+  return mine >= cutoff;
 }
 
 function cpuClassicAttack() {
@@ -5320,6 +5590,7 @@ async function createRoom() {
         firstPlayer: 1,
         totalTroops, gameMode, fogOfWar,
         turnMode, fixedTurnCount, preAllocRandom,
+        assignQuantumSetting,
         map: serializeMap(map)
       });
       startGame(map);
@@ -5357,14 +5628,22 @@ function handlePeerData(d) {
       if (typeof d.turnMode === 'string') turnMode = d.turnMode;
       if (typeof d.fixedTurnCount === 'number') fixedTurnCount = d.fixedTurnCount;
       if (typeof d.preAllocRandom === 'boolean') preAllocRandom = d.preAllocRandom;
+      if (typeof d.assignQuantumSetting === 'number') assignQuantumSetting = d.assignQuantumSetting;
       if (d.map) {
         startGame(deserializeMap(d.map));
       }
       break;
     case 'deploy':
       if (phase === 'deploy' && regions[d.idx] && regions[d.idx].owner === 0) {
-        applyDeploy(d.idx, d.player, d.amount); afterDeployMove();
+        // A peer placement while the pie-rule offer was pending means they declined.
+        if (assignSwapOffered() && d.player === 2) assignSwapDecided = true;
+        applyDeploy(d.idx, d.player, d.amount);
+        postDeployBookkeeping(d.idx, d.player);
+        afterDeployMove();
       }
+      break;
+    case 'assign-swap':
+      if (phase === 'deploy' && gameMode === 'aoe') assignTakeSwap(true);
       break;
     case 'attack':
       if (phase === 'attack' && gameMode === 'classic' && typeof d.defender === 'number' && regions[d.defender]) {
@@ -5528,6 +5807,15 @@ function renderRulesCard() {
       '<li>On your turn, pick how many troops to deploy and tap an empty region.</li>' +
       '<li>Continue until both players have placed all their troops.</li>' +
     '</ul>';
+  const assignBlock =
+    '<h3>Phase 1 · Assign</h3>' +
+    '<ul>' +
+      '<li>Players alternate placing a fixed stack of <strong>' + resolvedAssignQuantum() + ' troops</strong> onto an empty region, until both sides have placed all their troops.</li>' +
+      '<li><strong>Pie rule:</strong> after Player 1\'s opening placement, Player 2 may either take that placement over as their own (Player 1 then places next) or place normally. This keeps the opening fair: an overly strong first placement just gets stolen.</li>' +
+      '<li><strong>Surround capture (Go-style):</strong> your placement wipes an adjacent enemy territory T if your troops on T\'s neighbors exceed T\'s troops plus the troops on T\'s friendly neighbors. Wiped territories lose their troops and revert to unclaimed, so they can be re-assigned.</li>' +
+      '<li>Captures cascade: a wiped territory no longer supports its neighbors, which are re-checked.</li>' +
+      '<li>Captures only trigger from the placing player\'s move; you must commit a placement to spring the trap.</li>' +
+    '</ul>';
   const mapBlock =
     '<h3>Map Types</h3>' +
     '<ul><li><strong>Matrix:</strong> a grid of rectangles. Two regions are neighbours if they share an edge.</li>' +
@@ -5537,7 +5825,7 @@ function renderRulesCard() {
   if (gameMode === 'aoe') {
     body =
       '<h2>How to Play — Aggression: Age of Empires</h2>' +
-      deployBlock +
+      assignBlock +
       '<h3>Phase 2 · Battle (parallel turns)</h3>' +
       '<p>Each round, BOTH players privately pick one action; actions reveal and resolve simultaneously. The game lasts ⌊total_regions / 2⌋ rounds.</p>' +
       '<h3>Action ⚔ Attack</h3>' +
@@ -5553,9 +5841,10 @@ function renderRulesCard() {
       '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), the engagement resolves as a mutual clash — both sides take damage proportional to the other\'s power, no territorial change.</p>' +
       '<h3>Action ↔ Adjust troops</h3>' +
       '<ul>' +
-        '<li>Set one or more transfers (source → adjacent friendly dest), each amount ≤ ⌊source/2⌋.</li>' +
-        '<li>Each source appears in at most one transfer; a dest may receive multiple.</li>' +
-        '<li>Resolution order makes Adjust a defense option — applied in Step 1, before attacks.</li>' +
+        '<li>A single Adjust turn does BOTH, in any combination: move troops AND fortify a defense base. Use the pen toggle in the banner to pick what a map-click adds; both sets submit together.</li>' +
+        '<li><strong>Transfers:</strong> set one or more (source to an adjacent friendly dest), each amount ≤ ⌊source/2⌋. Each source appears in at most one transfer; a dest may receive multiple.</li>' +
+        '<li><strong>Base:</strong> fortify one border territory per SEPARATE (disconnected) territory group. Most positions are one connected blob, so that is one base; if your territory is split into N disconnected groups you may set N bases, one each. The 100% defense pool splits evenly across your bases (1 base = full +50% defense and -25% attrition at its territory, 2 bases = half each, etc.), and each base\'s benefit falls with graph distance. Bases persist across rounds, so you can set a base once and keep transferring in later turns.</li>' +
+        '<li>Resolution order makes Adjust a defense option: transfers and base both apply in Step 1, before attacks resolve, so a defender can reinforce and fortify the same territory an attacker is about to hit.</li>' +
       '</ul>' +
       '<h3>Action ▣ Claim a gray</h3>' +
       '<ul>' +
@@ -5614,6 +5903,7 @@ window.AG = {
   resolveMutualClash, isMutualAttackClash,
   applyAdjustmentsToState, applyAoeEffects,
   enumerateAttackCandidates, enumerateClaimCandidates,
+  assignCaptureScan,
   regionVisibleTo,
   setFog: (f) => { fogOfWar = f; },
   setGameMode: (g) => { gameMode = g; },
