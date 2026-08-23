@@ -446,6 +446,8 @@
       border-color: rgba(248,113,113,.3);
     }
     .actionBtn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    .actionBtn:disabled:hover { background: rgba(168,85,247,.2); }
+    .actionBtn.primary:disabled:hover { background: linear-gradient(135deg, #a855f7, #7c3aed); }
 
     /* result */
     .resultCard {
@@ -2534,48 +2536,78 @@ function attritionSpreadCheck(group, dist, totalDmg, regs) {
   return { ok: violators.length === 0, violators, requiredHit, n };
 }
 
-/* Auto-bleed: distribute integer total L across attackers in G evenly,
-   respecting each attacker's available troops. Returns map idx->loss.
-   If overflowAllowed, losses can exceed a region's troops (cap-and-wipe);
-   surplus is absorbed (lost). */
+/* Auto-bleed: distribute integer total L across attackers in G in proportion
+   to the troops each committed, then push anything a small stack cannot absorb
+   onto attackers that still have capacity. Returns map idx->loss.
+   A flat split would cost the smallest contributor its whole garrison while a
+   stack ten times its size paid the same, so losses scale with what each
+   territory put into the attack. At least min(L, attackers) of them take a hit.
+   overflowAllowed decides the exhausted-capacity tail: true keeps the map
+   summing to L by piling the remainder on the largest stack (every attacker is
+   wiped at that point anyway), false leaves it capped at what can be absorbed. */
 function autoBleedDist(group, L, state, overflowAllowed) {
   const losses = {};
   for (const g of group) losses[g] = 0;
   if (group.length === 0 || L <= 0) return losses;
-  // Even split with rotation
-  const base = Math.floor(L / group.length);
-  const rem  = L % group.length;
-  // Sort by troops desc for stable big-first rem distribution
-  const sorted = group.slice().sort((a, b) => state[b].troops - state[a].troops);
-  for (let i = 0; i < sorted.length; i++) {
-    losses[sorted[i]] = base + (i < rem ? 1 : 0);
+
+  const withTroops = group.filter(g => state[g].troops > 0);
+  const pool = withTroops.length ? withTroops : group.slice();
+  const totalTroops = pool.reduce((t, g) => t + Math.max(0, state[g].troops), 0);
+
+  if (totalTroops > 0) {
+    const raw = pool.map(g => (Math.max(0, state[g].troops) / totalTroops) * L);
+    let used = 0;
+    pool.forEach((g, i) => { losses[g] = Math.floor(raw[i]); used += losses[g]; });
+    // Largest fractional part takes the rounding remainder, ties to the bigger stack.
+    const order = pool.map((g, i) => ({ g, frac: raw[i] - Math.floor(raw[i]), troops: state[g].troops, i }))
+                      .sort((a, b) => (b.frac - a.frac) || (b.troops - a.troops) || (a.i - b.i));
+    for (let k = 0, rem = L - used; rem > 0; k++, rem--) losses[order[k % order.length].g]++;
+  } else {
+    const base = Math.floor(L / pool.length);
+    const rem = L % pool.length;
+    pool.forEach((g, i) => { losses[g] = base + (i < rem ? 1 : 0); });
   }
-  if (!overflowAllowed) {
-    // Redistribute overflow to remaining capacity
-    let safety = 0;
-    while (safety++ < 500) {
-      let surplus = 0;
-      for (const g of sorted) {
-        if (losses[g] > state[g].troops) { surplus += losses[g] - state[g].troops; losses[g] = state[g].troops; }
+
+  // No attacker sits out an exchange it took part in while others bleed.
+  const requiredHit = Math.min(L, pool.length);
+  let hit = pool.filter(g => losses[g] >= 1).length;
+  if (hit < requiredHit) {
+    const donors = pool.slice().sort((a, b) => losses[b] - losses[a]);
+    for (const z of pool) {
+      if (hit >= requiredHit) break;
+      if (losses[z] !== 0) continue;
+      const d = donors.find(g => losses[g] >= 2);
+      if (!d) break;
+      losses[d]--; losses[z]++; hit++;
+    }
+  }
+
+  let safety = 0;
+  while (safety++ < 500) {
+    let surplus = 0;
+    for (const g of pool) {
+      if (losses[g] > state[g].troops) { surplus += losses[g] - state[g].troops; losses[g] = state[g].troops; }
+    }
+    if (surplus <= 0) break;
+    const candidates = pool.filter(g => losses[g] < state[g].troops);
+    if (candidates.length === 0) {
+      if (overflowAllowed) {
+        const biggest = pool.slice().sort((a, b) => state[b].troops - state[a].troops)[0];
+        losses[biggest] += surplus;
       }
-      if (surplus === 0) break;
-      const candidates = sorted.filter(g => losses[g] < state[g].troops);
-      if (candidates.length === 0) {
-        // can't absorb — drop any extra (shouldn't happen in success-attrition; caller validates)
-        break;
-      }
-      let i = 0;
-      while (surplus > 0 && candidates.length > 0) {
-        const c = candidates[i % candidates.length];
-        if (losses[c] < state[c].troops) { losses[c]++; surplus--; }
-        i++;
-        if (i > candidates.length * 4) {
-          const fresh = candidates.filter(g => losses[g] < state[g].troops);
-          if (fresh.length === 0) break;
-          candidates.length = 0;
-          for (const f of fresh) candidates.push(f);
-          i = 0;
-        }
+      break;
+    }
+    let i = 0;
+    while (surplus > 0) {
+      const c = candidates[i % candidates.length];
+      if (losses[c] < state[c].troops) { losses[c]++; surplus--; }
+      i++;
+      if (i > candidates.length * 4) {
+        const fresh = candidates.filter(g => losses[g] < state[g].troops);
+        if (fresh.length === 0) break;
+        candidates.length = 0;
+        for (const f of fresh) candidates.push(f);
+        i = 0;
       }
     }
   }
@@ -3009,7 +3041,7 @@ function doubleAttackCapture(defenseValue) {
 
 /* Resolve a single attack against `post` snapshot.
    Returns { effects, log }. */
-function resolveSingleAttack(plan, post, rng) {
+function resolveSingleAttack(plan, post, rng, opts) {
   const player = plan.player;
   const G = plan.group;
   const D = plan.defender;
@@ -3032,11 +3064,30 @@ function resolveSingleAttack(plan, post, rng) {
 
   const attLog = { player, group: G.slice(), defender: D, power: landedPower, rawPower: pwr.total,
                    defense: defenseValue,
+                   groupTroops: G.reduce((m, g) => { m[g] = post[g].troops; return m; }, {}),
                    rawDefense: def.troops, isDouble, defendLevel: defLevel,
                    defendFactor: defFactor,
                    attackFactor: aoeAttackPowerFactor(isDouble),
                    facedDefense,
                    clash: defLevel > 0, outcome: null };
+
+  // The group's losses are either applied here or handed back for the attacker
+  // to place once the round has resolved. Returns the pending decision or null.
+  function bleedAttackers(total, dist) {
+    if (total > 0 && opts && opts.canDefer && opts.canDefer(G, opts.slot | 0)) {
+      attLog.attritionDeferred = true;
+      attLog.attackerLosses = null;
+      return { player, group: G.slice(), totalDmg: total, preferred: dist || null,
+               log: attLog, title: 'Attack Attrition' };
+    }
+    for (const g of G) {
+      const remaining = Math.max(0, post[g].troops - (dist[g] | 0));
+      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+    }
+    attLog.attackerLosses = dist;
+    return null;
+  }
 
   if (landedPower > facedDefense) {
     // Fortress rule: a double-defended territory can be broken but not taken.
@@ -3052,16 +3103,11 @@ function resolveSingleAttack(plan, post, rng) {
         dist = autoBleedDist(G, cost.total, post, true);
       }
       effects.push({ kind: 'convert', idx: D, newOwner: player, newTroops: cost.garrison });
-      for (const g of G) {
-        const remaining = Math.max(0, post[g].troops - (dist[g] | 0));
-        if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
-        else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
-      }
+      const pending = bleedAttackers(cost.total, dist);
       attLog.outcome = 'convert';
-      attLog.attackerLosses = dist;
       attLog.attrition = cost.attrition;
       attLog.garrison = cost.garrison;
-      return { effects, log: attLog };
+      return { effects, log: attLog, pending };
     }
     // A single attack razes the territory; it turns gray and is claimable. A
     // double attack that ran into a fortress lands here too: it breaks the
@@ -3076,16 +3122,10 @@ function resolveSingleAttack(plan, post, rng) {
       dist = autoBleedDist(G, L, post, true);
     }
     effects.push({ kind: 'wipeDef', idx: D, newOwner: 0, newTroops: 0 });
-    for (const g of G) {
-      const loss = (dist[g] | 0);
-      const cur = post[g].troops;
-      const remaining = Math.max(0, cur - loss);
-      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
-      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
-    }
+    const pending = bleedAttackers(L, dist);
     attLog.outcome = 'win';
-    attLog.attackerLosses = dist;
-    return { effects, log: attLog };
+    attLog.attrition = L;
+    return { effects, log: attLog, pending };
   }
 
   // Repelled: both sides bleed and no territory changes hands. Each pays half the
@@ -3099,20 +3139,13 @@ function resolveSingleAttack(plan, post, rng) {
   } else {
     dist = autoBleedDist(G, attackerDmg, post, true);
   }
-  for (const g of G) {
-    const loss = (dist[g] | 0);
-    const cur = post[g].troops;
-    const remaining = Math.max(0, cur - loss);
-    if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
-    else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
-  }
+  const pending = bleedAttackers(attackerDmg, dist);
   const defRem = Math.max(0, def.troops - defenderDmg);
   effects.push({ kind: 'defDamage', idx: D, newOwner: post[D].owner, newTroops: defRem });
   attLog.outcome = 'fail';
-  attLog.attackerLosses = dist;
   attLog.attackerDmg = attackerDmg;
   attLog.defenderDmg = defenderDmg;
-  return { effects, log: attLog };
+  return { effects, log: attLog, pending };
 }
 
 /* Distribute `totalDmg` integer points across `contribs=[{source,amount},...]`
@@ -3141,6 +3174,35 @@ function distributeClaimDamage(contribs, totalDmg) {
 /* Resolve simultaneous multi-source claims (both players may claim same gray).
    Plans of shape { type:'claim', player, claims:[{target, contributions:[{source,amount},...]}, ...] }.
    Returns { effects: [{...}], logs: [{...}] }. */
+/* Troops committed to a claim march out of their source before the day's
+   fighting, so the source is fought over at what it has left and the claim
+   still lands when the source falls. Deducts the departures from `state` and
+   returns a fresh re-capped plan (never mutating the committed one), or null
+   when nothing is left to send. */
+function applyClaimDepartures(plan, state) {
+  if (!plan || plan.type !== 'claim' || plan.departed) return plan;
+  const subs = [];
+  const usedSources = new Set();
+  for (const cl of planClaimList(plan)) {
+    const t = state[cl.target];
+    if (!t || t.owner !== 0) continue;
+    const contributions = [];
+    for (const c of cl.contributions) {
+      const s = state[c.source];
+      if (!s || s.owner !== plan.player || usedSources.has(c.source)) continue;
+      // A territory never sends more than half of what it holds.
+      const amt = Math.min(c.amount, Math.floor(s.troops / 2));
+      if (amt < 1) continue;
+      s.troops = Math.max(0, s.troops - amt);
+      usedSources.add(c.source);
+      contributions.push({ source: c.source, amount: amt });
+    }
+    if (contributions.length) subs.push({ target: cl.target, contributions });
+  }
+  if (!subs.length) return null;
+  return { type: 'claim', player: plan.player, claims: subs, departed: true };
+}
+
 function resolveClaims(planA, planB, post) {
   const effects = [];
   const logs = [];
@@ -3148,17 +3210,26 @@ function resolveClaims(planA, planB, post) {
   const cB = (planB && planB.type === 'claim') ? planB : null;
   if (!cA && !cB) return { effects, logs };
 
-  // Aggregate per-source deductions across multiple sub-claims for the same
-  // source on the same plan, so the final claimSource effect reflects the sum.
-  const sourceDeducts = new Map(); // sourceIdx -> { owner, total }
-  function recordSource(idx, owner, dedAmount) {
-    if (dedAmount <= 0) return;
-    if (!sourceDeducts.has(idx)) sourceDeducts.set(idx, { owner, total: 0 });
-    sourceDeducts.get(idx).total += dedAmount;
+  // Aggregate per-source bookkeeping across multiple sub-claims for the same
+  // source on the same plan, so the final effect reflects the sum.
+  const sourceDeducts = new Map(); // sourceIdx -> { owner, spent, committed, departed }
+  function recordSource(idx, owner, spentAmount, committedAmount, departed) {
+    if (spentAmount <= 0 && committedAmount <= 0) return;
+    if (!sourceDeducts.has(idx)) sourceDeducts.set(idx, { owner, spent: 0, committed: 0, departed: !!departed });
+    const info = sourceDeducts.get(idx);
+    info.spent += Math.max(0, spentAmount);
+    info.committed += Math.max(0, committedAmount);
   }
   function flushSourceEffects() {
     for (const [idx, info] of sourceDeducts) {
-      const nt = Math.max(0, post[idx].troops - info.total);
+      if (info.departed) {
+        // The committed troops already left. Only survivors of a claim that
+        // did not land march back, and only to a home still in friendly hands.
+        const back = info.committed - info.spent;
+        if (back > 0) effects.push({ kind: 'claimReturn', idx, owner: info.owner, delta: back });
+        continue;
+      }
+      const nt = Math.max(0, post[idx].troops - info.spent);
       effects.push({
         kind: 'claimSource',
         idx,
@@ -3168,9 +3239,9 @@ function resolveClaims(planA, planB, post) {
     }
   }
 
-  function uncontested(player, contributions, tIdx) {
+  function uncontested(player, contributions, tIdx, departed) {
     const total = contributions.reduce((s, c) => s + c.amount, 0);
-    for (const c of contributions) recordSource(c.source, player, c.amount);
+    for (const c of contributions) recordSource(c.source, player, c.amount, c.amount, departed);
     effects.push({ kind: 'claimTake', idx: tIdx, newOwner: player, newTroops: total });
     logs.push({
       player,
@@ -3186,15 +3257,15 @@ function resolveClaims(planA, planB, post) {
   const byTarget = {};
   const subA = cA ? planClaimList(cA) : [];
   const subB = cB ? planClaimList(cB) : [];
-  for (const cl of subA) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].a = { player: cA.player, contributions: cl.contributions }; }
-  for (const cl of subB) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].b = { player: cB.player, contributions: cl.contributions }; }
+  for (const cl of subA) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].a = { player: cA.player, contributions: cl.contributions, departed: !!cA.departed }; }
+  for (const cl of subB) { byTarget[cl.target] = byTarget[cl.target] || {}; byTarget[cl.target].b = { player: cB.player, contributions: cl.contributions, departed: !!cB.departed }; }
 
   for (const tIdxStr in byTarget) {
     const tIdx = parseInt(tIdxStr, 10);
     const entry = byTarget[tIdxStr];
     const a = entry.a, b = entry.b;
-    if (a && !b) { uncontested(a.player, a.contributions, tIdx); continue; }
-    if (b && !a) { uncontested(b.player, b.contributions, tIdx); continue; }
+    if (a && !b) { uncontested(a.player, a.contributions, tIdx, a.departed); continue; }
+    if (b && !a) { uncontested(b.player, b.contributions, tIdx, b.departed); continue; }
 
     // Contested mutual claim
     const pwrA = a.contributions.reduce((s, c) => s + c.amount, 0);
@@ -3204,8 +3275,8 @@ function resolveClaims(planA, planB, post) {
       const dmgEach = Math.ceil(pwrA / 2);
       const dmgsA = distributeClaimDamage(a.contributions, dmgEach);
       const dmgsB = distributeClaimDamage(b.contributions, dmgEach);
-      for (let i = 0; i < a.contributions.length; i++) recordSource(a.contributions[i].source, a.player, dmgsA[i]);
-      for (let i = 0; i < b.contributions.length; i++) recordSource(b.contributions[i].source, b.player, dmgsB[i]);
+      for (let i = 0; i < a.contributions.length; i++) recordSource(a.contributions[i].source, a.player, dmgsA[i], a.contributions[i].amount, a.departed);
+      for (let i = 0; i < b.contributions.length; i++) recordSource(b.contributions[i].source, b.player, dmgsB[i], b.contributions[i].amount, b.departed);
       logs.push({
         playerA: a.player, contributionsA: a.contributions.slice(), powerA: pwrA, damageA: dmgsA,
         playerB: b.player, contributionsB: b.contributions.slice(), powerB: pwrB, damageB: dmgsB,
@@ -3219,9 +3290,9 @@ function resolveClaims(planA, planB, post) {
       const pwrL = aWins ? pwrB : pwrA;
       const dmgToLoser = Math.ceil(pwrL / 2);
 
-      for (const c of winner.contributions) recordSource(c.source, winner.player, c.amount);
+      for (const c of winner.contributions) recordSource(c.source, winner.player, c.amount, c.amount, winner.departed);
       const dmgsLoser = distributeClaimDamage(loser.contributions, dmgToLoser);
-      for (let i = 0; i < loser.contributions.length; i++) recordSource(loser.contributions[i].source, loser.player, dmgsLoser[i]);
+      for (let i = 0; i < loser.contributions.length; i++) recordSource(loser.contributions[i].source, loser.player, dmgsLoser[i], loser.contributions[i].amount, loser.departed);
       const tTroops = Math.max(0, pwrW - dmgToLoser);
       effects.push({ kind: 'claimTake', idx: tIdx, newOwner: winner.player, newTroops: tTroops });
       logs.push({
@@ -3246,8 +3317,10 @@ function applyAoeEffects(effects) {
   // Merge by idx: later wipe overrides anything; otherwise newest write wins
   // but we have ordering: attacks first then claims. Wipes should dominate.
   const finalByIdx = {};
+  const returns = [];
   for (const e of effects) {
     const idx = e.idx;
+    if (e.kind === 'claimReturn') { returns.push(e); continue; }
     if (!(idx in finalByIdx)) { finalByIdx[idx] = e; continue; }
     const cur = finalByIdx[idx];
     const isWipeDef = (e.kind === 'wipeDef' || e.kind === 'wipeAtt');
@@ -3271,6 +3344,11 @@ function applyAoeEffects(effects) {
     r.troops = Math.max(0, e.newTroops | 0);
     r.owner  = e.newOwner;
     if (r.troops === 0 && r.owner !== -1) r.owner = 0;
+  }
+  for (const e of returns) {
+    const r = regions[e.idx];
+    if (!r || r.owner !== e.owner) continue;
+    r.troops += e.delta;
   }
 }
 
@@ -3346,12 +3424,15 @@ function resolveMutualClash(planA, planB, post) {
   const dmgToA = aoeAttritionFrom(powerB, aoeAttackPowerFactor(planA.double));
   const dmgToB = aoeAttritionFrom(powerA, aoeAttackPowerFactor(planB.double));
 
+  const troopsOf = group => group.reduce((m, g) => { m[g] = post[g].troops; return m; }, {});
   const log = {
     type: 'mutualClash',
     playerA: planA.player, groupA: planA.group.slice(), defenderA: planA.defender,
     powerA, rawPowerA: rawA, dmgToB, doubleA: !!planA.double,
+    groupTroopsA: troopsOf(planA.group), defTroopsA: post[planA.defender].troops,
     playerB: planB.player, groupB: planB.group.slice(), defenderB: planB.defender,
     powerB, rawPowerB: rawB, dmgToA, doubleB: !!planB.double,
+    groupTroopsB: troopsOf(planB.group), defTroopsB: post[planB.defender].troops,
     outcome: 'mutualClash'
   };
 
@@ -3431,19 +3512,23 @@ function buildAttritionEffects(group, dist, stateSource) {
 /* The full round resolve. plans = { 1, 2 } each a committed plan or null.
    rngSeed = integer (host broadcasts; local games use Math.random-derived).
    Returns { attackLogs, claimLogs, postSnap }. */
-function resolveAoeRound(planA, planB, rngSeed) {
+function resolveAoeRound(planA, planB, rngSeed, opts) {
   // Step 1: adjustments against pre-round (current regions)
   if (planA && planA.type === 'adjust') applyAdjustmentsToState(planA, regions);
   if (planB && planB.type === 'adjust') applyAdjustmentsToState(planB, regions);
   // Base designations take effect this round (a fortified base defends immediately).
   if (planA && planA.type === 'adjust' && planA.bases !== undefined && planA.bases !== null) applyBasesForPlayer(planA.player, planA.bases);
   if (planB && planB.type === 'adjust' && planB.bases !== undefined && planB.bases !== null) applyBasesForPlayer(planB.player, planB.bases);
+  // Claim troops leave first, so everything after is measured against what
+  // their source territories actually still hold.
+  planA = applyClaimDepartures(planA, regions);
+  planB = applyClaimDepartures(planB, regions);
   // Defend: bases set and regen applied before attacks resolve, so a defended
   // territory is fought at its post-regen strength.
   if (planA && planA.type === 'defend') applyDefendPlan(planA);
   if (planB && planB.type === 'defend') applyDefendPlan(planB);
 
-  // Step 2: attacks + claims against post-adjust snapshot
+  // Step 2: attacks and claim landings against the post-adjust, post-departure snapshot
   const postSnap = regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
                                        neighbors: r.neighbors.slice(),
                                        owner: r.owner, troops: r.troops, isBase: r.isBase,
@@ -3452,12 +3537,14 @@ function resolveAoeRound(planA, planB, rngSeed) {
                                        auraFactor: r.auraFactor || 1 }));
   const rng = mulberry32(rngSeed | 0);
   const attackLogs = [];
+  const attritionSides = [];
   let allEffects = [];
   let mutualClashPending = null;
   if (isMutualAttackClash(planA, planB)) {
     const { effects, log, pending } = resolveMutualClash(planA, planB, postSnap);
     attackLogs.push(log);
     allEffects = allEffects.concat(effects);
+    if (pending) for (const side of pending.sides) { side.log = log; side.title = 'Mutual Clash'; }
     mutualClashPending = pending;
   } else {
     // Ordered resolution: if A attacks B and B is in the other's attacking group,
@@ -3484,9 +3571,10 @@ function resolveAoeRound(planA, planB, rngSeed) {
       if (!firstAttack && secondAttack) { firstAttack = secondAttack; secondAttack = null; }
     }
     if (firstAttack) {
-      const { effects, log } = resolveSingleAttack(firstAttack, postSnap, rng);
+      const { effects, log, pending } = resolveSingleAttack(firstAttack, postSnap, rng, opts);
       attackLogs.push(log);
       allEffects = allEffects.concat(effects);
+      if (pending) attritionSides.push(pending);
       // Apply first attack effects to postSnap so second attack sees updated state
       for (const e of effects) {
         if (e.idx !== undefined && postSnap[e.idx]) {
@@ -3496,9 +3584,10 @@ function resolveAoeRound(planA, planB, rngSeed) {
       }
     }
     if (secondAttack) {
-      const { effects, log } = resolveSingleAttack(secondAttack, postSnap, rng);
+      const { effects, log, pending } = resolveSingleAttack(secondAttack, postSnap, rng, opts);
       attackLogs.push(log);
       allEffects = allEffects.concat(effects);
+      if (pending) attritionSides.push(pending);
     }
   }
   const claimRes = resolveClaims(planA, planB, postSnap);
@@ -3507,7 +3596,37 @@ function resolveAoeRound(planA, planB, rngSeed) {
   applyAoeEffects(allEffects);
   sanitizeBases();
 
-  return { attackLogs, claimLogs: claimRes.logs, postSnap, mutualClashPending };
+  return { attackLogs, claimLogs: claimRes.logs, postSnap, mutualClashPending, attritionSides };
+}
+
+/* Every attrition decision the round left for a player to make, in one list. */
+function roundAttritionPending(res) {
+  const sides = (res.attritionSides || []).slice();
+  if (res.mutualClashPending) for (const side of res.mutualClashPending.sides) sides.push(side);
+  return sides.length ? { sides } : null;
+}
+
+/* An attrition decision can wait for its owner to place it only when nothing
+   later in the round reads the troops it removes: no attack targets one of
+   those territories, and none of them marches out again in a later slot.
+   Returns a predicate over (group, slot). */
+function aoeAttritionDeferral(planA, planB) {
+  const attacks = [];
+  for (const plan of [planA, planB]) {
+    let slot = 0;
+    for (const a of planActionList(plan)) {
+      if (!a || a.type !== 'attack') continue;
+      attacks.push({ slot: slot++, group: a.group.slice(), defender: a.defender });
+    }
+  }
+  return function (group, slot) {
+    for (const x of attacks) {
+      if (x.slot < slot) continue;
+      if (group.indexOf(x.defender) >= 0) return false;
+      if (x.slot > slot && x.group.some(g => group.indexOf(g) >= 0)) return false;
+    }
+    return true;
+  };
 }
 
 /* Re-check an attack action against live state before its slot resolves. An
@@ -3555,20 +3674,26 @@ function planActionList(plan) {
   return [plan];
 }
 
-/* Multi-action round resolve. Order: all adjusts, all defends (bases + regen),
-   attack slot 1, attack slot 2, then all claims simultaneously. Each attack
+/* Multi-action round resolve. Order: all adjusts, all claim departures, all
+   defends (bases + regen), attack slot 1, attack slot 2, then the claims land
+   simultaneously. Each attack
    slot runs through resolveAoeRound so chain ordering, base inflation and
    mutual clashes behave exactly as in single-action rounds. Clash attrition
    auto-distributes here rather than pausing for a modal per slot. */
-function resolveAoeRoundMulti(planA, planB, rngSeed) {
+function resolveAoeRoundMulti(planA, planB, rngSeed, opts) {
   const listA = planActionList(planA);
   const listB = planActionList(planB);
-  const attackLogs = [], claimLogs = [];
+  const attackLogs = [], claimLogs = [], attritionSides = [];
+  const canDefer = (opts && opts.canDefer) || null;
   let seed = rngSeed | 0;
   const nextSeed = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
 
   for (const a of listA) if (a.type === 'adjust') applyAdjustmentsToState(a, regions);
   for (const b of listB) if (b.type === 'adjust') applyAdjustmentsToState(b, regions);
+  // Claims are committed and their troops march out before any defend or
+  // attack this day resolves.
+  const claimA = applyClaimDepartures(mergeClaimActions(1, listA.filter(a => a.player === 1)), regions);
+  const claimB = applyClaimDepartures(mergeClaimActions(2, listB.filter(b => b.player === 2)), regions);
   for (const a of listA) if (a.type === 'defend') applyDefendPlan(a);
   for (const b of listB) if (b.type === 'defend') applyDefendPlan(b);
 
@@ -3587,12 +3712,16 @@ function resolveAoeRoundMulti(planA, planB, rngSeed) {
       }
     }
     if (!v1 && !v2) continue;
-    const res = resolveAoeRound(v1, v2, nextSeed());
+    const res = resolveAoeRound(v1, v2, nextSeed(), canDefer ? { canDefer, slot: s } : null);
     for (const L of res.attackLogs) attackLogs.push(L);
+    for (const side of (res.attritionSides || [])) attritionSides.push(side);
     if (res.mutualClashPending) {
       const clashLog = res.attackLogs.find(L => L.type === 'mutualClash') || null;
       for (const side of res.mutualClashPending.sides) {
         if (side.totalDmg <= 0) continue;
+        // A clash whose losses nothing later in the round depends on waits for
+        // its player; otherwise the next slot needs them on the board now.
+        if (canDefer && canDefer(side.group, s)) { attritionSides.push(side); continue; }
         const dist = autoBleedDist(side.group, side.totalDmg, regions, true);
         applyAttritionDist(side, dist, clashLog);
       }
@@ -3600,14 +3729,12 @@ function resolveAoeRoundMulti(planA, planB, rngSeed) {
     }
   }
 
-  const claimA = mergeClaimActions(1, listA.filter(a => a.player === 1));
-  const claimB = mergeClaimActions(2, listB.filter(b => b.player === 2));
   if (claimA || claimB) {
     const res = resolveAoeRound(claimA, claimB, nextSeed());
     for (const L of res.claimLogs) claimLogs.push(L);
   }
   sanitizeBases();
-  return { attackLogs, claimLogs, postSnap: null, mutualClashPending: null };
+  return { attackLogs, claimLogs, postSnap: null, mutualClashPending: null, attritionSides };
 }
 
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
@@ -4074,22 +4201,25 @@ function aoePerformResolutionWithSeed(rngSeed) {
     const preOwners = regions.map(r => r.owner);
     aoePendingRoundSummary = { round: thisRound, preOwners };
     const isMulti = (planA && planA.type === 'multi') || (planB && planB.type === 'multi');
-    const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed)
-                        : resolveAoeRound(planA, planB, rngSeed);
+    const opts = { canDefer: aoeAttritionDeferral(planA, planB), slot: 0 };
+    const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed, opts)
+                        : resolveAoeRound(planA, planB, rngSeed, opts);
     flashOutcomes(res);
-    appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
     setTimeout(() => {
       clearIntentArrows();
       render();
 
       // A won single attack razes the target to gray; taking it needs a Claim on
       // a later turn. Only a double attack converts territory outright.
-      if (res.mutualClashPending) {
-        const clashLog = res.attackLogs.find(L => L.type === 'mutualClash') || res.attackLogs[0];
-        processAttritionDistribution(res.mutualClashPending, clashLog, aoePostResolution);
-      } else {
+      // The round log is written after the attrition modals so it can report
+      // the losses each player actually placed.
+      const finish = () => {
+        appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
         aoePostResolution();
-      }
+      };
+      const pending = roundAttritionPending(res);
+      if (pending) processAttritionDistribution(pending, null, finish);
+      else finish();
     }, 1800);
   }, 1500);
 }
@@ -4136,18 +4266,35 @@ function applyAttritionDist(side, dist, clashLog) {
       regions[e.idx].troops = e.newTroops;
     }
   }
-  // Store losses in the clash log for display
-  if (clashLog) {
-    if (side.player === clashLog.playerA) clashLog.lossesA = dist;
-    else clashLog.lossesB = dist;
+  // Store losses on the entry that reports them.
+  const log = side.log || clashLog;
+  if (!log) return;
+  if (log.type === 'mutualClash') {
+    if (side.player === log.playerA) log.lossesA = dist;
+    else log.lossesB = dist;
+  } else {
+    log.attackerLosses = dist;
   }
 }
 
 function openAttritionModal(side, callback) {
   const dist = {};
-  // Pre-fill with the canonical even spread so the modal opens valid.
-  const autoDist = autoBleedDist(side.group, side.totalDmg, regions, true);
-  for (const g of side.group) dist[g] = autoDist[g] || 0;
+  // Pre-fill with the proportional spread, or with whatever the attacker
+  // already asked for when it still sums to the damage actually taken.
+  // Damage beyond what the group can hold has nowhere to go, so the amount to
+  // place is what its territories can actually absorb.
+  const capacity = side.group.reduce((t, g) => t + Math.max(0, regions[g].troops), 0);
+  const target = Math.min(side.totalDmg, capacity);
+  const autoDist = autoBleedDist(side.group, target, regions, false);
+  let seed = autoDist;
+  if (side.preferred) {
+    let sum = 0;
+    for (const g of side.group) sum += (side.preferred[g] | 0);
+    if (sum === target && attritionSpreadCheck(side.group, side.preferred, target, regions).ok) {
+      seed = side.preferred;
+    }
+  }
+  for (const g of side.group) dist[g] = seed[g] || 0;
 
   function getTotal() {
     let t = 0;
@@ -4158,8 +4305,8 @@ function openAttritionModal(side, callback) {
   function renderModal() {
     const host = document.getElementById('aoeModalHost');
     const total = getTotal();
-    const diff = side.totalDmg - total;
-    const spread = attritionSpreadCheck(side.group, dist, side.totalDmg, regions);
+    const diff = target - total;
+    const spread = attritionSpreadCheck(side.group, dist, target, regions);
     const rows = side.group.map(g => {
       const v = dist[g] | 0;
       const r = regions[g];
@@ -4181,9 +4328,13 @@ function openAttritionModal(side, callback) {
 
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
-        '<h3>Mutual Clash — Distribute Attrition</h3>' +
+        '<h3>' + (side.title || 'Mutual Clash') + ': distribute attrition</h3>' +
         '<div class="modal-info">' + playerName(side.player) + ': your forces took <strong>' + side.totalDmg +
-          '</strong> total damage. At least <strong>' + spread.requiredHit + '</strong> of <strong>' + spread.n +
+          '</strong> total damage' +
+          (target < side.totalDmg
+            ? ', more than the <strong>' + capacity + '</strong> your group can absorb, so place ' + capacity + ' and the rest is lost with them'
+            : '') +
+          '. At least <strong>' + spread.requiredHit + '</strong> of <strong>' + spread.n +
           '</strong> attackers must take ≥ 1 (pile surplus where you want).' +
           (diff !== 0 ? ' <span style="color:#fca5a5;">Remaining: ' + diff + '</span>' : ' <span style="color:#86efac;">✓ Fully distributed</span>') +
         '</div>' +
@@ -4209,14 +4360,14 @@ function openAttritionModal(side, callback) {
 
     const okBtn = document.getElementById('attrOk');
     if (okBtn) okBtn.onclick = () => {
-      const finalSpread = attritionSpreadCheck(side.group, dist, side.totalDmg, regions);
-      if (!finalSpread.ok || getTotal() !== side.totalDmg) return;
+      const finalSpread = attritionSpreadCheck(side.group, dist, target, regions);
+      if (!finalSpread.ok || getTotal() !== target) return;
       host.innerHTML = '';
       callback(dist);
     };
     const autoBtn = document.getElementById('attrAuto');
     if (autoBtn) autoBtn.onclick = () => {
-      const autoDist = autoBleedDist(side.group, side.totalDmg, regions, true);
+      const autoDist = autoBleedDist(side.group, target, regions, false);
       for (const g of side.group) dist[g] = autoDist[g] || 0;
       host.innerHTML = '';
       callback(dist);
@@ -4243,43 +4394,61 @@ function aoePostResolution() {
 
 /* `action` is one of attack | attack2 | defend | defend2 | adjust | claim | pass.
    The `2` variants are the whole-day double actions. */
+/* Why an action type cannot be started right now, or null when it can.
+   `composed` is the banked plan to price the action against; pass null to skip
+   the cost checks and test only the phase and day/night gates. */
+function aoeActionUnavailableReason(action, composed) {
+  const isDouble = (action === 'attack2' || action === 'defend2');
+  const base = isDouble ? action.slice(0, -1) : action;
+  if (phase !== 'battle') return 'Not in the battle phase.';
+  if (!canIControlAoePlan()) return 'Wait for your plan step.';
+  const night = aoeIsNightRound();
+  if (night && base !== 'adjust' && base !== 'pass') return 'Night: only Adjust or Pass.';
+  if (!night && base === 'adjust') return 'Adjusting troops is a night action.';
+  if (isDouble && !aoeDoublesAllowed()) return 'Double actions need a 3-action day.';
+  // Passing costs nothing and ends the turn, so it is always on the table.
+  if (!composed || !aoeMultiMode() || base === 'pass') return null;
+
+  const apLeft = Math.max(0, aoeMaxActions() - aoeApUsedBy(composed));
+  if (apLeft <= 0) return 'All ' + aoeMaxActions() + ' AP used. Submit, or remove an action.';
+  let atk = 0, def = 0;
+  for (const a of composed) { if (a.type === 'attack') atk++; else if (a.type === 'defend') def++; }
+  if (base === 'attack' && !isDouble && atk >= aoeMaxAttacks()) {
+    return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
+  }
+  if (base === 'defend' && !isDouble && def >= aoeMaxDefends()) {
+    return 'Only ' + aoeMaxDefends() + ' Defend actions per turn.';
+  }
+  const cost = aoeActionApCost(base, base === 'attack' ? atk : base === 'defend' ? def : 0, isDouble);
+  if (cost > apLeft) {
+    return (isDouble ? 'A double ' : 'A second ') + base + ' costs ' + cost +
+           ' AP; you have ' + apLeft + ' left.';
+  }
+  return null;
+}
+
+/* The banked plan as it would stand a moment after clicking another action
+   type, since that banks whatever is finished on the map first. */
+function aoeProjectedComposed() {
+  if (!aoeMultiMode() || !aoeWorking.action || aoeWorking.action === 'pass') return aoeComposed;
+  const act = buildPlanFromWorking(aoePlanningPlayer);
+  if (!act || composedAdditionError(aoePlanningPlayer, act)) return aoeComposed;
+  return aoeComposed.concat([act]);
+}
+
 function setAoeUiAction(action) {
   if (historyViewIdx >= 0) historyExit();
   if (phase !== 'battle') return;
-  if (!canIControlAoePlan()) {
-    flashMessage('Wait for your plan step.', 'warn'); return;
-  }
   const isDouble = (action === 'attack2' || action === 'defend2');
   const base = isDouble ? action.slice(0, -1) : action;
-  const night = aoeIsNightRound();
-  if (night && base !== 'adjust' && base !== 'pass') {
-    flashMessage('Night: only Adjust or Pass.', 'warn'); return;
-  }
-  if (!night && base === 'adjust') {
-    flashMessage('Adjusting troops is a night action.', 'warn'); return;
-  }
-  if (isDouble && !aoeDoublesAllowed()) {
-    flashMessage('Double actions need a 3-action day.', 'warn'); return;
-  }
+  const gate = aoeActionUnavailableReason(action, null);
+  if (gate) { flashMessage(gate, 'warn'); return; }
   if (aoeMultiMode() && base !== 'pass') {
-    // Switching action type banks a finished action instead of discarding it.
+    // Switching action type banks a finished action instead of discarding it,
+    // so what it costs is priced against the plan including that one.
     if (aoeWorking.action) aoeAddAction(true);
-    if (aoeApLeft() <= 0) {
-      flashMessage('All ' + aoeMaxActions() + ' AP used. Submit, or remove an action.', 'warn'); return;
-    }
-    if (base === 'attack' && !isDouble && aoeComposedAttackCount() >= aoeMaxAttacks()) {
-      flashMessage('Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.', 'warn'); return;
-    }
-    if (base === 'defend' && !isDouble && aoeComposedDefendCount() >= aoeMaxDefends()) {
-      flashMessage('Only ' + aoeMaxDefends() + ' Defend actions per turn.', 'warn'); return;
-    }
-    const nextCost = aoeActionApCost(base,
-      base === 'attack' ? aoeComposedAttackCount() : base === 'defend' ? aoeComposedDefendCount() : 0,
-      isDouble);
-    if (nextCost > aoeApLeft()) {
-      flashMessage((isDouble ? 'A double ' : 'A second ') + base + ' costs ' + nextCost +
-                   ' AP; you have ' + aoeApLeft() + ' left.', 'warn'); return;
-    }
+    const reason = aoeActionUnavailableReason(action, aoeComposed);
+    if (reason) { flashMessage(reason, 'warn'); return; }
   }
   aoeWorking = makeEmptyWorking();
   aoeWorking.action = base;
@@ -4503,16 +4672,16 @@ function openAttackConfirmModal(G, defenderIdx) {
               '</strong> troops, a quarter of its garrison changing sides with the ground. Your attackers pay <strong>' +
               capture.attrition + '</strong> in attrition, and none of the garrison comes out of your own stacks.<br>'
             : 'On success: the territory is razed to gray and can be claimed later. Attackers lose <strong>' + successAttrition + '</strong> total attrition.<br>') +
-          'If repelled: attackers lose <strong>' + failAttrition + '</strong> total, auto-distributed at resolution. ' +
+          'If repelled: attackers lose <strong>' + failAttrition + '</strong> total. You place those losses across this group when the round resolves, whatever the final figure turns out to be. ' +
           'You may attack a stronger territory; the price of failing scales with what you could not break.<br>' +
           '<em>If the defender plays Defend or Double Defend here it reinforces AND blunts your strike by the same factor, so this projection is a best case.' +
           (isDouble ? ' A double-defended territory can be broken but not converted.' : '') + '</em><br>' +
           '<em>If the opponent counter-attacks into this group, both sides take damage; only a winning double attack takes ground.</em>' +
         '</div>' +
         '<div class="checkbox-row">' +
-          '<label><input type="checkbox" id="autoBleedChk" ' + (autoBleed ? 'checked' : '') + '> Auto-bleed (even split)</label>' +
+          '<label><input type="checkbox" id="autoBleedChk" ' + (autoBleed ? 'checked' : '') + '> Auto-bleed (proportional to each stack)</label>' +
         '</div>' +
-        '<div class="section-head">Success-case attrition (currently ' + successAttrition + ', may change)</div>' +
+        '<div class="section-head">Preferred success-case attrition (currently ' + successAttrition + ', may change)</div>' +
         successRows +
         '<div class="err" id="atkErr"></div>' +
         '<div class="modal-foot">' +
@@ -5105,13 +5274,17 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
     if (plan.type === 'claim') {
       const subClaims = planClaimList(plan);
       return subClaims.map(cl => {
-        const contribStr = cl.contributions.map(c => regionRef(c.source) + ' <span class="neutral">(' + pre[c.source] + ' troops, sent ' + c.amount + ')</span>').join(', ');
-        const totalSent = cl.contributions.reduce((s, c) => s + c.amount, 0);
-        let outcomeTxt = '';
         const myClaim = res.claimLogs.find(c =>
           (c.player === p && c.target === cl.target) ||
           ((c.playerA === p || c.playerB === p) && c.target === cl.target)
         );
+        // A claim is re-capped against live troops when it marches out, so the
+        // resolved contributions are what actually left.
+        const sent = (myClaim && (myClaim.contributions ||
+                      (myClaim.playerA === p ? myClaim.contributionsA : myClaim.contributionsB))) || cl.contributions;
+        const contribStr = sent.map(c => regionRef(c.source) + ' <span class="neutral">(' + pre[c.source] + ' troops, sent ' + c.amount + ')</span>').join(', ');
+        const totalSent = sent.reduce((s, c) => s + c.amount, 0);
+        let outcomeTxt = '';
         if (myClaim) {
           if (myClaim.uncontested && myClaim.outcome === 'win') {
             outcomeTxt = ' → <span style="color:#86efac;">captured</span>, ' + totalSent + ' troops landed.';
@@ -5138,21 +5311,33 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       });
     }
     if (plan.type === 'attack') {
-      const grpDetail = plan.group.map(idx => regionRef(idx) + ' <span class="neutral">(' + pre[idx] + ')</span>').join(', ');
-      const defDetail = regionRef(plan.defender) + ' <span class="neutral">(' + pre[plan.defender] + ')</span>';
+      // Strengths as they stood when the strike landed, which is after any
+      // troops those territories committed to a claim had marched out.
+      const atFight = (mutualLog ? (mutualLog.playerA === p ? mutualLog.groupTroopsA : mutualLog.groupTroopsB)
+                                 : (attackLog && attackLog.groupTroops)) || null;
+      const defAtFight = mutualLog ? (mutualLog.playerA === p ? mutualLog.defTroopsA : mutualLog.defTroopsB)
+                                   : (attackLog && attackLog.rawDefense);
+      const troopsAt = idx => (atFight && atFight[idx] !== undefined) ? atFight[idx] : pre[idx];
+      const grpDetail = plan.group.map(idx => regionRef(idx) + ' <span class="neutral">(' + troopsAt(idx) + ')</span>').join(', ');
+      const defDetail = regionRef(plan.defender) + ' <span class="neutral">(' +
+                        ((defAtFight === undefined || defAtFight === null) ? pre[plan.defender] : defAtFight) + ')</span>';
       const head = '<strong>' + playerName(p) + '</strong> ' + (plan.double ? 'double attacked ' : 'attacked ') + defDetail +
                    ' with [' + grpDetail + ']';
 
       if (mutualLog) {
         const totDmg = (mutualLog.playerA === p ? mutualLog.dmgToA : mutualLog.dmgToB);
         const oppPwr = (mutualLog.playerA === p ? mutualLog.powerB : mutualLog.powerA);
+        const clashLosses = (mutualLog.playerA === p ? mutualLog.lossesA : mutualLog.lossesB) || null;
+        const clashDetail = clashLosses
+          ? ' [' + plan.group.map(i => regionRef(i) + ': -' + (clashLosses[i] || 0)).join(', ') + ']'
+          : '';
         if (mutualLog.fortressBlocked) {
           return [{
             kind: cls,
             html: head + '. <em>Clash</em>: ' + (mutualLog.winner === p
               ? 'your double attack broke through but a \U0001f6e1\U0001f6e1 double defend denied the conversion.'
               : 'their double attack broke through; your \U0001f6e1\U0001f6e1 double defend denied them the territory.') +
-              ' Takes <strong>' + totDmg + '</strong> total attrition.'
+              ' Takes <strong>' + totDmg + '</strong> total attrition' + clashDetail + '.'
           }];
         }
         if (mutualLog.outcome === 'clashConvert') {
@@ -5167,21 +5352,25 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
           return [{
             kind: cls,
             html: head + '. <em>Clash lost to a double attack</em>: ' + regionRef(mutualLog.convertedIdx) +
-                  ' <span style="color:#fca5a5;">changed hands</span>. Takes <strong>' + totDmg + '</strong> total attrition.'
+                  ' <span style="color:#fca5a5;">changed hands</span>. Takes <strong>' + totDmg + '</strong> total attrition' + clashDetail + '.'
           }];
         }
         return [{
           kind: cls,
           html: head + '. <em>Mutual clash</em> (no territory changes). Takes <strong>' + totDmg +
-                '</strong> total attrition (half of opponent\'s power ' + oppPwr.toFixed(1) + '). Distribution chosen by player.'
+                '</strong> total attrition (half of opponent\'s power ' + oppPwr.toFixed(1) + ')' +
+                (clashDetail ? clashDetail + '.' : ', distribution chosen by ' + playerName(p) + '.')
         }];
       }
 
       // Individual attack outcome
       if (!attackLog) return [{ kind: cls, html: head + '.' }];
-      const losses = attackLog.attackerLosses || {};
-      const totLoss = Object.values(losses).reduce((a,b) => a + (b|0), 0);
-      const lossDetail = plan.group.map(idx => regionRef(idx) + ': -' + (losses[idx] || 0)).join(', ');
+      const losses = attackLog.attackerLosses || null;
+      const totLoss = losses ? Object.values(losses).reduce((a,b) => a + (b|0), 0)
+                             : ((attackLog.attrition | 0) || (attackLog.attackerDmg | 0));
+      const lossDetail = losses
+        ? plan.group.map(idx => regionRef(idx) + ': -' + (losses[idx] || 0)).join(', ')
+        : 'distribution chosen by ' + playerName(p);
       const defOwner = 3 - p;
       const defTag = ' <span class="neutral">(' + playerName(defOwner) + '\'s)</span>';
       // Trailing note rather than an inline aside, so the outcome clause reads cleanly.
@@ -5574,6 +5763,20 @@ function render() {
     document.getElementById('aoeAdjustBtn').classList.toggle('active', w.action === 'adjust');
     document.getElementById('aoeClaimBtn').classList.toggle('active', w.action === 'claim');
     document.getElementById('aoePassBtn').classList.toggle('active', w.action === 'pass');
+
+    // An action the remaining AP cannot pay for is greyed out rather than
+    // rejected on click. The one being built stays live so it can be revisited.
+    const projected = aoeProjectedComposed();
+    const activeKey = w.action ? (w.action + (w.isDouble ? '2' : '')) : null;
+    for (const [id, key] of [['aoeAttackBtn', 'attack'], ['aoeAttack2Btn', 'attack2'],
+                             ['aoeDefendBtn', 'defend'], ['aoeDefend2Btn', 'defend2'],
+                             ['aoeAdjustBtn', 'adjust'], ['aoeClaimBtn', 'claim'],
+                             ['aoePassBtn', 'pass']]) {
+      const el = document.getElementById(id);
+      const reason = (key === activeKey) ? null : aoeActionUnavailableReason(key, projected);
+      el.disabled = !!reason;
+      el.title = reason || '';
+    }
 
     // Banner
     let html = '';
@@ -6758,7 +6961,7 @@ function renderRulesCard() {
             '<li>Build an action on the map, then press <strong>＋ Add to Plan</strong>. Switching action type banks a finished action automatically. Press × on a listed action to drop it. Submit sends the whole set.</li>' +
             '<li>No two attacks may target the same territory, no two claims the same gray, and each territory may supply only one claim.</li>' +
             '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then attack slot 2, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
-            '<li>Mutual clashes auto-distribute their attrition evenly in 3-action days (no per-clash prompt).</li>' +
+            '<li>Whoever pays attrition places it. After the round resolves you are asked to spread your own losses across the territories that took part, for every attack that bled and for a clash alike. An attack whose losses a later attack in the same round depends on is settled automatically instead, and so is any side played by the CPU.</li>' +
           '</ul>'
         : '<h3>Day actions (1 per day)</h3><p>Each day you pick a single action: Attack, Defend, Claim, or Pass. Double actions need the 3-action day.</p>') +
       '<h3>Action ⚔ Attack</h3>' +
@@ -6769,6 +6972,7 @@ function renderRulesCard() {
         '<li><strong>A dug-in target blunts the strike:</strong> whatever factor a territory scaled its own power up by, it scales an incoming attack down by the same factor. A Defend takes a territory to 1.5x, so an attack lands at 1/1.5 of its power; a Double Defend takes it to 2.5x and lands attacks at 1/2.5. This decides the outcome only. <strong>Attrition on both sides is still measured against raw power</strong>, so blunting a strike never spares the attacker.</li>' +
         '<li><strong>Power &gt; Defense (win):</strong> D is razed to <strong>gray</strong> and its troops are gone. A single attack does NOT take the ground; the ruin can be Claimed on a later turn by either side. Attackers pay ceil(D/2) attrition.</li>' +
         '<li><strong>Else (repelled):</strong> both sides bleed and no ground changes hands. The attackers lose half the defence they could not break; the defender loses half the power that actually landed.</li>' +
+        '<li><strong>Placing attacker losses:</strong> the total is fixed by the fight, but where it lands is yours to choose, subject to at least min(total, attackers) of them taking 1 or more. Left automatic, losses fall in proportion to what each territory committed, so a small contributor is not bled at the same flat rate as a stack ten times its size.</li>' +
       '</ul>' +
       '<h3>Power factors and attrition</h3>' +
       '<p>Every attrition figure in the game has one shape:</p>' +
@@ -6803,7 +7007,7 @@ function renderRulesCard() {
         '<li><strong>Blunting:</strong> a territory scales an incoming attack down by the same factor it scaled itself up, so a Defend at 1.5x lands attacks at 1/1.5 and a Double Defend at 2.5x lands them at 1/2.5.</li>' +
         '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. Overlapping auras take the best boost rather than stacking.</li>' +
         '<li><strong>Fortress:</strong> a double-defended territory can never be converted, only razed. It is the answer to a double attack.</li>' +
-        '<li><strong>An attack on a defended territory becomes a clash:</strong> the attack was declared against the pre-round count, so the reinforcement can turn a sure thing into a bloody draw.</li>' +
+        '<li><strong>An attack on a defended territory becomes a clash:</strong> the attack was declared against the pre-round count, so the reinforcement can turn a sure thing into a bloody draw. The same cuts the other way: a target that spent troops on a claim is fought at what it has left.</li>' +
         '<li>Fortification is temporary: it applies to that round\'s resolution only, and every round starts with a clean map.</li>' +
       '</ul>' +
       '<h3>Action ↔ Adjust troops (night)</h3>' +
@@ -6815,18 +7019,22 @@ function renderRulesCard() {
       '<ul>' +
         '<li>Pick one adjacent gray as target, then stack contributions from any of your adjacent territories (≥ 2 troops each, ≤ ⌊source/2⌋ per source). Claim power = sum of contributions.</li>' +
         '<li><strong>One gray per Claim action</strong> (1 AP each), so grabbing two grays costs 2 AP. Each source may contribute to at most one claim per turn.</li>' +
+        '<li>Contributions leave their sources at the start of the day, before any defend or attack resolves. A source that sends troops is attacked at what it has left, and the claim still lands if that source is razed or captured.</li>' +
         '<li>Uncontested: gray becomes yours with Σ amount troops; each contributing source loses its sent amount.</li>' +
         '<li>Contested: larger total wins. Winner takes the gray with (winner power) − ⌈(loser power)/2⌉ troops; winner sources each lose their full sent amount. Loser sources take ⌈loser power /2⌉ damage spread proportionally and keep the rest.</li>' +
-        '<li>Tied: gray stays gray; each side takes ⌈power/2⌉ damage spread proportionally across its contributions, remainder returns to sources.</li>' +
+        '<li>Tied: gray stays gray; each side takes ⌈power/2⌉ damage spread proportionally across its contributions, remainder returns to sources. Survivors only return to a source still in your hands.</li>' +
       '</ul>' +
       '<h3>Action ⏭ Pass</h3>' +
       '<p>If BOTH players Pass in the SAME round, game ends early and scores tally.</p>' +
       '<h3>Resolution order</h3>' +
       '<ol style="padding-left:22px;">' +
-        '<li>Step 1 — Adjustments applied atomically against pre-round counts.</li>' +
-        '<li>Step 2 — Attacks &amp; claims resolved against post-adjustment state (chain-ordered).</li>' +
+        '<li>Step 1: adjustments applied atomically against pre-round counts.</li>' +
+        '<li>Step 2: claim contributions march out of their sources.</li>' +
+        '<li>Step 3: defends fortify and reinforce what their territory now holds.</li>' +
+        '<li>Step 4: attacks resolved against that state (chain-ordered).</li>' +
+        '<li>Step 5: claims land on their targets, whatever became of their sources.</li>' +
       '</ol>' +
-      '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 2 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts use pre-round source counts as cap.</p>' +
+      '<p class="sub">Edge cases: a dest that gets wiped this round still receives the reinforcement in Step 1, then is wiped in Step 4 (troops gone with it). A wiped source still leaves its troops at dest. Claim amounts are capped at half of what the source holds when the claim marches out.</p>' +
       (fogOfWar ? '<h3>Fog of War (enabled)</h3><p>You only see your own territories, gray ruins, and enemy territories adjacent to yours. Everything else renders as a fog tile until it borders you.</p>' : '') +
       '<h3>Victory</h3>' +
       '<ul>' +
@@ -6864,7 +7072,7 @@ window.AG = {
   state: () => ({ regions, gridSize }),
   setRegions: (rs, gs) => { regions = rs; if (gs) gridSize = gs; },
   autoBleedDist,
-  resolveAoeRound, resolveAoeRoundMulti, mulberry32,
+  resolveAoeRound, resolveAoeRoundMulti, mulberry32, applyClaimDepartures,
   resolveMutualClash, isMutualAttackClash,
   applyAdjustmentsToState, applyAoeEffects,
   enumerateAttackCandidates, enumerateClaimCandidates, enumerateAdjustCandidates,
