@@ -410,6 +410,7 @@
     }
     .region.base .region-base, .region.baseSel .region-base { display: block; }
     .region.base { box-shadow: inset 0 0 0 2px rgba(251,191,36,.85), 0 0 14px rgba(251,191,36,.35); }
+    .region.base2 { box-shadow: inset 0 0 0 4px rgba(180,83,9,.95), inset 0 0 0 6px rgba(251,191,36,.9), 0 0 18px rgba(180,83,9,.55); }
     .region.baseSel { outline: 2px dashed #fbbf24; outline-offset: -4px; }
     .region.baseCand { outline: 2px dotted rgba(251,191,36,.55); outline-offset: -4px; cursor: pointer; }
     /* Go-like deployment legality */
@@ -745,6 +746,7 @@
       display: block; fill: #fbbf24; font-size: 5.5px;
     }
     .map-container.geo-map g.region.base polygon { stroke: #fbbf24; stroke-width: 0.9; }
+    .map-container.geo-map g.region.base2 polygon { stroke: #b45309; stroke-width: 1.8; }
     .map-container.geo-map g.region.baseSel polygon { stroke: #fbbf24; stroke-width: 0.7; stroke-dasharray: 1.5 1; }
     .map-container.geo-map g.region.baseCand polygon { stroke: rgba(251,191,36,.6); stroke-width: 0.5; }
     .map-container.geo-map g.region.deployLegal polygon { stroke: rgba(134,239,172,.8); stroke-width: 0.6; }
@@ -869,7 +871,7 @@
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> - two phases: Assign (alternate fixed placements, Go-style surround captures, pie rule) then Battle (parallel turns; attack, adjust, or claim).
+        <strong>Age of Empires</strong> - two phases: Assign (alternate fixed placements, Go-style surround captures, pie rule) then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
       </div>
     </div>
 
@@ -952,6 +954,15 @@
         <span class="helpText" style="margin-top:0;">0 = auto (<span id="assignQuantumPreview">10</span>)</span>
       </div>
       <div class="helpText">Assign phase: players alternate placing this many troops per turn onto an empty region. Auto = total troops / 10.</div>
+    </div>
+
+    <div class="setupSection" id="actionsPerDaySection" style="display:none;">
+      <div class="setupLabel">Actions per Day (Age of Empires only)</div>
+      <div id="actionsPerDayToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setActionsPerDay(1)">1 Action</button>
+        <button class="modeBtn selected" onclick="setActionsPerDay(3)">3 Actions</button>
+      </div>
+      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. A 2nd attack or 2nd defend costs 2 AP, and a double attack or double defend costs all 3. Legal days: attack/attack, defend/defend, attack/defend/claim, attack/claim/claim, defend/claim/claim, claim/claim/claim, double attack, double defend. Nights stay one Adjust.</div>
     </div>
 
     <div class="setupSection" id="turnModeSection" style="display:none;">
@@ -1039,6 +1050,9 @@
 
     <div id="aoeActionBar" class="aoe-action-bar hidden">
       <button class="actionBtn" id="aoeAttackBtn" onclick="setAoeUiAction('attack')">⚔ Attack</button>
+      <button class="actionBtn" id="aoeAttack2Btn" onclick="setAoeUiAction('attack2')">⚔⚔ Double Attack</button>
+      <button class="actionBtn" id="aoeDefendBtn" onclick="setAoeUiAction('defend')">🛡 Defend</button>
+      <button class="actionBtn" id="aoeDefend2Btn" onclick="setAoeUiAction('defend2')">🛡🛡 Double Defend</button>
       <button class="actionBtn" id="aoeAdjustBtn" onclick="setAoeUiAction('adjust')">↔ Adjust</button>
       <button class="actionBtn" id="aoeClaimBtn" onclick="setAoeUiAction('claim')">▣ Claim</button>
       <button class="actionBtn" id="aoePassBtn" onclick="setAoeUiAction('pass')">⏭ Pass</button>
@@ -1047,6 +1061,7 @@
     <div id="aoeBanner" class="aoe-banner hidden"></div>
 
     <div id="aoeSubmitBar" class="submit-bar hidden">
+      <button class="actionBtn hidden" id="aoeAddActionBtn" onclick="aoeAddAction()">＋ Add to Plan</button>
       <button class="actionBtn primary" id="aoeSubmitBtn" onclick="aoeSubmitPlan()">Submit Plan</button>
       <button class="actionBtn" id="aoeClearBtn" onclick="aoeClearWorking()">Clear</button>
     </div>
@@ -1132,6 +1147,7 @@ let gameMode = 'classic';      // 'classic' | 'aoe'
 let fogOfWar = false;
 let turnMode = 'dynamic';     // 'fixed' | 'dynamic'
 let fixedTurnCount = 0;       // 0 = auto (regions/2), else user-specified
+let actionsPerDay = 3;        // AoE battle: actions a player composes per day round (1 or 3)
 let preAllocRandom = false;   // both players get random deployment, skip deploy phase
 let assignQuantumSetting = 0; // AoE assign phase: troops per placement, 0 = auto (ceil(total/10))
 
@@ -1172,19 +1188,23 @@ let battleLogCollapsed = false;
 let boardHistory = [];
 let historyViewIdx = -1;
 
+/* Actions the active planner has already committed to this turn's plan.
+   Only used on day rounds when actionsPerDay is 3. */
+let aoeComposed = [];
+
 /* Working plan currently being built by the active planner */
 let aoeWorking = makeEmptyWorking();
 function makeEmptyWorking() {
   return {
     action: null,           // 'attack' | 'adjust' | 'claim' | 'pass' | null
+    isDouble: false,        // attack/defend committed as a whole-day double action
     attackGroup: new Set(),
     attackDefender: -1,
     attackAutoBleed: true,
     attackSuccessManual: null, // map idx->loss
     adjustTransfers: [],
     adjustSourceSel: -1,
-    adjustBases: null,      // Set of region idx designated as defense bases (lazy init on entering adjust)
-    adjustBaseMode: false,  // when true, clicks toggle bases instead of transfers
+    defendBases: null,      // Set of region idx for the day Defend action (bases + regen)
     claims: [],            // [{target, contributions: [{source, amount}]}]
     claimTargetSel: -1,    // currently-focused target idx (the gray)
     claimSourceSel: -1     // own territory currently pending an amount input
@@ -1262,6 +1282,17 @@ function setGameMode(g) {
   document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
   document.getElementById('assignQuantumSection').classList.toggle('hidden', g !== 'aoe');
   document.getElementById('turnModeSection').style.display = (g === 'aoe') ? '' : 'none';
+  document.getElementById('actionsPerDaySection').style.display = (g === 'aoe') ? '' : 'none';
+}
+
+function setActionsPerDay(n) {
+  actionsPerDay = (n === 3) ? 3 : 1;
+  document.querySelectorAll('#actionsPerDayToggle .modeBtn').forEach((b, i) => {
+    b.classList.toggle('selected', [1, 3][i] === actionsPerDay);
+  });
+  document.getElementById('actionsPerDayHint').innerHTML = actionsPerDay === 3
+    ? '<strong>3 Actions:</strong> each day you spend 3 action points. A 2nd attack or 2nd defend costs 2 AP, and a double attack or double defend costs all 3. Legal days: attack/attack, defend/defend, attack/defend/claim, attack/claim/claim, defend/claim/claim, claim/claim/claim, double attack, double defend. Nights stay one Adjust.'
+    : '<strong>1 Action:</strong> each day you pick a single action (attack, defend, or claim). Double actions need the 3-action day. Nights stay one Adjust.';
 }
 
 function autoAssignQuantum(troops) { return Math.max(1, Math.ceil(troops / 10)); }
@@ -1424,6 +1455,7 @@ function backToSetup() {
 function aoeResetAll() {
   aoeRound = 0;
   aoeMaxRounds = 0;
+  aoeComposed = [];
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
   aoePassFlags = { 1: false, 2: false };
@@ -1826,7 +1858,7 @@ function startGame(mapData) {
     tiny: !!r.tiny,
     isGeo: !!r.isGeo,
     neighbors: r.neighbors.slice(),
-    owner: 0, troops: 0, isBase: false
+    owner: 0, troops: 0, isBase: false, defendLevel: 0, defendFactor: 1
   }));
   // Sync mapType from incoming map data (important for online guest).
   mapType = (regions[0] && regions[0].isGeo) ? 'geo' : 'matrix';
@@ -2078,7 +2110,7 @@ function randomAllocateMyTroops() {
     if (assignSwapOffered()) assignSwapDecided = true;
     const legal = legalDeployInfo(me);
     const cands = empties.filter(r => legal.set.has(r.id));
-    if (cands.length === 0) return;
+    if (cands.length === 0) { endDeployTurn(); return; }
     const pick = cands[Math.floor(Math.random() * cands.length)];
     const amt = Math.min(assignQuantum, remaining);
     applyDeploy(pick.id, me, amt);
@@ -2260,7 +2292,8 @@ function onRegionClick(idx) {
     const legal = legalDeployInfo(currentPlayer);
     if (!legal.set.has(idx)) {
       const why = legal.tier === 1 ? 'place on an isolated territory (touching nothing yet)'
-                : legal.tier === 2 ? 'place touching only your own territory — not the opponent'
+                : legal.tier === 2 ? 'place touching only your own territory, not the opponent'
+                : legal.tier === 3 ? 'not place where enemy neighbors outnumber your placement plus support, unless the placement surround-captures'
                 : 'place on an available territory';
       flashMessage('Go rule: you must ' + why + '.', 'warn');
       return;
@@ -2331,6 +2364,13 @@ function finishDeploy() {
 }
 
 /* End the current player's labelling turn and hand off to the opponent. */
+/* True when `player` still has troops AND somewhere legal to put them. */
+function deployPlayerCanPlace(player) {
+  const rem = player === 1 ? p1Remaining : p2Remaining;
+  if (rem <= 0) return false;
+  return legalDeployInfo(player).set.size > 0;
+}
+
 /* Hand the labelling turn to the opponent (strict one-territory-each alternation). */
 function endDeployTurn() {
   if ((p1Remaining === 0 && p2Remaining === 0) || !regions.some(r => r.owner === 0)) { finishDeploy(); return; }
@@ -2339,6 +2379,23 @@ function endDeployTurn() {
   const curRem  = currentPlayer === 1 ? p1Remaining : p2Remaining;
   if (nextRem > 0) currentPlayer = next;
   else if (curRem === 0) currentPlayer = next;
+  // Go-style pass: the suicide rule can leave a player with troops but no
+  // legal square. They skip; if neither side can place, deployment ends and
+  // the unplaced troops are forfeit.
+  if (!deployPlayerCanPlace(currentPlayer)) {
+    const other = otherPlayer(currentPlayer);
+    if (deployPlayerCanPlace(other)) {
+      appendLogEntry({
+        title: null,
+        lines: [{ kind: classOfPlayer(currentPlayer),
+                  html: '<strong>' + playerName(currentPlayer) + '</strong> has no legal placement and passes.' }]
+      });
+      currentPlayer = other;
+    } else {
+      finishDeploy();
+      return;
+    }
+  }
   updateDeployBar(); render();
   maybeTriggerCpuTurn();
 }
@@ -2425,19 +2482,30 @@ function checkClassicProgress() {
 
 /* ═══════════════════════════ AoE — UTILITIES ═══════════════════════════ */
 
-/* Attack power formula: sum + Σ_{i<j} (troops_i/10)*(troops_j/10) */
-function aoePowerFromState(group, state) {
+/* Power multipliers, all self-applied. A plain attack is 1x, a Defend takes its
+   territory to 1.5x, a Double Attack fights at 2x, a Double Defend holds at
+   2.5x. Each also scales an opposing push down by the same factor. */
+const AOE_DOUBLE_ATTACK_MULT = 2;
+
+/* Attack power = plain sum of the attacking group's troops, times the double
+   attack multiplier when the action is a double attack. There is no
+   surrounding/cooperation bonus: massing neighbours is what makes an attack
+   legal at all, not a power multiplier. */
+function aoePowerFromState(group, state, isDouble) {
   let sum = 0;
   for (const idx of group) sum += state[idx].troops;
-  let coop = 0;
-  for (let i = 0; i < group.length; i++) {
-    for (let j = i + 1; j < group.length; j++) {
-      coop += (state[group[i]].troops / 10) * (state[group[j]].troops / 10);
-    }
-  }
-  return { sum, coop, total: sum + coop };
+  const mult = isDouble ? AOE_DOUBLE_ATTACK_MULT : 1;
+  return { sum, coop: 0, mult, total: sum * mult };
 }
-function aoePower(group) { return aoePowerFromState(group, regions); }
+function aoePower(group, isDouble) { return aoePowerFromState(group, regions, isDouble); }
+
+/* Raw troop sum of an attacking group, used by the surround legality gate. */
+function aoeGroupTroopSum(group, state) {
+  state = state || regions;
+  let sum = 0;
+  for (const idx of group) if (state[idx]) sum += state[idx].troops;
+  return sum;
+}
 
 /* Min-spread validator for attrition. Each eligible territory (troops > 0)
    must take at least 1 damage IF possible — i.e. the number of eligibles with
@@ -2521,6 +2589,160 @@ function aoePlayerOwnedCount(p) {
   return c;
 }
 
+/* ─── Day/Night cycle ───
+   Battle rounds alternate Day (odd aoeRound) and Night (even aoeRound).
+   Day actions: attack, defend (bases + regen), claim, pass.
+   Night actions: adjust (transfers only), pass.
+   aoeMaxRounds counts DAYS; nights are free. */
+function aoeIsNightRound(round) {
+  round = (round === undefined) ? aoeRound : round;
+  return round % 2 === 0;
+}
+function aoeDayNumber(round) {
+  round = (round === undefined) ? aoeRound : round;
+  return Math.ceil(round / 2);
+}
+function aoeRoundLabel(round) {
+  round = (round === undefined) ? aoeRound : round;
+  return (aoeIsNightRound(round) ? 'Night ' : 'Day ') + aoeDayNumber(round);
+}
+/* Defend levels: 1 = Defend, 2 = Double Defend. A Defend reinforces its
+   territory by 50% of its troops and a Double Defend by 150%, capped at one
+   quantum and 1.5 quanta respectively. A Double Defend spends the whole day,
+   so it buys a great deal more than two of anything else: 10 troops become 25
+   and 6 become 15. */
+const AOE_DEFEND_REGEN_FRAC = { 1: 0.5, 2: 1.5 };
+const AOE_DEFEND_REGEN_CAP = { 1: 1, 2: 1.5 };
+
+function aoeDefendLevelOf(plan) { return plan && plan.double ? 2 : 1; }
+
+function aoeDefendRegenForBase(idx, player, state, level) {
+  state = state || regions;
+  level = level || 1;
+  const r = state[idx];
+  if (!r || r.owner !== player) return 0;
+  const frac = AOE_DEFEND_REGEN_FRAC[level] || AOE_DEFEND_REGEN_FRAC[1];
+  const cap = assignQuantum * (AOE_DEFEND_REGEN_CAP[level] || AOE_DEFEND_REGEN_CAP[1]);
+  return Math.max(1, Math.min(cap, Math.round(r.troops * frac)));
+}
+function aoeDefendRegenPreview(player, baseIdxs, level) {
+  let sum = 0;
+  for (const b of baseIdxs) sum += aoeDefendRegenForBase(b, player, null, level);
+  return sum;
+}
+
+/* Defend level currently standing on a territory (0 when undefended). */
+function aoeDefendLevelAt(idx, state) {
+  state = state || regions;
+  const r = state[idx];
+  return (r && r.defendLevel) ? r.defendLevel : 0;
+}
+/* Whatever multiplies your power divides your attrition. A Defend that lifts a
+   territory from 10 troops to 15 multiplied its power by 1.5, so it bleeds 1.5x
+   less; a Double Attack fighting at 2.5x power bleeds 2.5x less. The factor is
+   the one actually realised, so a reinforcement clipped by the quantum cap buys
+   proportionally less protection. */
+const AOE_AURA_RING = { 1: [0.25], 2: [0.25, 0.10] };
+
+/* A defend lends nearby own territories a flat power boost for this round only.
+   No troops appear and it expires with the round. Rings are walked
+   geographically; only own territories receive it, and the best boost wins. */
+function applyDefendAura(player, idx, level) {
+  const rings = AOE_AURA_RING[level] || AOE_AURA_RING[1];
+  const seen = new Set([idx]);
+  let frontier = [idx];
+  for (let ring = 0; ring < rings.length; ring++) {
+    const next = [];
+    for (const cur of frontier) {
+      const rc = regions[cur];
+      if (!rc) continue;
+      for (const n of rc.neighbors) {
+        if (seen.has(n)) continue;
+        seen.add(n); next.push(n);
+        const rn = regions[n];
+        if (!rn || rn.owner !== player) continue;
+        rn.auraFactor = Math.max(rn.auraFactor || 1, 1 + rings[ring]);
+      }
+    }
+    frontier = next;
+  }
+}
+function aoeAuraFactorAt(idx, state) {
+  state = state || regions;
+  const r = state[idx];
+  return (r && r.auraFactor > 1) ? r.auraFactor : 1;
+}
+function aoeDefendPowerFactorAt(idx, state) {
+  state = state || regions;
+  const r = state[idx];
+  if (!r) return 1;
+  const own = (typeof r.defendFactor === 'number' && r.defendFactor > 1) ? r.defendFactor : 1;
+  return Math.max(own, aoeAuraFactorAt(idx, state));
+}
+function aoeAttackPowerFactor(isDouble) {
+  return isDouble ? AOE_DOUBLE_ATTACK_MULT : 1;
+}
+/* Attrition rounds half up: 0.5 becomes 1, anything below 0.5 becomes 0. */
+function aoeRoundAttrition(x) {
+  return Math.max(0, Math.round(x));
+}
+
+/* Every attrition figure has the same shape: you lose half the opposing side's
+   FULL power. The scaling that decides who wins never shrinks the bill either
+   side pays, and a territory's own multiplier does not discount it.
+   ownPowerFactor is accepted so call sites read symmetrically, and is unused. */
+function aoeAttritionFrom(opposingPower, ownPowerFactor) {
+  return aoeRoundAttrition(opposingPower / 2);
+}
+/* Action-point budget for the current round. Nights are always a single
+   Adjust. Days grant 3 AP: most actions cost 1 AP, the SECOND attack and the
+   SECOND defend each cost 2 AP, and a double attack / double defend costs the
+   whole day (3 AP). Legal day mixes are therefore attack+attack,
+   defend+defend, attack+defend+claim, attack+claim+claim,
+   defend+claim+claim, claim+claim+claim, double attack, or double defend. */
+function aoeMaxActions() {
+  if (gameMode !== 'aoe') return 1;
+  if (aoeIsNightRound()) return 1;
+  return actionsPerDay === 3 ? 3 : 1;
+}
+function aoeMaxAttacks() { return aoeMaxActions() >= 3 ? 2 : 1; }
+function aoeMaxDefends() { return aoeMaxActions() >= 3 ? 2 : 1; }
+/* True when the current settings leave room for a 3 AP double action. */
+function aoeDoublesAllowed() { return aoeMaxActions() >= 3; }
+function aoeActionApCost(type, priorOfSameType, isDouble) {
+  if (isDouble && (type === 'attack' || type === 'defend')) return 3;
+  if ((type === 'attack' || type === 'defend') && priorOfSameType >= 1) return 2;
+  return 1;
+}
+function aoeApUsedBy(actions) {
+  let ap = 0, atk = 0, def = 0;
+  for (const a of actions) {
+    if (a.type === 'attack') { ap += aoeActionApCost('attack', atk, a.double); atk++; }
+    else if (a.type === 'defend') { ap += aoeActionApCost('defend', def, a.double); def++; }
+    else ap += 1;
+  }
+  return ap;
+}
+function aoeComposedDefendCount() {
+  let n = 0;
+  for (const a of aoeComposed) if (a.type === 'defend') n++;
+  return n;
+}
+function aoeMultiMode() { return aoeMaxActions() > 1; }
+function aoeComposedAttackCount() {
+  let n = 0;
+  for (const a of aoeComposed) if (a.type === 'attack') n++;
+  return n;
+}
+function aoeApLeft() { return Math.max(0, aoeMaxActions() - aoeApUsedBy(aoeComposed)); }
+
+function aoeDayCapReached() {
+  if (gameMode !== 'aoe' || aoeMaxRounds <= 0) return false;
+  const day = aoeDayNumber(aoeRound);
+  // The night after the final day is skipped (no day follows it).
+  return day > aoeMaxRounds || (aoeIsNightRound(aoeRound) && day >= aoeMaxRounds);
+}
+
 /* True when `player` owns ≥ 1 territory and every owned territory has ≤ 1 troop.
    Gray (owner === 0) regions don't count toward the player's tally. */
 function allTerritoriesAtOrBelowOne(player) {
@@ -2580,15 +2802,13 @@ function isBorderTerritory(idx, player, state) {
   return false;
 }
 
-/* A base set is valid when each base is owned, on the border, distinct, and no
-   two bases share a connected component (multiple bases only across separate
-   isolated groups). An empty set is valid (clears all bases). */
+/* A base set is valid when each base is owned, distinct, and on the border.
+   Bases are independent local strongpoints, so any number may coexist in the
+   same connected group. An empty set is valid (clears all bases). */
 function basesValidForPlayer(player, bases, state) {
   state = state || regions;
   if (!Array.isArray(bases)) return false;
-  const comps = playerComponents(player, state);
   const seen = new Set();
-  const usedComp = new Set();
   for (const b of bases) {
     if (typeof b !== 'number' || seen.has(b)) return false;
     seen.add(b);
@@ -2596,60 +2816,8 @@ function basesValidForPlayer(player, bases, state) {
     // A brand-new base must be on the border; an already-held base stays valid
     // even if territory growth has since made it interior.
     if (!isBorderTerritory(b, player, state) && !state[b].isBase) return false;
-    const ci = comps.findIndex(c => c.has(b));
-    if (ci < 0 || usedComp.has(ci)) return false;
-    usedComp.add(ci);
   }
   return true;
-}
-
-/* Coerce a desired base selection into a valid one (drops bases that aren't
-   owned/eligible and keeps at most one per connected group). Used at plan-build
-   time so committing an adjust can never dead-end on a stale base. */
-function sanitizeBaseSelection(player, baseIdxs) {
-  const comps = playerComponents(player);
-  const out = [];
-  const usedComp = new Set();
-  for (const b of baseIdxs) {
-    const r = regions[b];
-    if (!r || r.owner !== player) continue;
-    if (!isBorderTerritory(b, player) && !r.isBase) continue;
-    const ci = comps.findIndex(c => c.has(b));
-    if (ci < 0 || usedComp.has(ci)) continue;
-    usedComp.add(ci);
-    out.push(b);
-  }
-  return out;
-}
-
-/* Per-region defensive benefit factor (0..1) contributed by `player`'s bases.
-   Each base radiates 0.5^distance through the player's own connected territory.
-   Total benefit divides evenly across all of the player's bases. */
-function computeBaseBenefits(player, state) {
-  state = state || regions;
-  const bases = [];
-  for (let i = 0; i < state.length; i++) {
-    if (state[i] && state[i].owner === player && state[i].isBase) bases.push(i);
-  }
-  const benefit = new Map();
-  if (bases.length === 0) return benefit;
-  const share = 1 / bases.length;
-  for (const b of bases) {
-    const dist = new Map([[b, 0]]);
-    const q = [b];
-    while (q.length) {
-      const cur = q.shift();
-      const d = dist.get(cur);
-      for (const n of state[cur].neighbors) {
-        if (state[n] && state[n].owner === player && !dist.has(n)) { dist.set(n, d + 1); q.push(n); }
-      }
-    }
-    for (const [idx, d] of dist) {
-      const f = share * Math.pow(0.5, d);
-      benefit.set(idx, Math.max(benefit.get(idx) || 0, f));
-    }
-  }
-  return benefit;
 }
 
 /* Round x with "floor up if fractional part > 0.5" (half rounds down). */
@@ -2658,43 +2826,59 @@ function baseRound(x) {
   return frac > 0.5 ? Math.ceil(x) : Math.floor(x);
 }
 
-/* Inflated defensive value of a territory, accounting for its owner's base
-   benefit. Plain troop count when there's no benefit. */
-function effectiveDefenseForState(idx, state, benefitMaps) {
+/* Defensive value of a territory is its plain troop count. Defending buys
+   troops (regen) and damage reduction, not an inflated score. */
+function effectiveDefenseForState(idx, state) {
   state = state || regions;
   const r = state[idx];
-  if (!r || (r.owner !== 1 && r.owner !== 2)) return r ? r.troops : 0;
-  const bm = (benefitMaps && benefitMaps[r.owner]) || computeBaseBenefits(r.owner, state);
-  const benefit = bm.get(idx) || 0;
-  if (benefit <= 0) return r.troops;
-  return baseRound(r.troops * (1 + 0.5 * benefit));
+  if (!r) return 0;
+  return Math.round(r.troops * aoeAuraFactorAt(idx, state));
 }
 function effectiveDefense(idx) { return effectiveDefenseForState(idx, regions); }
-function baseBenefitAtState(idx, state) {
-  state = state || regions;
-  const r = state[idx];
-  if (!r || (r.owner !== 1 && r.owner !== 2)) return 0;
-  return computeBaseBenefits(r.owner, state).get(idx) || 0;
-}
 
 /* Set `player`'s bases to exactly `bases` on the live regions[]. */
 function applyBasesForPlayer(player, bases) {
   if (!Array.isArray(bases)) return;
-  for (const r of regions) if (r.owner === player) r.isBase = false;
-  for (const b of bases) if (regions[b] && regions[b].owner === player) regions[b].isBase = true;
+  for (const r of regions) if (r.owner === player) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
+  for (const b of bases) if (regions[b] && regions[b].owner === player) {
+    regions[b].isBase = true;
+    regions[b].defendLevel = Math.max(1, regions[b].defendLevel || 0);
+  }
 }
 /* A base only survives on an owned territory; clear stale bases after combat. */
 function sanitizeBases() {
-  for (const r of regions) if (r.owner !== 1 && r.owner !== 2) r.isBase = false;
+  for (const r of regions) if (r.owner !== 1 && r.owner !== 2) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
 }
 
-/* Placement legality for `player` during deployment. Restrictions are
-   currently disabled — every empty region is a legal placement (players take
-   turns placing anywhere). Returns { tier, set }; tier 0 = "anywhere". */
+/* Placement legality for `player` during deployment.
+   Classic: every empty region is legal.
+   AoE assign: Go-style suicide rule. A spot is suicidal when the adjacent
+   enemy troops exceed the placed quantum plus adjacent friendly support.
+   Suicidal spots are legal only if the placement surround-captures at least
+   one enemy territory. Returns { tier, set }; tier 0 = "anywhere",
+   tier 3 = suicide rule active. */
 function legalDeployInfo(player) {
   const set = new Set();
   for (const r of regions) if (r.owner === 0) set.add(r.id);
-  return { tier: 0, set };
+  if (gameMode !== 'aoe') return { tier: 0, set };
+  const remaining = player === 1 ? p1Remaining : p2Remaining;
+  const amt = Math.min(assignQuantum, remaining);
+  const opp = otherPlayer(player);
+  for (const id of Array.from(set)) {
+    let atk = 0, sup = 0;
+    for (const n of regions[id].neighbors) {
+      const nb = regions[n];
+      if (!nb) continue;
+      if (nb.owner === opp) atk += nb.troops;
+      else if (nb.owner === player) sup += nb.troops;
+    }
+    if (atk <= amt + sup) continue;
+    const owners = regions.map(r => r.owner);
+    const troops = regions.map(r => r.troops);
+    owners[id] = player; troops[id] += amt;
+    if (assignCaptureScan(player, id, owners, troops).length === 0) set.delete(id);
+  }
+  return { tier: 3, set };
 }
 
 /* Validity of an Attack plan against current (live) state.
@@ -2713,23 +2897,10 @@ function attackPlanValid(player, attackers, defender) {
     if (!r || r.owner !== player) return false;
     if (!isAdjacent(g, defender)) return false;
   }
-  // AoE rule: trivial 1v1 (single 1-troop attacker vs 1-troop defender) is forbidden.
-  // Coop bonus is impossible with |G|=1 and a 1-troop solo attacker on a 1-troop
-  // defender just produces a coin-flip stalemate (or fail) — gameplay-dead, so disallow.
-  if (isTrivialOneVsOne(player, attackers, defender)) return false;
+  // No strength gate: a weaker force may attack a stronger territory. A failed
+  // push simply pays attrition scaled to the target it could not break, so
+  // punching up is a real option with a real price.
   return true;
-}
-
-/* Returns true if `attackers` is a single region with 1 troop and `defender`
-   has 1 troop. Used to forbid gameplay-dead 1v1 attacks in AoE. We can't
-   inspect the defender's plan at validation time (planning is private), so
-   we just rely on public state. */
-function isTrivialOneVsOne(player, attackers, defender) {
-  if (!Array.isArray(attackers) || attackers.length !== 1) return false;
-  const a = regions[attackers[0]];
-  const d = regions[defender];
-  if (!a || !d) return false;
-  return a.troops === 1 && d.troops === 1;
 }
 
 /* Validity of Adjust plan against pre-round state. Each transfer must:
@@ -2823,6 +2994,19 @@ function applyAdjustmentsToState(plan, state) {
   }
 }
 
+/* Cost of a won double attack, in troops drawn out of the attacking group.
+   Half the total is real attrition, half marches into the captured territory
+   and becomes its garrison. */
+function doubleAttackCapture(defenseValue) {
+  // A sudden invasion. The attacker pays half the defence outright, and a
+  // quarter of the defending garrison changes sides with the ground rather than
+  // being destroyed, so the captured territory is held by troops that were
+  // defending it. Only the attrition comes out of the attacking group.
+  const attrition = aoeRoundAttrition(defenseValue / 2);
+  const garrison = Math.max(1, Math.round(defenseValue / 4));
+  return { attrition, garrison, total: attrition };
+}
+
 /* Resolve a single attack against `post` snapshot.
    Returns { effects, log }. */
 function resolveSingleAttack(plan, post, rng) {
@@ -2830,20 +3014,60 @@ function resolveSingleAttack(plan, post, rng) {
   const G = plan.group;
   const D = plan.defender;
   const def = post[D];
+  const isDouble = !!plan.double;
 
-  // Inflated defensive value when the defender is a fortified base.
-  const benefit = baseBenefitAtState(D, post);
+  const defLevel = aoeDefendLevelAt(D, post);
   const defenseValue = effectiveDefenseForState(D, post);
-  const pwr = aoePowerFromState(G, post);
+  const defFactor = aoeDefendPowerFactorAt(D, post);
+  // Whatever factor a territory scaled its own power up by, it scales an
+  // incoming strike down by the same factor. This decides the outcome only:
+  // the attrition both sides pay is still measured against raw power, so a
+  // defend never makes its attacker bleed less.
+  const pwr = aoePowerFromState(G, post, isDouble);
+  const landedPower = pwr.total / defFactor;
+  // Symmetric to the defender's blunting: a double attack scales the defence it
+  // faces down by its own multiplier. Outcome only, exactly like the blunting.
+  const facedDefense = defenseValue / aoeAttackPowerFactor(isDouble);
   const effects = [];
 
-  const attLog = { player, group: G.slice(), defender: D, power: pwr.total, defense: defenseValue,
-                   rawDefense: def.troops, isBase: benefit > 0, outcome: null };
+  const attLog = { player, group: G.slice(), defender: D, power: landedPower, rawPower: pwr.total,
+                   defense: defenseValue,
+                   rawDefense: def.troops, isDouble, defendLevel: defLevel,
+                   defendFactor: defFactor,
+                   attackFactor: aoeAttackPowerFactor(isDouble),
+                   facedDefense,
+                   clash: defLevel > 0, outcome: null };
 
-  if (pwr.total > defenseValue) {
-    // Branch 1: success → defender wiped. Attacker attrition scales with the
-    // inflated score they had to overcome.
-    const L = Math.ceil(defenseValue / 2);
+  if (landedPower > facedDefense) {
+    // Fortress rule: a double-defended territory can be broken but not taken.
+    if (isDouble && defLevel < 2) {
+      // A won double attack converts the territory instead of razing it. The
+      // garrison is deducted from the attackers and lands on the new holding.
+      const cost = doubleAttackCapture(defenseValue);
+      let dist;
+      if (plan.successDist) {
+        let sum = 0; for (const g of G) sum += (plan.successDist[g] | 0);
+        dist = (sum === cost.total) ? plan.successDist : autoBleedDist(G, cost.total, post, true);
+      } else {
+        dist = autoBleedDist(G, cost.total, post, true);
+      }
+      effects.push({ kind: 'convert', idx: D, newOwner: player, newTroops: cost.garrison });
+      for (const g of G) {
+        const remaining = Math.max(0, post[g].troops - (dist[g] | 0));
+        if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+        else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+      }
+      attLog.outcome = 'convert';
+      attLog.attackerLosses = dist;
+      attLog.attrition = cost.attrition;
+      attLog.garrison = cost.garrison;
+      return { effects, log: attLog };
+    }
+    // A single attack razes the territory; it turns gray and is claimable. A
+    // double attack that ran into a fortress lands here too: it breaks the
+    // stack but is denied the conversion.
+    attLog.fortressBlocked = isDouble;
+    const L = aoeAttritionFrom(defenseValue, aoeAttackPowerFactor(isDouble));
     let dist;
     if (plan.successDist) {
       let sum = 0; for (const g of G) sum += (plan.successDist[g] | 0);
@@ -2864,13 +3088,10 @@ function resolveSingleAttack(plan, post, rng) {
     return { effects, log: attLog };
   }
 
-  // Branch 2: fail (power <= inflated defense) — mutual damage, no territory change.
-  // Attacker bleed scales with the inflated score; a base defender keeps more
-  // of its troops (attrition reduced by 25% × benefit).
-  const attackerDmg = Math.ceil(defenseValue / 2);
-  const defenderDmg = benefit > 0
-    ? Math.round(Math.floor(def.troops / 2) * (1 - 0.25 * benefit))
-    : Math.floor(def.troops / 2);
+  // Repelled: both sides bleed and no territory changes hands. Each pays half the
+  // other's full power, before any of the scaling that decided the outcome.
+  const attackerDmg = aoeAttritionFrom(defenseValue, aoeAttackPowerFactor(isDouble));
+  const defenderDmg = aoeAttritionFrom(pwr.total, defFactor);
   let dist;
   if (plan.failDist) {
     let sum = 0; for (const g of G) sum += (plan.failDist[g] | 0);
@@ -3053,6 +3274,40 @@ function applyAoeEffects(effects) {
   }
 }
 
+/* Make `idx` a base at `level`. Purely additive: existing bases anywhere else
+   are kept, so sequential Defend actions in one turn accumulate strongpoints. */
+function designateBase(player, idx, level) {
+  const r = regions[idx];
+  if (!r || r.owner !== player) return false;
+  r.isBase = true;
+  r.defendLevel = Math.max(r.defendLevel || 0, level || 1);
+  return true;
+}
+
+/* Defend plan: fortify the action's territory and reinforce it. A Defend adds
+   50% of its troops, a Double Defend 100%, capped at the quantum size per
+   level. Each Defend action pays for itself, so defend/defend reinforces two
+   territories at full rate. */
+function applyDefendPlan(plan) {
+  const level = aoeDefendLevelOf(plan);
+  const bases = (plan.bases || []).filter(b => regions[b] && regions[b].owner === plan.player);
+  if (bases.length === 0) { plan.regenApplied = 0; return; }
+  let total = 0;
+  for (const b of bases) {
+    const amount = aoeDefendRegenForBase(b, plan.player, null, level);
+    const before = regions[b].troops;
+    designateBase(plan.player, b, level);
+    regions[b].troops += amount;
+    // The factor its power actually grew by, which is also what divides its attrition.
+    regions[b].defendFactor = before > 0 ? (before + amount) / before : 1;
+    applyDefendAura(plan.player, b, level);
+    total += amount;
+  }
+  plan.regenApplied = total;
+  plan.defendLevelApplied = level;
+  plan.defendFactorApplied = bases.length ? (regions[bases[0]].defendFactor || 1) : 1;
+}
+
 /* Mutual-clash detection. Triggers when BOTH plans are attacks AND each side's
    declared defender is a member of the other side's attacking group, i.e.
    D1 ∈ G2 AND D2 ∈ G1. */
@@ -3065,32 +3320,93 @@ function isMutualAttackClash(planA, planB) {
   return gB.indexOf(dA) >= 0 && gA.indexOf(dB) >= 0;
 }
 
-/* Resolve a mutual-attack clash. Both sides take damage proportional to the
-   OTHER side's power; neither side wins territory. Damage on each side is
+/* Resolve a mutual-attack clash: both sides marched into each other, so each
+   takes damage proportional to the OTHER side's power. Damage on each side is
    distributed across that side's attacking group (which by construction
    contains the OTHER side's declared defender, so that defender absorbs its
-   share as a member of the group). Wipes (troops → 0) flip the territory to
+   share as a member of the group). Wipes (troops to 0) flip the territory to
    gray as natural attrition.
+
+   When one side committed a double attack and out-powers the other, the double
+   attack's rules prevail: it takes the reduced double-attack cost and converts
+   its declared target, while the loser takes the usual clash damage. A losing
+   double attack is just a losing attack.
 
    Distribution honors plan.failDist (carried over from the attack confirm
    dialog when manual) and otherwise falls back to autoBleed (overflow allowed,
    since side-wide damage may exceed any individual region's troops). */
 function resolveMutualClash(planA, planB, post) {
-  const pwrA = aoePowerFromState(planA.group, post);
-  const pwrB = aoePowerFromState(planB.group, post);
-  const dmgToA = Math.ceil(Math.floor(pwrB.total) / 2);
-  const dmgToB = Math.ceil(Math.floor(pwrA.total) / 2);
+  // Raw power drives the attrition each side pays. The ground being fought over
+  // scales an incoming strike down by the factor it scaled itself up, and that
+  // scaled figure is what decides who wins the clash.
+  const rawA = aoePowerFromState(planA.group, post, planA.double).total;
+  const rawB = aoePowerFromState(planB.group, post, planB.double).total;
+  const powerA = rawA / aoeDefendPowerFactorAt(planA.defender, post);
+  const powerB = rawB / aoeDefendPowerFactorAt(planB.defender, post);
+  const dmgToA = aoeAttritionFrom(powerB, aoeAttackPowerFactor(planA.double));
+  const dmgToB = aoeAttritionFrom(powerA, aoeAttackPowerFactor(planB.double));
 
   const log = {
     type: 'mutualClash',
     playerA: planA.player, groupA: planA.group.slice(), defenderA: planA.defender,
-    powerA: pwrA.total, dmgToB,
+    powerA, rawPowerA: rawA, dmgToB, doubleA: !!planA.double,
     playerB: planB.player, groupB: planB.group.slice(), defenderB: planB.defender,
-    powerB: pwrB.total, dmgToA,
+    powerB, rawPowerB: rawB, dmgToA, doubleB: !!planB.double,
     outcome: 'mutualClash'
   };
-  // Effects deferred — each player distributes attrition manually via modal.
-  // Return pending info for the distribution step.
+
+  const winnerIsA = powerA > powerB;
+  const winnerIsB = powerB > powerA;
+  const winPlan = winnerIsA ? planA : winnerIsB ? planB : null;
+  const losePlan = winnerIsA ? planB : winnerIsB ? planA : null;
+
+  // Fortress rule: a double-defended territory is never converted, even by a
+  // double attack that wins the clash.
+  if (winPlan && winPlan.double && aoeDefendLevelAt(winPlan.defender, post) >= 2) {
+    log.fortressBlocked = true;
+    log.winner = winPlan.player;
+  } else if (winPlan && winPlan.double) {
+    // The double attack converts its target. A clash is still mutual, so the
+    // winner pays the ordinary clash attrition against the whole opposing
+    // group, not merely the cost of taking one territory, plus the garrison it
+    // marches into the captured ground.
+    const D = winPlan.defender;
+    const cost = doubleAttackCapture(effectiveDefenseForState(D, post));
+    const winDmg = (winPlan.player === planA.player) ? dmgToA : dmgToB;
+    const winTotal = Math.max(cost.attrition, winDmg);
+    const winDist = autoBleedDist(winPlan.group, winTotal, post, true);
+    const effects = [{ kind: 'convert', idx: D, newOwner: winPlan.player, newTroops: cost.garrison }];
+    for (const g of winPlan.group) {
+      const remaining = Math.max(0, post[g].troops - (winDist[g] | 0));
+      if (remaining <= 0) effects.push({ kind: 'wipeAtt', idx: g, newOwner: 0, newTroops: 0 });
+      else effects.push({ kind: 'attLoss', idx: g, newOwner: post[g].owner, newTroops: remaining });
+    }
+    log.outcome = 'clashConvert';
+    log.winner = winPlan.player;
+    log.convertedIdx = D;
+    log.garrison = cost.garrison;
+    log.winnerCost = winTotal;
+
+    // The captured territory changed hands, so it takes no further attrition,
+    // but its share of the loser's damage dies with it rather than piling onto
+    // whatever else happened to be in the attacking group.
+    const loseDmg = (losePlan.player === planA.player) ? dmgToA : dmgToB;
+    const loseGroup = losePlan.group.filter(g => g !== D);
+    let carried = loseDmg;
+    if (loseGroup.length && loseGroup.length < losePlan.group.length && loseDmg > 0) {
+      const full = autoBleedDist(losePlan.group, loseDmg, post, true);
+      carried = 0;
+      for (const g of loseGroup) carried += (full[g] | 0);
+      log.damageAbsorbedByCaptured = loseDmg - carried;
+    }
+    const pending = loseGroup.length && carried > 0
+      ? { sides: [{ player: losePlan.player, group: loseGroup, totalDmg: carried }] }
+      : null;
+    return { effects, log, pending };
+  }
+
+  // No winning double attack: neither side takes ground, both bleed.
+  // Effects deferred so each player distributes attrition via the modal.
   const pending = {
     sides: [
       { player: planA.player, group: planA.group.slice(), totalDmg: dmgToA },
@@ -3122,11 +3438,18 @@ function resolveAoeRound(planA, planB, rngSeed) {
   // Base designations take effect this round (a fortified base defends immediately).
   if (planA && planA.type === 'adjust' && planA.bases !== undefined && planA.bases !== null) applyBasesForPlayer(planA.player, planA.bases);
   if (planB && planB.type === 'adjust' && planB.bases !== undefined && planB.bases !== null) applyBasesForPlayer(planB.player, planB.bases);
+  // Defend: bases set and regen applied before attacks resolve, so a defended
+  // territory is fought at its post-regen strength.
+  if (planA && planA.type === 'defend') applyDefendPlan(planA);
+  if (planB && planB.type === 'defend') applyDefendPlan(planB);
 
   // Step 2: attacks + claims against post-adjust snapshot
   const postSnap = regions.map(r => ({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h,
                                        neighbors: r.neighbors.slice(),
-                                       owner: r.owner, troops: r.troops, isBase: r.isBase }));
+                                       owner: r.owner, troops: r.troops, isBase: r.isBase,
+                                       defendLevel: r.defendLevel || 0,
+                                       defendFactor: r.defendFactor || 1,
+                                       auraFactor: r.auraFactor || 1 }));
   const rng = mulberry32(rngSeed | 0);
   const attackLogs = [];
   let allEffects = [];
@@ -3187,13 +3510,113 @@ function resolveAoeRound(planA, planB, rngSeed) {
   return { attackLogs, claimLogs: claimRes.logs, postSnap, mutualClashPending };
 }
 
+/* Re-check an attack action against live state before its slot resolves. An
+   earlier slot may have wiped attackers or flipped the defender. Returns a
+   cleaned plan or null when the attack no longer stands. */
+function revalidateAttackAction(plan) {
+  if (!plan || plan.type !== 'attack') return null;
+  const group = plan.group.filter(g => regions[g] && regions[g].owner === plan.player && regions[g].troops > 0);
+  if (group.length === 0) return null;
+  const def = regions[plan.defender];
+  if (!def || def.owner !== otherPlayer(plan.player)) return null;
+  for (const g of group) if (!isAdjacent(g, plan.defender)) return null;
+  return { type: 'attack', player: plan.player, group, defender: plan.defender,
+           double: !!plan.double, autoBleed: true, failDist: null, successDist: null };
+}
+
+/* Fold every claim action of one player into a single claim plan, re-capped
+   against live troops. One target and one source may each be used once. */
+function mergeClaimActions(player, actions) {
+  const subs = [];
+  const seenTargets = new Set(), seenSources = new Set();
+  for (const a of actions) {
+    if (!a || a.type !== 'claim') continue;
+    for (const cl of planClaimList(a)) {
+      if (seenTargets.has(cl.target)) continue;
+      const t = regions[cl.target];
+      if (!t || t.owner !== 0) continue;
+      const contributions = [];
+      for (const c of cl.contributions) {
+        const s = regions[c.source];
+        if (!s || s.owner !== player || seenSources.has(c.source)) continue;
+        const amt = Math.min(c.amount, Math.floor(s.troops / 2));
+        if (amt >= 1) { contributions.push({ source: c.source, amount: amt }); seenSources.add(c.source); }
+      }
+      if (contributions.length) { subs.push({ target: cl.target, contributions }); seenTargets.add(cl.target); }
+    }
+  }
+  return subs.length ? { type: 'claim', player, claims: subs } : null;
+}
+
+function planActionList(plan) {
+  if (!plan) return [];
+  if (plan.type === 'multi') return Array.isArray(plan.actions) ? plan.actions : [];
+  if (plan.type === 'pass') return [];
+  return [plan];
+}
+
+/* Multi-action round resolve. Order: all adjusts, all defends (bases + regen),
+   attack slot 1, attack slot 2, then all claims simultaneously. Each attack
+   slot runs through resolveAoeRound so chain ordering, base inflation and
+   mutual clashes behave exactly as in single-action rounds. Clash attrition
+   auto-distributes here rather than pausing for a modal per slot. */
+function resolveAoeRoundMulti(planA, planB, rngSeed) {
+  const listA = planActionList(planA);
+  const listB = planActionList(planB);
+  const attackLogs = [], claimLogs = [];
+  let seed = rngSeed | 0;
+  const nextSeed = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
+
+  for (const a of listA) if (a.type === 'adjust') applyAdjustmentsToState(a, regions);
+  for (const b of listB) if (b.type === 'adjust') applyAdjustmentsToState(b, regions);
+  for (const a of listA) if (a.type === 'defend') applyDefendPlan(a);
+  for (const b of listB) if (b.type === 'defend') applyDefendPlan(b);
+
+  const atkA = listA.filter(a => a.type === 'attack');
+  const atkB = listB.filter(b => b.type === 'attack');
+  const slots = Math.max(atkA.length, atkB.length);
+  for (let s = 0; s < slots; s++) {
+    const v1 = revalidateAttackAction(atkA[s]);
+    const v2 = revalidateAttackAction(atkB[s]);
+    // An attack whose force died, or whose target already changed hands in an
+    // earlier slot, is called off rather than silently skipped.
+    for (const [orig, live] of [[atkA[s], v1], [atkB[s], v2]]) {
+      if (orig && !live) {
+        attackLogs.push({ player: orig.player, defender: orig.defender,
+                          group: orig.group.slice(), outcome: 'aborted' });
+      }
+    }
+    if (!v1 && !v2) continue;
+    const res = resolveAoeRound(v1, v2, nextSeed());
+    for (const L of res.attackLogs) attackLogs.push(L);
+    if (res.mutualClashPending) {
+      const clashLog = res.attackLogs.find(L => L.type === 'mutualClash') || null;
+      for (const side of res.mutualClashPending.sides) {
+        if (side.totalDmg <= 0) continue;
+        const dist = autoBleedDist(side.group, side.totalDmg, regions, true);
+        applyAttritionDist(side, dist, clashLog);
+      }
+      sanitizeBases();
+    }
+  }
+
+  const claimA = mergeClaimActions(1, listA.filter(a => a.player === 1));
+  const claimB = mergeClaimActions(2, listB.filter(b => b.player === 2));
+  if (claimA || claimB) {
+    const res = resolveAoeRound(claimA, claimB, nextSeed());
+    for (const L of res.claimLogs) claimLogs.push(L);
+  }
+  sanitizeBases();
+  return { attackLogs, claimLogs, postSnap: null, mutualClashPending: null };
+}
+
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
 
 function captureBoardSnapshot(label, plans) {
   const snap = {
     label: label || ('Round ' + aoeRound),
     round: aoeRound,
-    state: regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase })),
+    state: regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase, defendLevel: r.defendLevel || 0 })),
     priorPlans: plans || null,
     deploy: { p1: typeof p1Remaining === 'number' ? p1Remaining : null,
               p2: typeof p2Remaining === 'number' ? p2Remaining : null }
@@ -3204,16 +3627,20 @@ function captureBoardSnapshot(label, plans) {
 
 function aoeStartRound() {
   aoeRound++;
+  // Bases are temporary: a Defend fortifies its territory for that round's
+  // resolution only. Every round starts with a clean map.
+  for (const r of regions) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
   aoePassFlags = { 1: false, 2: false };
   aoeWorking = makeEmptyWorking();
+  aoeComposed = [];
   aoeRevealing = false;
   aoeHandoffPending = false;
-  captureBoardSnapshot('Start of Round ' + aoeRound);
+  captureBoardSnapshot('Start of ' + aoeRoundLabel(aoeRound));
 
-  // Turn limit check (fixed mode only; dynamic mode has no round cap)
-  if (aoeMaxRounds > 0 && aoeRound > aoeMaxRounds) { endGame(); return; }
+  // Turn limit: aoeMaxRounds counts days; nights are free.
+  if (aoeDayCapReached()) { endGame(); return; }
 
   // Termination check (before plans this round): a player with 0 territories loses
   const p1Own = aoePlayerOwnedCount(1);
@@ -3244,12 +3671,156 @@ function maybeTriggerCpuPlan() {
   }, 350);
 }
 
+/* Why an action cannot join the current player's composed plan, or null. */
+function composedAdditionError(player, act) {
+  if (!act) return 'Finish building the action first.';
+  const perActionErr = validatePlan(act);
+  if (perActionErr) return perActionErr;
+  const priorSame = act.type === 'attack' ? aoeComposedAttackCount()
+                  : act.type === 'defend' ? aoeComposedDefendCount() : 0;
+  const cost = aoeActionApCost(act.type, priorSame, act.double);
+  if (cost > aoeApLeft()) {
+    return 'Not enough action points: this ' + (act.double ? 'double ' : '') + act.type +
+           ' costs ' + cost + ' AP, you have ' + aoeApLeft() + ' left.';
+  }
+  if (act.type === 'attack') {
+    if (aoeComposedAttackCount() >= aoeMaxAttacks()) {
+      return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
+    }
+    for (const a of aoeComposed) {
+      if (a.type === 'attack' && a.defender === act.defender) return 'Already attacking ' + regionRef(act.defender) + ' this turn.';
+    }
+  }
+  if (act.type === 'claim') {
+    const targets = new Set(), sources = new Set();
+    for (const a of aoeComposed) {
+      if (a.type !== 'claim') continue;
+      for (const cl of planClaimList(a)) {
+        targets.add(cl.target);
+        for (const c of cl.contributions) sources.add(c.source);
+      }
+    }
+    for (const cl of planClaimList(act)) {
+      if (targets.has(cl.target)) return 'Already claiming ' + regionRef(cl.target) + ' this turn.';
+      for (const c of cl.contributions) {
+        if (sources.has(c.source)) return regionRef(c.source) + ' already sent troops to another claim.';
+      }
+    }
+  }
+  if (act.type === 'attack') {
+    // A territory cannot both march out and dig in on the same day.
+    for (const a of aoeComposed) {
+      if (a.type !== 'defend') continue;
+      for (const g of act.group) {
+        if (a.bases[0] === g) return regionRef(g) + ' is fortified this turn, so it cannot attack.';
+      }
+    }
+  }
+  if (act.type === 'defend') {
+    if (aoeComposedDefendCount() >= aoeMaxDefends()) {
+      return 'Only ' + aoeMaxDefends() + ' Defend action' + (aoeMaxDefends() === 1 ? '' : 's') + ' per turn.';
+    }
+    const b = act.bases[0];
+    for (const a of aoeComposed) {
+      if (a.type === 'defend' && a.bases[0] === b) return regionRef(b) + ' is already fortified this turn.';
+      if (a.type === 'attack' && a.group.indexOf(b) >= 0) {
+        return regionRef(b) + ' is attacking this turn, so it cannot be fortified.';
+      }
+    }
+  }
+  if (act.type === 'adjust') {
+    const srcs = new Set();
+    for (const a of aoeComposed) if (a.type === 'adjust') for (const t of a.transfers) srcs.add(t.source);
+    for (const t of act.transfers) if (srcs.has(t.source)) return regionRef(t.source) + ' already moved troops this turn.';
+  }
+  return null;
+}
+
+/* Commit the working action into the composed plan. Returns true on success. */
+function aoeAddAction(quiet) {
+  if (phase !== 'battle' || !canIControlAoePlan()) return false;
+  if (!aoeMultiMode()) return false;
+  if (!aoeWorking.action || aoeWorking.action === 'pass') {
+    if (!quiet) flashMessage('Choose an action first.', 'warn');
+    return false;
+  }
+  const act = buildPlanFromWorking(aoePlanningPlayer);
+  if (!act) {
+    if (!quiet) flashMessage('Finish building the action first.', 'warn');
+    return false;
+  }
+  const err = composedAdditionError(aoePlanningPlayer, act);
+  if (err) { if (!quiet) flashMessage(err, 'bad'); return false; }
+  aoeComposed.push(act);
+  aoeWorking = makeEmptyWorking();
+  if (!quiet) {
+    flashMessage('Action ' + aoeComposed.length + ' of ' + aoeMaxActions() + ' added.', 'good');
+    render();
+  }
+  return true;
+}
+
+/* One-line summary of a composed action for the planning banner. */
+function aoeActionSummary(a) {
+  if (!a) return '';
+  if (a.type === 'attack') {
+    return (a.double ? '⚔⚔ ' : '⚔ ') + regionRef(a.defender) + ' ← ' + a.group.map(g => regionRef(g)).join(' ');
+  }
+  if (a.type === 'defend') {
+    const level = a.double ? 2 : 1;
+    return (a.double ? '🛡🛡 ' : '🛡 ') + a.bases.map(b =>
+      regionRef(b) + ' +' + aoeDefendRegenForBase(b, a.player, null, level)).join(' ');
+  }
+  if (a.type === 'claim') {
+    return '▣ ' + planClaimList(a).map(cl =>
+      regionRef(cl.target) + ' (' + cl.contributions.reduce((s, c) => s + c.amount, 0) + ')').join(' ');
+  }
+  if (a.type === 'adjust') {
+    return '↔ ' + a.transfers.map(t => regionRef(t.source) + '→' + regionRef(t.dest) + ' (' + t.amount + ')').join(' ');
+  }
+  return a.type;
+}
+
+function aoeComposedStripHtml() {
+  const max = aoeMaxActions();
+  let html = '<div style="margin-bottom:6px;">AP <span class="pwr">' + aoeApUsedBy(aoeComposed) + '/' + max + '</span>' +
+             ' <span class="sub">(2nd attack or 2nd defend costs 2 AP; a double action costs 3)</span>';
+  if (aoeComposed.length === 0) {
+    html += ' <span class="sub">none yet</span>';
+  } else {
+    html += ' ' + aoeComposed.map((a, i) =>
+      '<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:10px;' +
+      ' background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.18);">' +
+      (i + 1) + '. ' + aoeActionSummary(a) +
+      ' <span style="cursor:pointer; color:#fca5a5; font-weight:700;" onclick="aoeRemoveAction(' + i + ')">×</span>' +
+      '</span>').join('');
+  }
+  return html + '</div>';
+}
+
+function aoeRemoveAction(i) {
+  if (!canIControlAoePlan()) return;
+  if (i < 0 || i >= aoeComposed.length) return;
+  aoeComposed.splice(i, 1);
+  render();
+}
+
 /* Submit currently-active player's plan from aoeWorking. */
 function aoeSubmitPlan() {
   if (phase !== 'battle') return;
   if (!canIControlAoePlan()) return;
   const p = aoePlanningPlayer;
-  const plan = buildPlanFromWorking(p);
+  let plan;
+  if (aoeWorking.action === 'pass') {
+    plan = { type: 'pass', player: p };
+  } else if (aoeMultiMode()) {
+    // A finished-but-unadded action counts: submitting implies adding it.
+    if (aoeWorking.action) aoeAddAction(true);
+    if (aoeComposed.length === 0) { flashMessage('Add at least one action, or Pass.', 'warn'); return; }
+    plan = { type: 'multi', player: p, actions: aoeComposed.slice() };
+  } else {
+    plan = buildPlanFromWorking(p);
+  }
   if (!plan) { flashMessage('Choose an action first.', 'warn'); return; }
   const err = validatePlan(plan);
   if (err) { flashMessage(err, 'bad'); return; }
@@ -3271,28 +3842,34 @@ function buildPlanFromWorking(player) {
     if (w.attackGroup.size === 0 || w.attackDefender < 0) return null;
     const group = Array.from(w.attackGroup);
     const plan = { type: 'attack', player, group, defender: w.attackDefender,
+                   double: !!w.isDouble,
                    autoBleed: !!w.attackAutoBleed,
                    failDist: null,
                    successDist: w.attackAutoBleed ? null : (w.attackSuccessManual || null) };
     return plan;
   }
   if (w.action === 'adjust') {
-    const bases = w.adjustBases ? sanitizeBaseSelection(player, Array.from(w.adjustBases)) : null;
-    const curBases = new Set(regions.map((r, i) => i).filter(i => regions[i].owner === player && regions[i].isBase));
-    const baseChanged = bases !== null &&
-      (bases.length !== curBases.size || bases.some(b => !curBases.has(b)));
-    if (w.adjustTransfers.length === 0 && !baseChanged) return null;
-    return { type: 'adjust', player, transfers: w.adjustTransfers.slice(), bases };
+    if (w.adjustTransfers.length === 0) return null;
+    return { type: 'adjust', player, transfers: w.adjustTransfers.slice(), bases: null };
+  }
+  if (w.action === 'defend') {
+    const sel = Array.from(w.defendBases || []);
+    if (sel.length === 0) return null;
+    const idx = sel[0];
+    const r = regions[idx];
+    if (!r || r.owner !== player) return null;
+    if (!isBorderTerritory(idx, player) && !r.isBase) return null;
+    return { type: 'defend', player, bases: [idx], double: !!w.isDouble };
   }
   if (w.action === 'claim') {
     const valid = (w.claims || []).filter(cl => cl && cl.contributions && cl.contributions.length > 0);
     if (valid.length === 0) return null;
+    // One gray per Claim action; extra targets would need their own AP.
+    const cl = valid[0];
     return {
       type: 'claim', player,
-      claims: valid.map(cl => ({
-        target: cl.target,
-        contributions: cl.contributions.map(c => ({ source: c.source, amount: c.amount }))
-      }))
+      claims: [{ target: cl.target,
+                 contributions: cl.contributions.map(c => ({ source: c.source, amount: c.amount })) }]
     };
   }
   return null;
@@ -3300,11 +3877,70 @@ function buildPlanFromWorking(player) {
 
 function validatePlan(plan) {
   if (!plan) return 'No plan.';
+  const night = aoeIsNightRound();
+  if (night && plan.type !== 'adjust' && plan.type !== 'pass') return 'Night: only Adjust or Pass.';
+  if (!night && plan.type === 'adjust') return 'Adjusting troops is a night action.';
   if (plan.type === 'pass') return null;
-  if (plan.type === 'attack') {
-    if (isTrivialOneVsOne(plan.player, plan.group, plan.defender)) {
-      return 'Trivial 1v1 attacks are not allowed.';
+  if (plan.type === 'multi') {
+    const acts = Array.isArray(plan.actions) ? plan.actions : null;
+    if (!acts || acts.length === 0) return 'Empty plan.';
+    if (aoeApUsedBy(acts) > aoeMaxActions()) {
+      return 'Plan costs ' + aoeApUsedBy(acts) + ' AP; only ' + aoeMaxActions() + ' available (2nd attack and 2nd base cost 2 AP each).';
     }
+    let attacks = 0, defends = 0;
+    const defenders = new Set(), targets = new Set(), claimSrc = new Set(), adjSrc = new Set(),
+          defBases = new Set(), attackers = new Set();
+    for (const a of acts) {
+      if (!a || a.type === 'multi' || a.type === 'pass') return 'Invalid action in plan.';
+      if (a.player !== plan.player) return 'Action belongs to the wrong player.';
+      const e = validatePlan(a);
+      if (e) return e;
+      if (a.type === 'attack') {
+        attacks++;
+        if (attacks > aoeMaxAttacks()) return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
+        if (defenders.has(a.defender)) return 'Two attacks on the same territory.';
+        defenders.add(a.defender);
+        for (const g of a.group) attackers.add(g);
+      } else if (a.type === 'claim') {
+        for (const cl of planClaimList(a)) {
+          if (targets.has(cl.target)) return 'Two claims on the same territory.';
+          targets.add(cl.target);
+          for (const c of cl.contributions) {
+            if (claimSrc.has(c.source)) return 'A territory sent troops to two claims.';
+            claimSrc.add(c.source);
+          }
+        }
+      } else if (a.type === 'defend') {
+        defends++;
+        if (defends > aoeMaxDefends()) return 'Only ' + aoeMaxDefends() + ' Defend actions per turn.';
+        const b = a.bases[0];
+        if (defBases.has(b)) return 'That base is already fortified this turn.';
+        defBases.add(b);
+      } else if (a.type === 'adjust') {
+        for (const t of a.transfers) {
+          if (adjSrc.has(t.source)) return 'A territory moved troops twice.';
+          adjSrc.add(t.source);
+        }
+      }
+    }
+    // A territory either marches out or digs in, never both on the same day.
+    for (const b of defBases) {
+      if (attackers.has(b)) return regionRef(b) + ' cannot both attack and be fortified this turn.';
+    }
+    return null;
+  }
+  if (plan.type === 'defend') {
+    if (!Array.isArray(plan.bases) || plan.bases.length !== 1) return 'A Defend action fortifies exactly one base.';
+    if (plan.double && !aoeDoublesAllowed()) return 'Double Defend needs a 3-action day.';
+    const idx = plan.bases[0];
+    const r = regions[idx];
+    if (!r || r.owner !== plan.player) return 'A base must be a territory you own.';
+    if (!isBorderTerritory(idx, plan.player) && !r.isBase) return 'A base must be on your border.';
+    return null;
+  }
+  if (plan.type === 'attack') {
+    if (plan.double && !aoeDoublesAllowed()) return 'Double Attack needs a 3-action day.';
+    if (!Array.isArray(plan.group) || plan.group.length === 0) return 'Pick at least one attacking territory.';
     if (!attackPlanValid(plan.player, plan.group, plan.defender)) return 'Invalid attack plan (adjacency/ownership).';
     return null;
   }
@@ -3315,6 +3951,7 @@ function validatePlan(plan) {
   if (plan.type === 'claim') {
     const list = planClaimList(plan);
     if (list.length === 0) return 'Invalid claim plan format.';
+    if (list.length > 1) return 'One Claim action takes one gray; a second gray needs another action point.';
     if (!claimsPlanValid(plan.player, list)) return 'Invalid claim.';
     return null;
   }
@@ -3327,6 +3964,7 @@ function serializePlan(plan) {
   if (plan.type === 'attack') {
     out.group = plan.group.slice();
     out.defender = plan.defender;
+    out.double = !!plan.double;
     out.autoBleed = plan.autoBleed;
     out.failDist = plan.failDist ? { ...plan.failDist } : null;
     out.successDist = plan.successDist ? { ...plan.successDist } : null;
@@ -3338,6 +3976,11 @@ function serializePlan(plan) {
       target: cl.target,
       contributions: cl.contributions.map(c => ({ source: c.source, amount: c.amount }))
     }));
+  } else if (plan.type === 'defend') {
+    out.bases = plan.bases.slice();
+    out.double = !!plan.double;
+  } else if (plan.type === 'multi') {
+    out.actions = planActionList(plan).map(a => serializePlan(a));
   }
   return out;
 }
@@ -3350,6 +3993,7 @@ function deserializePlan(s) {
 /* When a plan is submitted, advance flow. */
 function aoeAfterSubmit() {
   aoeWorking = makeEmptyWorking();
+  aoeComposed = [];
   if (mode === 'online') {
     flashMessage('Plan submitted. Waiting for opponent…', 'good');
     render();
@@ -3425,48 +4069,26 @@ function aoePerformResolutionWithSeed(rngSeed) {
     const thisRound = aoeRound;
     // Snapshot the pre-resolution state with plans attached — this is the
     // "attack pattern" view in history (board still untouched, arrows drawn).
-    captureBoardSnapshot('Plans for Round ' + thisRound, { 1: planA, 2: planB });
+    captureBoardSnapshot('Plans for ' + aoeRoundLabel(thisRound), { 1: planA, 2: planB });
     const preSnap = regions.map(r => r.troops);
     const preOwners = regions.map(r => r.owner);
     aoePendingRoundSummary = { round: thisRound, preOwners };
-    const res = resolveAoeRound(planA, planB, rngSeed);
+    const isMulti = (planA && planA.type === 'multi') || (planB && planB.type === 'multi');
+    const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed)
+                        : resolveAoeRound(planA, planB, rngSeed);
     flashOutcomes(res);
     appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
     setTimeout(() => {
       clearIntentArrows();
       render();
 
-      function proceedToAcquisitions() {
-        const acquisitions = [];
-        for (const log of res.attackLogs) {
-          if (log.outcome === 'win') {
-            const attacker = log.player;
-            const defIdx = log.defender;
-            if (regions[defIdx].owner === 0) {
-              const sources = [];
-              for (const g of log.group) {
-                if (regions[g].owner === attacker && regions[g].troops >= 2) {
-                  sources.push({ idx: g, cap: Math.floor(regions[g].troops / 2) });
-                }
-              }
-              const maxPlace = sources.reduce((s, c) => s + c.cap, 0);
-              if (maxPlace > 0) {
-                acquisitions.push({ player: attacker, defIdx, group: log.group, sources, maxPlace });
-              }
-            }
-          }
-        }
-        if (acquisitions.length > 0) {
-          processAcquisitions(acquisitions, 0);
-        } else {
-          aoePostResolution();
-        }
-      }
-
+      // A won single attack razes the target to gray; taking it needs a Claim on
+      // a later turn. Only a double attack converts territory outright.
       if (res.mutualClashPending) {
-        processAttritionDistribution(res.mutualClashPending, res.attackLogs[0], proceedToAcquisitions);
+        const clashLog = res.attackLogs.find(L => L.type === 'mutualClash') || res.attackLogs[0];
+        processAttritionDistribution(res.mutualClashPending, clashLog, aoePostResolution);
       } else {
-        proceedToAcquisitions();
+        aoePostResolution();
       }
     }, 1800);
   }, 1500);
@@ -3603,138 +4225,15 @@ function openAttritionModal(side, callback) {
   renderModal();
 }
 
-function processAcquisitions(acquisitions, idx) {
-  if (idx >= acquisitions.length) { aoePostResolution(); return; }
-  const acq = acquisitions[idx];
-  if (mode === 'cpu' && acq.player !== myPlayer) {
-    // CPU: each source contributes floor(cap/2)
-    const contribs = {};
-    for (const s of acq.sources) contribs[s.idx] = Math.max(1, Math.floor(s.cap / 2));
-    applyAcquisitionContribs(acq, contribs);
-    processAcquisitions(acquisitions, idx + 1);
-  } else if (mode === 'online' && acq.player !== myPlayer) {
-    processAcquisitions(acquisitions, idx + 1);
-  } else {
-    openAcquisitionModal(acq, function(contribs) {
-      applyAcquisitionContribs(acq, contribs);
-      if (mode === 'online' && conn && conn.open) {
-        conn.send({ type: 'aoe-acquire', defIdx: acq.defIdx, contribs, player: acq.player });
-      }
-      processAcquisitions(acquisitions, idx + 1);
-    });
-  }
-}
-
-function applyAcquisitionContribs(acq, contribs) {
-  let total = 0;
-  for (const idxStr in contribs) {
-    const idx = parseInt(idxStr, 10);
-    const amt = contribs[idx] | 0;
-    if (amt > 0 && regions[idx]) {
-      regions[idx].troops = Math.max(0, regions[idx].troops - amt);
-      total += amt;
-    }
-  }
-  if (total > 0) {
-    regions[acq.defIdx].owner = acq.player;
-    regions[acq.defIdx].troops = total;
-  }
-  render();
-}
-
-function setAcquireFocus(idx) {
-  document.querySelectorAll('.region.acquireFocus').forEach(el => el.classList.remove('acquireFocus'));
-  if (idx < 0) return;
-  const cell = document.querySelector('#mapContainer .region[data-idx="' + idx + '"]')
-            || document.querySelector('#mapContainer g.region[data-idx="' + idx + '"]');
-  if (cell) cell.classList.add('acquireFocus');
-}
-
-function openAcquisitionModal(acq, callback) {
-  // Per-source contribution amounts, default to each source's max (floor(troops/2))
-  const contribs = {};
-  for (const s of acq.sources) contribs[s.idx] = s.cap;
-  setAcquireFocus(acq.defIdx);
-
-  function getTotal() {
-    let t = 0;
-    for (const s of acq.sources) t += (contribs[s.idx] | 0);
-    return t;
-  }
-
-  function render2() {
-    const host = document.getElementById('aoeModalHost');
-    const total = getTotal();
-    const rows = acq.sources.map(s => {
-      const v = contribs[s.idx] | 0;
-      const r = regions[s.idx];
-      return '<div class="row">' +
-        '<span class="lbl">#' + (s.idx+1) + ' (' + r.troops + ' troops, max ' + s.cap + ')</span>' +
-        '<span class="arrow">→</span>' +
-        '<input type="number" min="0" max="' + s.cap + '" value="' + v +
-        '" data-src="' + s.idx + '">' +
-      '</div>';
-    }).join('');
-
-    host.innerHTML =
-      '<div class="aoe-modal"><div class="aoe-modal-card">' +
-        '<h3>Territory Conquered! Acquire #' + (acq.defIdx+1) + '?</h3>' +
-        '<div class="modal-info">You wiped region #' + (acq.defIdx+1) +
-          '. Choose how many troops to send from each attacking territory (each up to ⌊troops/2⌋). Total landing: <strong id="acqTotal">' + total + '</strong>.</div>' +
-        '<div class="section-head">Troops to send</div>' +
-        rows +
-        '<div class="modal-foot">' +
-          '<button class="actionBtn primary" id="acqOk">Place ' + total + ' troops</button>' +
-          '<button class="actionBtn" id="acqNone">Send 0 (leave gray)</button>' +
-        '</div>' +
-      '</div></div>';
-
-    document.querySelectorAll('input[type=number][data-src]').forEach(inp => {
-      inp.oninput = () => {
-        const idx = parseInt(inp.dataset.src, 10);
-        const src = acq.sources.find(s => s.idx === idx);
-        let v = parseInt(inp.value, 10);
-        if (!Number.isFinite(v) || v < 0) v = 0;
-        if (src && v > src.cap) v = src.cap;
-        contribs[idx] = v;
-        const t = getTotal();
-        const tEl = document.getElementById('acqTotal');
-        if (tEl) tEl.textContent = t;
-        const btn = document.getElementById('acqOk');
-        if (btn) btn.textContent = t > 0 ? 'Place ' + t + ' troops' : 'Leave gray';
-      };
-    });
-    document.getElementById('acqOk').onclick = () => {
-      const t = getTotal();
-      closeAoeModal();
-      setAcquireFocus(-1);
-      if (t > 0) callback(contribs);
-      else callback({});
-    };
-    document.getElementById('acqNone').onclick = () => {
-      closeAoeModal();
-      setAcquireFocus(-1);
-      callback({});
-    };
-  }
-  render2();
-}
-
 function aoePostResolution() {
   appendRoundOwnerSummary();
-  // Termination: both pass in same round?
-  if (aoePassFlags[1] && aoePassFlags[2]) { endGame(); return; }
+  // Termination: both pass in the same DAY round. A night double-pass just
+  // advances to dawn (having nothing to move at night is not surrender).
+  if (aoePassFlags[1] && aoePassFlags[2] && !aoeIsNightRound()) { endGame(); return; }
   // Or someone has 0 territories?
   if (aoePlayerOwnedCount(1) === 0 || aoePlayerOwnedCount(2) === 0) { endGame(); return; }
-  // Or both armies reduced to 1-troop garrisons?
-  if (bothPlayersStuckAtOnes()) {
-    appendLogEntry({
-      title: null,
-      lines: [{ kind: 'system', html: 'Both armies reduced to 1-troop garrisons — no further moves possible.' }]
-    });
-    endGame();
-    return;
-  }
+  // Note: stuck-at-ones no longer ends the game; Defend regen can rebuild an
+  // army of 1-troop garrisons. A dead position ends via mutual Pass instead.
 
   // Otherwise next round
   aoeStartRound();
@@ -3742,22 +4241,54 @@ function aoePostResolution() {
 
 /* ═══════════════════════════ AoE — ACTION-PICKER UI ═══════════════════════════ */
 
+/* `action` is one of attack | attack2 | defend | defend2 | adjust | claim | pass.
+   The `2` variants are the whole-day double actions. */
 function setAoeUiAction(action) {
   if (historyViewIdx >= 0) historyExit();
   if (phase !== 'battle') return;
   if (!canIControlAoePlan()) {
     flashMessage('Wait for your plan step.', 'warn'); return;
   }
-  aoeWorking = makeEmptyWorking();
-  aoeWorking.action = action;
-  if (action === 'adjust') {
-    // Seed the base selection from the player's current bases so committing an
-    // adjust without touching bases preserves them.
-    aoeWorking.adjustBases = new Set(
-      regions.map((r, i) => i).filter(i => regions[i].owner === aoePlanningPlayer && regions[i].isBase)
-    );
+  const isDouble = (action === 'attack2' || action === 'defend2');
+  const base = isDouble ? action.slice(0, -1) : action;
+  const night = aoeIsNightRound();
+  if (night && base !== 'adjust' && base !== 'pass') {
+    flashMessage('Night: only Adjust or Pass.', 'warn'); return;
   }
-  if (action === 'pass') {
+  if (!night && base === 'adjust') {
+    flashMessage('Adjusting troops is a night action.', 'warn'); return;
+  }
+  if (isDouble && !aoeDoublesAllowed()) {
+    flashMessage('Double actions need a 3-action day.', 'warn'); return;
+  }
+  if (aoeMultiMode() && base !== 'pass') {
+    // Switching action type banks a finished action instead of discarding it.
+    if (aoeWorking.action) aoeAddAction(true);
+    if (aoeApLeft() <= 0) {
+      flashMessage('All ' + aoeMaxActions() + ' AP used. Submit, or remove an action.', 'warn'); return;
+    }
+    if (base === 'attack' && !isDouble && aoeComposedAttackCount() >= aoeMaxAttacks()) {
+      flashMessage('Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.', 'warn'); return;
+    }
+    if (base === 'defend' && !isDouble && aoeComposedDefendCount() >= aoeMaxDefends()) {
+      flashMessage('Only ' + aoeMaxDefends() + ' Defend actions per turn.', 'warn'); return;
+    }
+    const nextCost = aoeActionApCost(base,
+      base === 'attack' ? aoeComposedAttackCount() : base === 'defend' ? aoeComposedDefendCount() : 0,
+      isDouble);
+    if (nextCost > aoeApLeft()) {
+      flashMessage((isDouble ? 'A double ' : 'A second ') + base + ' costs ' + nextCost +
+                   ' AP; you have ' + aoeApLeft() + ' left.', 'warn'); return;
+    }
+  }
+  aoeWorking = makeEmptyWorking();
+  aoeWorking.action = base;
+  aoeWorking.isDouble = isDouble;
+  if (base === 'defend') {
+    // One base per Defend action, chosen explicitly each time.
+    aoeWorking.defendBases = new Set();
+  }
+  if (base === 'pass') {
     // Submit immediately after a brief confirm
     openPassConfirmModal();
     return;
@@ -3765,28 +4296,21 @@ function setAoeUiAction(action) {
   render();
 }
 
-function toggleAdjustBaseMode() {
-  if (aoeWorking.action !== 'adjust') return;
-  aoeWorking.adjustBaseMode = !aoeWorking.adjustBaseMode;
-  aoeWorking.adjustSourceSel = -1;
-  if (aoeWorking.adjustBaseMode) {
-    flashMessage('Base pen on: click a border territory to fortify it. Your transfers are kept.', 'good');
-  } else {
-    flashMessage('Transfer pen on: click a source then a friendly neighbor. Your base is kept.', 'good');
-  }
-  render();
-}
-
 function aoeClearWorking() {
-  if (!aoeWorking.action) return;
+  if (!aoeWorking.action) {
+    if (aoeMultiMode() && aoeComposed.length) {
+      aoeComposed = [];
+      flashMessage('Composed actions cleared.', 'warn');
+      render();
+    }
+    return;
+  }
   const a = aoeWorking.action;
+  const dbl = aoeWorking.isDouble;
   aoeWorking = makeEmptyWorking();
   aoeWorking.action = a;
-  if (a === 'adjust') {
-    aoeWorking.adjustBases = new Set(
-      regions.map((r, i) => i).filter(i => regions[i].owner === aoePlanningPlayer && regions[i].isBase)
-    );
-  }
+  aoeWorking.isDouble = dbl;
+  if (a === 'defend') aoeWorking.defendBases = new Set();
   render();
 }
 
@@ -3805,7 +4329,14 @@ function onRegionClickAoe(idx) {
   if (act === 'attack') {
     if (r.owner === player) {
       if (aoeWorking.attackGroup.has(idx)) aoeWorking.attackGroup.delete(idx);
-      else aoeWorking.attackGroup.add(idx);
+      else {
+        for (const a of aoeComposed) {
+          if (a.type === 'defend' && a.bases[0] === idx) {
+            flashMessage(regionRef(idx) + ' is fortified this turn, so it cannot attack.', 'warn'); return;
+          }
+        }
+        aoeWorking.attackGroup.add(idx);
+      }
       aoeWorking.attackDefender = -1;
       render(); return;
     }
@@ -3820,36 +4351,35 @@ function onRegionClickAoe(idx) {
           return;
         }
       }
-      if (isTrivialOneVsOne(player, G, idx)) {
-        flashMessage('1v1 (single attacker, both 1 troop) is not allowed — bring more troops or coop with neighbors.', 'bad');
-        return;
-      }
       aoeWorking.attackDefender = idx;
       openAttackConfirmModal(G, idx);
       return;
     }
-    flashMessage('Gray region — use Claim to take it.', 'warn'); return;
+    flashMessage('Gray region: use Claim to take it.', 'warn'); return;
+  }
+
+  if (act === 'defend') {
+    if (r.owner !== player) { flashMessage('Pick your own border territory to fortify.', 'warn'); return; }
+    if (!aoeWorking.defendBases) aoeWorking.defendBases = new Set();
+    if (aoeWorking.defendBases.has(idx)) { aoeWorking.defendBases.clear(); render(); return; }
+    if (!isBorderTerritory(idx, player) && !r.isBase) {
+      flashMessage('A base must be on your border (next to a gray or enemy territory).', 'warn'); return;
+    }
+    // One base per Defend action; a base may only be fortified once a turn and
+    // may not also be marching out in an attack.
+    for (const a of aoeComposed) {
+      if (a.type === 'defend' && a.bases[0] === idx) {
+        flashMessage(regionRef(idx) + ' is already fortified this turn.', 'warn'); return;
+      }
+      if (a.type === 'attack' && a.group.indexOf(idx) >= 0) {
+        flashMessage(regionRef(idx) + ' is attacking this turn, so it cannot be fortified.', 'warn'); return;
+      }
+    }
+    aoeWorking.defendBases = new Set([idx]);
+    render(); return;
   }
 
   if (act === 'adjust') {
-    if (aoeWorking.adjustBaseMode) {
-      if (r.owner !== player) { flashMessage('Pick your own border territory to set a base.', 'warn'); return; }
-      if (!aoeWorking.adjustBases) aoeWorking.adjustBases = new Set();
-      if (aoeWorking.adjustBases.has(idx)) { aoeWorking.adjustBases.delete(idx); render(); return; }
-      if (!isBorderTerritory(idx, player)) {
-        flashMessage('A base must be on your border (next to a gray or enemy territory).', 'warn'); return;
-      }
-      const comps = playerComponents(player);
-      const ci = comps.findIndex(c => c.has(idx));
-      for (const b of aoeWorking.adjustBases) {
-        if (ci >= 0 && comps[ci].has(b)) {
-          flashMessage('This territory group already has a base (#' + (b+1) + '). You get one base per SEPARATE group; split off a disconnected group to earn another.', 'warn');
-          return;
-        }
-      }
-      aoeWorking.adjustBases.add(idx);
-      render(); return;
-    }
     if (r.owner !== player) { flashMessage('Pick your own territory.', 'warn'); return; }
     // If we already have a source selected and click an adjacent friendly: dest
     if (aoeWorking.adjustSourceSel >= 0 && aoeWorking.adjustSourceSel !== idx) {
@@ -3879,19 +4409,18 @@ function onRegionClickAoe(idx) {
 
   if (act === 'claim') {
     if (r.owner === 0) {
-      // If this gray is the focused target with no contributions yet, clicking
-      // it again unfocuses + removes it. Otherwise, focus it (adding if new).
+      // One gray per Claim action (1 AP each). Clicking the focused target
+      // clears it; clicking a different gray switches the target.
       const existing = workingFindClaim(aoeWorking, idx);
       if (existing && aoeWorking.claimTargetSel === idx) {
-        // Clicking focused target: if empty, remove; if has contribs, just unfocus.
-        if (existing.contributions.length === 0) {
-          workingRemoveClaim(aoeWorking, idx);
-        } else {
-          aoeWorking.claimTargetSel = -1;
-        }
+        workingRemoveClaim(aoeWorking, idx);
+        aoeWorking.claimSourceSel = -1;
         render(); return;
       }
-      if (!existing) aoeWorking.claims.push({ target: idx, contributions: [] });
+      if (!existing) {
+        aoeWorking.claims = [{ target: idx, contributions: [] }];
+        aoeWorking.claimSourceSel = -1;
+      }
       aoeWorking.claimTargetSel = idx;
       if (aoeWorking.claimSourceSel >= 0 && isAdjacent(aoeWorking.claimSourceSel, idx)) {
         const src = aoeWorking.claimSourceSel;
@@ -3934,10 +4463,15 @@ function closeAoeModal() {
 
 function openAttackConfirmModal(G, defenderIdx) {
   const def = regions[defenderIdx];
-  const pwr = aoePower(G);
+  const isDouble = !!aoeWorking.isDouble;
+  const pwr = aoePower(G, isDouble);
   const defenseValue = effectiveDefense(defenderIdx);
   const isBaseDef = def.isBase && (def.owner === 1 || def.owner === 2);
-  const successAttrition = Math.ceil(defenseValue / 2);
+  const capture = doubleAttackCapture(defenseValue);
+  const atkFactor = aoeAttackPowerFactor(isDouble);
+  const successAttrition = isDouble ? capture.total
+                                    : aoeAttritionFrom(defenseValue, atkFactor);
+  const failAttrition = aoeAttritionFrom(defenseValue, atkFactor);
   let autoBleed = true;
   let successManual = autoBleedDist(G, successAttrition, regions, false);
 
@@ -3945,8 +4479,8 @@ function openAttackConfirmModal(G, defenderIdx) {
     const host = document.getElementById('aoeModalHost');
     let projection;
     const isWeak = (pwr.total <= defenseValue);
-    if (pwr.total > defenseValue) projection = 'win';
-    else projection = '<span class="weak">attack will fail</span> — mutual damage (softening strike)';
+    if (pwr.total > defenseValue) projection = isDouble ? 'capture (territory converts to you)' : 'win (territory razed to gray)';
+    else projection = '<span class="weak">attack will be repelled</span>: a softening strike that still bleeds them';
 
     const successRows = G.map(idx => {
       const v = successManual[idx] || 0;
@@ -3957,17 +4491,23 @@ function openAttackConfirmModal(G, defenderIdx) {
 
     host.innerHTML =
       '<div class="aoe-modal"><div class="aoe-modal-card">' +
-        '<h3>Attack Region #' + (defenderIdx+1) + ' — defender: ' + def.troops + (isBaseDef ? ' 🛡 (inflated ' + defenseValue + ')' : '') + '</h3>' +
+        '<h3>' + (isDouble ? 'Double Attack' : 'Attack') + ' Region #' + (defenderIdx+1) + ' (defender: ' + def.troops + ' troops)</h3>' +
         '<div class="modal-info">' +
           'Attack power: <strong' + (isWeak ? ' class="weak"' : '') + '>' + pwr.total.toFixed(1) + '</strong> ' +
           'vs Defense: <strong>' + defenseValue + '</strong> ' +
-          (isBaseDef ? '<span class="weak">(🛡 fortified base — defense inflated from ' + def.troops + ', and it bleeds less on a failed attack)</span> ' : '') +
-          '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span>.<br>' +
+          '<span style="opacity:.6;">(sum ' + pwr.sum.toFixed(0) +
+          (isDouble ? ' × ' + AOE_DOUBLE_ATTACK_MULT + ' double-attack power' : '') + ')</span>.<br>' +
           'Projected (based on current troops): ' + projection + '.<br>' +
-          'On success: attackers lose <strong>⌈defense/2⌉</strong> total attrition (currently ' + successAttrition + ').<br>' +
-          'On failure: attackers lose <strong>⌈defense/2⌉</strong> total, auto-distributed at resolution.<br>' +
-          '<em>Defender may adjust troops or set a base before resolution — actual damage is based on final defender state.</em><br>' +
-          '<em>If the opponent counter-attacks into this group, both sides take damage and no territory changes hands.</em>' +
+          (isDouble
+            ? 'On success: a sudden invasion. The territory becomes yours holding <strong>' + capture.garrison +
+              '</strong> troops, a quarter of its garrison changing sides with the ground. Your attackers pay <strong>' +
+              capture.attrition + '</strong> in attrition, and none of the garrison comes out of your own stacks.<br>'
+            : 'On success: the territory is razed to gray and can be claimed later. Attackers lose <strong>' + successAttrition + '</strong> total attrition.<br>') +
+          'If repelled: attackers lose <strong>' + failAttrition + '</strong> total, auto-distributed at resolution. ' +
+          'You may attack a stronger territory; the price of failing scales with what you could not break.<br>' +
+          '<em>If the defender plays Defend or Double Defend here it reinforces AND blunts your strike by the same factor, so this projection is a best case.' +
+          (isDouble ? ' A double-defended territory can be broken but not converted.' : '') + '</em><br>' +
+          '<em>If the opponent counter-attacks into this group, both sides take damage; only a winning double attack takes ground.</em>' +
         '</div>' +
         '<div class="checkbox-row">' +
           '<label><input type="checkbox" id="autoBleedChk" ' + (autoBleed ? 'checked' : '') + '> Auto-bleed (even split)</label>' +
@@ -4165,36 +4705,88 @@ function clearIntentArrows() {
   const g = document.getElementById('aoeArrowsG');
   if (g) g.innerHTML = '';
 }
-function drawIntentArrows() {
+
+/* Renders one round's declared plans onto the arrow overlay. Attacks are red
+   arrows, doubled in width for a double attack; claims green; night transfers
+   violet; and a Defend draws a ring on the territory itself, doubled in width
+   and fully opaque for a Double Defend, since a defend has no direction. */
+function renderPlanArrows(plans) {
   const g = document.getElementById('aoeArrowsG');
-  if (!g) return;
+  if (!g) return false;
   g.innerHTML = '';
-  const draw = (a, b, color, marker) => {
+  if (!plans) return false;
+
+  const draw = (a, b, color, marker, width) => {
+    if (!regions[a] || !regions[b]) return;
     const ac = regionCenterPct(regions[a]);
     const bc = regionCenterPct(regions[b]);
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('x1', ac.cx); line.setAttribute('y1', ac.cy);
     line.setAttribute('x2', bc.cx); line.setAttribute('y2', bc.cy);
     line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '0.7');
+    line.setAttribute('stroke-width', String(width || 0.7));
     line.setAttribute('stroke-linecap', 'round');
     line.setAttribute('marker-end', 'url(#' + marker + ')');
     g.appendChild(line);
   };
+
+  const shield = (idx, isDouble) => {
+    if (!regions[idx]) return;
+    const c = regionCenterPct(regions[idx]);
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('cx', c.cx); ring.setAttribute('cy', c.cy);
+    ring.setAttribute('r', isDouble ? 4.2 : 3.2);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#fbbf24');
+    ring.setAttribute('stroke-width', isDouble ? '1.6' : '0.7');
+    ring.setAttribute('stroke-opacity', isDouble ? '1' : '0.75');
+    if (!isDouble) ring.setAttribute('stroke-dasharray', '1.6 1.2');
+    g.appendChild(ring);
+    if (isDouble) {
+      // A second, tighter ring reads as the heavier commitment at a glance.
+      const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      inner.setAttribute('cx', c.cx); inner.setAttribute('cy', c.cy);
+      inner.setAttribute('r', '2.4');
+      inner.setAttribute('fill', 'none');
+      inner.setAttribute('stroke', '#fbbf24');
+      inner.setAttribute('stroke-width', '0.9');
+      g.appendChild(inner);
+    }
+  };
+
   const showPlan = (plan) => {
     if (!plan) return;
+    if (plan.type === 'multi') {
+      for (const a of (plan.actions || [])) showPlan(a);
+      return;
+    }
     if (plan.type === 'attack') {
-      for (const a of plan.group) draw(a, plan.defender, '#ef4444', 'arrowhead-red');
+      const w = plan.double ? 1.8 : 0.7;
+      for (const a of plan.group) draw(a, plan.defender, '#ef4444', 'arrowhead-red', w);
+    } else if (plan.type === 'defend') {
+      for (const b of (plan.bases || [])) shield(b, !!plan.double);
     } else if (plan.type === 'adjust') {
-      for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
+      for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow', 0.7);
     } else if (plan.type === 'claim') {
       for (const cl of planClaimList(plan)) {
-        for (const c of cl.contributions) draw(c.source, cl.target, '#86efac', 'arrowhead-green');
+        for (const c of cl.contributions) draw(c.source, cl.target, '#86efac', 'arrowhead-green', 0.7);
       }
     }
   };
-  showPlan(aoePlans[1]); showPlan(aoePlans[2]);
+  showPlan(plans[1]); showPlan(plans[2]);
+  return true;
 }
+
+function drawIntentArrows() { renderPlanArrows(aoePlans); }
+
+function drawHistoryArrows(priorPlans) {
+  const overlay = document.getElementById('aoeArrowsOverlay');
+  const drew = renderPlanArrows(priorPlans);
+  if (!overlay) return;
+  if (drew) overlay.classList.remove('hidden');
+  else overlay.classList.add('hidden');
+}
+
 /* ═══════════════════════════ BATTLE LOG ═══════════════════════════ */
 function clearBattleLog() {
   battleLog = [];
@@ -4333,7 +4925,7 @@ function applyHistoryView() {
     else if (s.owner === 1) cls += ' p1';
     else if (s.owner === 2) cls += ' p2';
     else cls += ' empty unoccupied';
-    if (s.isBase && (s.owner === 1 || s.owner === 2)) cls += ' base';
+    if (s.isBase && (s.owner === 1 || s.owner === 2)) cls += (s.defendLevel >= 2) ? ' base base2' : ' base';
     el.setAttribute('class', cls);
     const tEl = el.querySelector('.region-troops');
     if (s.owner <= 0) tEl.textContent = '';
@@ -4366,41 +4958,6 @@ function applyHistoryView() {
     ti.style.borderColor = 'rgba(168,85,247,.4)';
     ti.textContent = 'History: ' + snap.label;
   }
-}
-
-function drawHistoryArrows(priorPlans) {
-  const g = document.getElementById('aoeArrowsG');
-  const overlay = document.getElementById('aoeArrowsOverlay');
-  if (!g || !overlay) return;
-  g.innerHTML = '';
-  if (!priorPlans) { overlay.classList.add('hidden'); return; }
-  const draw = (a, b, color, marker) => {
-    if (!regions[a] || !regions[b]) return;
-    const ac = regionCenterPct(regions[a]);
-    const bc = regionCenterPct(regions[b]);
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', ac.cx); line.setAttribute('y1', ac.cy);
-    line.setAttribute('x2', bc.cx); line.setAttribute('y2', bc.cy);
-    line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '0.7');
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('marker-end', 'url(#' + marker + ')');
-    g.appendChild(line);
-  };
-  const showPlan = (plan) => {
-    if (!plan) return;
-    if (plan.type === 'attack') {
-      for (const a of plan.group) draw(a, plan.defender, '#ef4444', 'arrowhead-red');
-    } else if (plan.type === 'adjust') {
-      for (const t of plan.transfers) draw(t.source, t.dest, '#c4b5fd', 'arrowhead-yellow');
-    } else if (plan.type === 'claim') {
-      for (const cl of planClaimList(plan)) {
-        for (const c of cl.contributions) draw(c.source, cl.target, '#86efac', 'arrowhead-green');
-      }
-    }
-  };
-  showPlan(priorPlans[1]); showPlan(priorPlans[2]);
-  overlay.classList.remove('hidden');
 }
 
 document.addEventListener('keydown', function(e) {
@@ -4482,8 +5039,33 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
   const lines = [];
   const pre = preSnap || regions.map(r => r.troops);
 
+  /* Match one attack action to its own log entry (multi-action rounds produce
+     several attack logs per player, so player alone is not enough). */
+  function logsForAction(a) {
+    if (!a || a.type !== 'attack') return { atk: null, mut: null };
+    const mut = res.attackLogs.find(l => l.type === 'mutualClash' &&
+      ((l.playerA === a.player && l.defenderA === a.defender) ||
+       (l.playerB === a.player && l.defenderB === a.defender))) || null;
+    if (mut) return { atk: null, mut };
+    const atk = res.attackLogs.find(l => !l.type && l.player === a.player && l.defender === a.defender) || null;
+    return { atk, mut: null };
+  }
+
   // Per-player action descriptions (with outcomes inline)
   function describePlan(plan, attackLog, mutualLog) {
+    if (plan && plan.type === 'multi') {
+      const acts = planActionList(plan);
+      const out = [{
+        kind: classOfPlayer(plan.player),
+        html: '<strong>' + playerName(plan.player) + '</strong> took ' + acts.length +
+              ' action' + (acts.length === 1 ? '' : 's') + ':'
+      }];
+      for (const a of acts) {
+        const m = logsForAction(a);
+        for (const L of describePlan(a, m.atk, m.mut)) out.push(L);
+      }
+      return out;
+    }
     if (!plan || plan.type === 'pass') {
       return [{
         kind: classOfPlayer(plan ? plan.player : 0),
@@ -4505,6 +5087,20 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       }
       const body = (plan.transfers.length ? 'adjusted: ' + moves : 'fortified') + baseTxt;
       return [{ kind: cls, html: '<strong>' + playerName(p) + '</strong> ' + body + '.' }];
+    }
+    if (plan.type === 'defend') {
+      const lvl = plan.double ? 2 : 1;
+      const pool = (typeof plan.regenApplied === 'number') ? plan.regenApplied : aoeDefendRegenPreview(p, plan.bases, lvl);
+      const baseTxt = plan.bases.map(b => regionRef(b)).join(', ');
+      return [{
+        kind: cls,
+        html: '<strong>' + playerName(p) + '</strong> ' + (plan.double ? '🛡🛡 double defended ' : '🛡 defended ') + baseTxt +
+              (pool > 0 ? ', reinforcing <strong>+' + pool + '</strong> troops'
+                        : ' (fortified)') +
+              (plan.defendFactorApplied > 1
+                ? ', raising its power ' + plan.defendFactorApplied.toFixed(2) + 'x and scaling incoming attacks down by the same'
+                : '') + ', with neighbours braced at +' + Math.round(AOE_AURA_RING[lvl][0] * 100) + '% this round.'
+      }];
     }
     if (plan.type === 'claim') {
       const subClaims = planClaimList(plan);
@@ -4544,16 +5140,40 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
     if (plan.type === 'attack') {
       const grpDetail = plan.group.map(idx => regionRef(idx) + ' <span class="neutral">(' + pre[idx] + ')</span>').join(', ');
       const defDetail = regionRef(plan.defender) + ' <span class="neutral">(' + pre[plan.defender] + ')</span>';
-      const head = '<strong>' + playerName(p) + '</strong> attacked ' + defDetail +
+      const head = '<strong>' + playerName(p) + '</strong> ' + (plan.double ? 'double attacked ' : 'attacked ') + defDetail +
                    ' with [' + grpDetail + ']';
 
       if (mutualLog) {
         const totDmg = (mutualLog.playerA === p ? mutualLog.dmgToA : mutualLog.dmgToB);
         const oppPwr = (mutualLog.playerA === p ? mutualLog.powerB : mutualLog.powerA);
+        if (mutualLog.fortressBlocked) {
+          return [{
+            kind: cls,
+            html: head + '. <em>Clash</em>: ' + (mutualLog.winner === p
+              ? 'your double attack broke through but a \U0001f6e1\U0001f6e1 double defend denied the conversion.'
+              : 'their double attack broke through; your \U0001f6e1\U0001f6e1 double defend denied them the territory.') +
+              ' Takes <strong>' + totDmg + '</strong> total attrition.'
+          }];
+        }
+        if (mutualLog.outcome === 'clashConvert') {
+          if (mutualLog.winner === p) {
+            return [{
+              kind: cls,
+              html: head + '. <em>Clash won by double attack</em>: ' + regionRef(mutualLog.convertedIdx) +
+                    ' <span style="color:#86efac;">converted</span> with a garrison of <strong>' +
+                    mutualLog.garrison + '</strong>, at a cost of ' + mutualLog.winnerCost + ' troops.'
+            }];
+          }
+          return [{
+            kind: cls,
+            html: head + '. <em>Clash lost to a double attack</em>: ' + regionRef(mutualLog.convertedIdx) +
+                  ' <span style="color:#fca5a5;">changed hands</span>. Takes <strong>' + totDmg + '</strong> total attrition.'
+          }];
+        }
         return [{
           kind: cls,
           html: head + '. <em>Mutual clash</em> (no territory changes). Takes <strong>' + totDmg +
-                '</strong> total attrition (½ of opponent\'s power ' + oppPwr.toFixed(1) + '). Distribution chosen by player.'
+                '</strong> total attrition (half of opponent\'s power ' + oppPwr.toFixed(1) + '). Distribution chosen by player.'
         }];
       }
 
@@ -4561,27 +5181,52 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       if (!attackLog) return [{ kind: cls, html: head + '.' }];
       const losses = attackLog.attackerLosses || {};
       const totLoss = Object.values(losses).reduce((a,b) => a + (b|0), 0);
-      const lossDetail = plan.group.map(idx => regionRef(idx) + ': −' + (losses[idx] || 0)).join(', ');
+      const lossDetail = plan.group.map(idx => regionRef(idx) + ': -' + (losses[idx] || 0)).join(', ');
       const defOwner = 3 - p;
       const defTag = ' <span class="neutral">(' + playerName(defOwner) + '\'s)</span>';
-      const baseTag = attackLog.isBase
-        ? ' <span style="color:#fbbf24;">🛡 base, defense inflated to ' + attackLog.defense +
-          (typeof attackLog.rawDefense === 'number' ? ' from ' + attackLog.rawDefense : '') + '</span>'
+      // Trailing note rather than an inline aside, so the outcome clause reads cleanly.
+      const auraNote = (!attackLog.defendLevel && attackLog.defendFactor > 1)
+        ? ' <span style="color:#fbbf24;">Target was braced by a nearby \U0001f6e1 defend: power x' +
+          attackLog.defendFactor.toFixed(2) + '.</span>'
         : '';
+      const defNote = attackLog.defendLevel
+        ? ' <span style="color:#fbbf24;">Target was ' +
+          (attackLog.defendLevel === 2 ? '🛡🛡 double defended' : '🛡 defended') +
+          ': reinforced to ' + attackLog.defense +
+          (attackLog.defendFactor > 1 ? ' (power x' + attackLog.defendFactor.toFixed(2) +
+            ', blunting the strike by the same)' : '') + '.</span>'
+        : '';
+      const defTag2 = '';
+      const clashTag = attackLog.clash ? ' <em>Clash.</em>' : '';
       let outcomeLine;
-      if (attackLog.outcome === 'win') {
-        outcomeLine = ' → <span style="color:#86efac;">won</span>. ' + regionRef(plan.defender) + defTag + baseTag +
-                      ' wiped. Attacker losses: <strong>' + totLoss + '</strong> [' + lossDetail + '].';
+      const bluntTag = attackLog.defendFactor > 1
+        ? '<span style="color:#fbbf24;">, scaled down from ' + attackLog.rawPower.toFixed(1) +
+          ' by the target\'s ' + attackLog.defendFactor.toFixed(2) + 'x</span>'
+        : '';
+      const atkFactorNote = attackLog.attackFactor > 1
+        ? ' <span style="color:#7dd3fc;">Double attack: the defence it faced was scaled down ' + attackLog.attackFactor + 'x.</span>'
+        : '';
+      if (attackLog.outcome === 'convert') {
+        outcomeLine = ' → <span style="color:#86efac;">captured</span>' + (bluntTag ? ' (power ' + attackLog.power.toFixed(1) + bluntTag + ')' : '') + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
+                      ' invaded: <strong>' + attackLog.garrison + '</strong> of its garrison changed sides and now holds it. ' +
+                      'Attackers paid <strong>' + attackLog.attrition + '</strong> in attrition [' + lossDetail + '].';
+      } else if (attackLog.outcome === 'win') {
+        outcomeLine = ' → <span style="color:#86efac;">won</span>' + (bluntTag ? ' (power ' + attackLog.power.toFixed(1) + bluntTag + ')' : '') + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
+                      (attackLog.fortressBlocked
+                        ? ' broken, but a 🛡🛡 double defend <strong>denied the conversion</strong>: it is razed to gray, not taken.'
+                        : ' razed to gray.') +
+                      ' Attacker losses: <strong>' + totLoss + '</strong> [' + lossDetail + '].';
+      } else if (attackLog.outcome === 'aborted') {
+        outcomeLine = ' → <span style="color:#c4b5fd;">called off</span>: the attacking force was lost (or the target changed hands) before this strike landed.';
       } else if (attackLog.outcome === 'fail') {
-        outcomeLine = ' → <span style="color:#fca5a5;">failed</span> (power ' + attackLog.power.toFixed(1) +
-                      ' vs defense ' + attackLog.defense + baseTag +
+        outcomeLine = ' → <span style="color:#fca5a5;">repelled</span>.' + clashTag + ' (power ' + attackLog.power.toFixed(1) + bluntTag +
+                      ' vs defense ' + attackLog.defense + defTag2 +
                       '). Attacker losses: <strong>' + (attackLog.attackerDmg || totLoss) + '</strong> [' + lossDetail +
-                      ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) +
-                      (attackLog.isBase ? ' (attrition reduced)' : '') + '.';
+                      ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) + '.';
       } else {
         outcomeLine = '.';
       }
-      return [{ kind: cls, html: head + outcomeLine }];
+      return [{ kind: cls, html: head + outcomeLine + defNote + auraNote + atkFactorNote }];
     }
     return [];
   }
@@ -4606,7 +5251,7 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
     // Both attacks already covered above; nothing extra.
   }
 
-  return { title: 'Round ' + roundNum, lines };
+  return { title: aoeRoundLabel(roundNum), lines };
 }
 
 function flashOutcomes(res) {
@@ -4615,8 +5260,9 @@ function flashOutcomes(res) {
     const cell = document.querySelector('#mapContainer .region[data-idx="' + log.defender + '"]');
     if (!cell) continue;
     if (log.outcome === 'win') cell.classList.add('flash-success');
+    else if (log.outcome === 'convert') cell.classList.add('flash-claim');
     else if (log.outcome === 'fail') cell.classList.add('flash-fail');
-    setTimeout(() => { cell.classList.remove('flash-success','flash-fail'); }, 1400);
+    setTimeout(() => { cell.classList.remove('flash-success','flash-fail','flash-claim'); }, 1400);
   }
   for (const log of res.claimLogs) {
     const cell = document.querySelector('#mapContainer .region[data-idx="' + log.target + '"]');
@@ -4670,28 +5316,51 @@ function render() {
   const fogViewer = viewerForFog();
 
   // Working-state highlights
+  /* Territories already committed to this turn's composed actions, so banked
+     actions stay visible on the map while the next one is being built. */
+  let composedMarks = null;
+  if (aoeUiVisible && aoeMultiMode() && aoeComposed.length) {
+    composedMarks = { atkSrc: new Set(), atkDef: new Set(), bases: new Set(), srcs: new Set(), dsts: new Set() };
+    for (const a of aoeComposed) {
+      if (a.type === 'attack') {
+        for (const g of a.group) composedMarks.atkSrc.add(g);
+        composedMarks.atkDef.add(a.defender);
+      } else if (a.type === 'defend') {
+        for (const b of a.bases) composedMarks.bases.add(b);
+      } else if (a.type === 'claim') {
+        for (const cl of planClaimList(a)) {
+          composedMarks.dsts.add(cl.target);
+          for (const c of cl.contributions) composedMarks.srcs.add(c.source);
+        }
+      } else if (a.type === 'adjust') {
+        for (const t of a.transfers) { composedMarks.srcs.add(t.source); composedMarks.dsts.add(t.dest); }
+      }
+    }
+  }
+
   let attackHighlights = null;
   let adjustHighlights = null;
   let claimHighlights = null;
+  let defendHighlights = null;
   if (aoeUiVisible && aoeWorking.action) {
-    if (aoeWorking.action === 'attack') {
+    if (aoeWorking.action === 'defend') {
+      defendHighlights = {
+        bases: aoeWorking.defendBases || new Set(),
+        baseCands: new Set(regions.map((r, i) => i).filter(i =>
+          regions[i].owner === planner && (isBorderTerritory(i, planner) || regions[i].isBase)))
+      };
+    } else if (aoeWorking.action === 'attack') {
       attackHighlights = {
         group: aoeWorking.attackGroup,
         targets: computeAttackTargets(planner, Array.from(aoeWorking.attackGroup))
       };
     } else if (aoeWorking.action === 'adjust') {
-      const baseMode = !!aoeWorking.adjustBaseMode;
       adjustHighlights = {
         srcSel: aoeWorking.adjustSourceSel,
         srcs: new Set(aoeWorking.adjustTransfers.map(t => t.source)),
         dsts: new Set(aoeWorking.adjustTransfers.map(t => t.dest)),
         validDests: aoeWorking.adjustSourceSel >= 0
           ? new Set(regions[aoeWorking.adjustSourceSel].neighbors.filter(n => regions[n].owner === planner && !aoeWorking.adjustTransfers.some(t => t.source === n)))
-          : null,
-        baseMode,
-        bases: aoeWorking.adjustBases || new Set(),
-        baseCands: baseMode
-          ? new Set(regions.map((r, i) => i).filter(i => regions[i].owner === planner && isBorderTerritory(i, planner)))
           : null
       };
     } else if (aoeWorking.action === 'claim') {
@@ -4745,8 +5414,10 @@ function render() {
     }
     // Committed base badge — suppressed while editing bases in adjust mode so
     // the planned (baseSel) selection previews instead.
-    const editingBases = aoeUiVisible && aoeWorking.action === 'adjust' && aoeWorking.adjustBases;
-    if ((r.owner === 1 || r.owner === 2) && r.isBase && !editingBases) cls += ' base';
+    const editingBases = aoeUiVisible && aoeWorking.action === 'defend' && aoeWorking.defendBases;
+    if ((r.owner === 1 || r.owner === 2) && r.isBase && !editingBases) {
+      cls += (r.defendLevel >= 2) ? ' base base2' : ' base';
+    }
     if (validTargets && validTargets.has(idx)) { cls += ' target'; clickable = true; }
     if (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn() && validTargets) {
       const opp = otherPlayer(currentPlayer);
@@ -4764,20 +5435,16 @@ function render() {
           cls += info.beatable ? ' beatable' : ' unbeatable';
           clickable = true;
         }
+      } else if (defendHighlights) {
+        if (r.owner === planner) clickable = true;
+        if (defendHighlights.bases.has(idx)) cls += ' baseSel';
+        else if (defendHighlights.baseCands.has(idx)) cls += ' baseCand';
       } else if (adjustHighlights) {
         if (r.owner === planner) clickable = true;
-        // Committed transfers and bases stay highlighted in both pens so the
-        // player sees they coexist in one Adjust turn.
-        if (adjustHighlights.bases.has(idx)) cls += ' baseSel';
         if (adjustHighlights.srcs.has(idx)) cls += ' adjustAssignedSrc';
         if (adjustHighlights.dsts.has(idx)) cls += ' adjustAssignedDst';
-        // Active-pen affordances (candidate cells for the current click target).
-        if (adjustHighlights.baseMode) {
-          if (adjustHighlights.baseCands && adjustHighlights.baseCands.has(idx) && !adjustHighlights.bases.has(idx)) cls += ' baseCand';
-        } else {
-          if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
-          if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
-        }
+        if (idx === adjustHighlights.srcSel) cls += ' adjustSource';
+        if (adjustHighlights.validDests && adjustHighlights.validDests.has(idx)) cls += ' adjustDest';
       } else if (claimHighlights) {
         if (r.owner === planner) {
           clickable = true;
@@ -4799,6 +5466,14 @@ function render() {
       } else {
         // No sub-action yet: still allow clicking own territories visually
       }
+    }
+
+    if (composedMarks) {
+      if (composedMarks.atkSrc.has(idx)) cls += ' attackerSel';
+      if (composedMarks.atkDef.has(idx)) cls += ' beatable';
+      if (composedMarks.bases.has(idx)) cls += ' baseSel';
+      if (composedMarks.srcs.has(idx)) cls += ' adjustAssignedSrc';
+      if (composedMarks.dsts.has(idx)) cls += ' adjustAssignedDst';
     }
 
     if (clickable) cls += ' clickable';
@@ -4849,7 +5524,7 @@ function render() {
   } else {
     ti.removeAttribute('style');
     if (phase === 'battle') {
-      if (aoeRevealing) { ti.className = 'turn-indicator both'; ti.textContent = 'Resolving round ' + aoeRound + '…'; }
+      if (aoeRevealing) { ti.className = 'turn-indicator both'; ti.textContent = 'Resolving ' + aoeRoundLabel(aoeRound) + '…'; }
       else {
         const p = aoePlanningPlayer;
         ti.className = 'turn-indicator ' + (p === 1 ? 'p1' : 'p2');
@@ -4857,7 +5532,11 @@ function render() {
         else if (mode === 'cpu') ti.textContent = (p === myPlayer ? 'Your plan' : 'CPU planning…');
         else ti.textContent = (p === myPlayer ? 'Your plan' : 'Opponent planning…');
       }
-      pl.textContent = 'Phase 2 · Battle — Round ' + Math.max(1, aoeRound) + '/' + aoeMaxRounds + (fogOfWar ? ' · Fog On' : '');
+      const rl = Math.max(1, aoeRound);
+      const dnLabel = aoeIsNightRound(rl)
+        ? '🌙 Night ' + aoeDayNumber(rl)
+        : '☀ Day ' + aoeDayNumber(rl) + '/' + aoeMaxRounds;
+      pl.textContent = 'Phase 2 · Battle · ' + dnLabel + (fogOfWar ? ' · Fog On' : '');
     } else if (phase === 'attack') {
       ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2');
       ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
@@ -4880,75 +5559,91 @@ function render() {
   if (gameMode === 'aoe' && phase === 'battle' && canIControlAoePlan()) {
     bar.classList.remove('hidden');
     const w = aoeWorking;
-    document.getElementById('aoeAttackBtn').classList.toggle('active', w.action === 'attack');
+    const night = aoeIsNightRound();
+    const doubles = aoeDoublesAllowed();
+    document.getElementById('aoeAttackBtn').classList.toggle('hidden', night);
+    document.getElementById('aoeAttack2Btn').classList.toggle('hidden', night || !doubles);
+    document.getElementById('aoeDefendBtn').classList.toggle('hidden', night);
+    document.getElementById('aoeDefend2Btn').classList.toggle('hidden', night || !doubles);
+    document.getElementById('aoeClaimBtn').classList.toggle('hidden', night);
+    document.getElementById('aoeAdjustBtn').classList.toggle('hidden', !night);
+    document.getElementById('aoeAttackBtn').classList.toggle('active', w.action === 'attack' && !w.isDouble);
+    document.getElementById('aoeAttack2Btn').classList.toggle('active', w.action === 'attack' && !!w.isDouble);
+    document.getElementById('aoeDefendBtn').classList.toggle('active', w.action === 'defend' && !w.isDouble);
+    document.getElementById('aoeDefend2Btn').classList.toggle('active', w.action === 'defend' && !!w.isDouble);
     document.getElementById('aoeAdjustBtn').classList.toggle('active', w.action === 'adjust');
     document.getElementById('aoeClaimBtn').classList.toggle('active', w.action === 'claim');
     document.getElementById('aoePassBtn').classList.toggle('active', w.action === 'pass');
 
     // Banner
     let html = '';
+    if (aoeMultiMode()) html += aoeComposedStripHtml();
     if (!w.action) {
-      html = '<div class="sub">Pick one action: ⚔ Attack, ↔ Adjust troops, ▣ Claim a gray, or ⏭ Pass.</div>';
+      html += night
+        ? '<div class="sub">🌙 Night: ↔ Adjust troops (move only, no combat) or ⏭ Pass. Nights do not count against the day limit.</div>'
+        : '<div class="sub">☀ Day (3 AP): ⚔ Attack (1 AP, 2 AP for a second), 🛡 Defend (1 AP, 2 AP for a second), ▣ Claim a gray (1 AP), or spend the whole day on ⚔⚔ Double Attack / 🛡🛡 Double Defend (3 AP).</div>';
+    } else if (w.action === 'defend') {
+      const level = w.isDouble ? 2 : 1;
+      const bl = (w.defendBases && w.defendBases.size)
+        ? [...w.defendBases].map(i => '#' + (i+1)).join(', ') : 'none yet';
+      const baseSet = w.defendBases ? w.defendBases.size : 0;
+      const pick = baseSet > 0 ? [...w.defendBases][0] : -1;
+      const isSecondBase = !w.isDouble && aoeComposedDefendCount() >= 1;
+      html += '<div>' + (w.isDouble ? '🛡🛡 <strong>Double Defend</strong>' : '🛡 <strong>Defend</strong>') +
+             ': <span class="pwr">' + bl + '</span> ' +
+             '<span class="sub">(' + (w.isDouble ? 'costs the whole day: 3 AP'
+                                                 : isSecondBase ? 'SECOND defend today: costs 2 AP'
+                                                                : 'lasts this round only') + ')</span></div>';
+      html += '<div class="sub" style="margin-top:4px;">Click a border territory to fortify it (click again to clear). ' +
+              (pick >= 0
+                ? 'It reinforces <span class="pwr">+' + aoeDefendRegenForBase(pick, planner, null, level) + '</span> troops'
+                : 'It reinforces by ' + (w.isDouble ? '150%' : '50%') + ' of its troops (capped at ' +
+                  Math.round(assignQuantum * AOE_DEFEND_REGEN_CAP[level]) + ')') +
+              ', applied BEFORE attacks resolve. Incoming attacks are scaled down by that same factor, and its own attrition is divided by it too. ' +
+              'Adjacent territories you own gain +' + Math.round(AOE_AURA_RING[level][0] * 100) + '% power for the round' +
+              (level === 2 ? ', and the ring beyond them +' + Math.round(AOE_AURA_RING[2][1] * 100) + '%' : '') + '. ' +
+              (w.isDouble ? 'A double-defended territory can be broken but never converted. ' : '') +
+              'An attack on a defended territory resolves as a clash.</div>';
     } else if (w.action === 'attack') {
       const G = Array.from(w.attackGroup);
       if (G.length === 0) {
-        html = '<div class="sub">Click your own territories to add them to the attack group, then click an enemy region.</div>';
+        html += '<div class="sub">' + (w.isDouble ? '⚔⚔ Double Attack (3 AP): each attacking stack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power and a win CONVERTS the territory to you. ' : '') +
+                'Click your own territories to add them to the attack group, then click an enemy region.</div>';
       } else {
-        const pwr = aoePower(G);
+        const pwr = aoePower(G, w.isDouble);
+        const rawSum = aoeGroupTroopSum(G);
         let pwrCls = 'pwr';
         let weakHint = '';
-        const soloOneTroop = (G.length === 1 && regions[G[0]] && regions[G[0]].troops === 1);
-        if (soloOneTroop) {
-          pwrCls = 'pwr weak';
-          weakHint = ' <span class="bad">(can\'t attack a 1-troop alone — need coop or more troops)</span>';
-        } else if (w.attackDefender >= 0 && regions[w.attackDefender]) {
+        if (w.attackDefender >= 0 && regions[w.attackDefender]) {
           const defT = effectiveDefense(w.attackDefender);
-          const baseNote = regions[w.attackDefender].isBase ? ' 🛡 base, inflated to ' + defT : '';
           if (pwr.total <= defT) {
             pwrCls = 'pwr weak';
-            weakHint = ' <span class="bad">(weaker than defender ' + defT + baseNote + ' — attack will fail; useful to soften them up)</span>';
-          } else if (regions[w.attackDefender].isBase) {
-            weakHint = ' <span class="sub">(defender 🛡 base, inflated to ' + defT + ')</span>';
+            weakHint = ' <span class="bad">(weaker than defender ' + defT + ': attack will fail; useful to soften them up)</span>';
           }
         }
-        html = '<div>Attack power: <span class="' + pwrCls + '">' + pwr.total.toFixed(1) + '</span>' + weakHint + ' ' +
-               '<span class="sub">(sum ' + pwr.sum.toFixed(0) + ' + coop ' + pwr.coop.toFixed(1) + ')</span></div>';
+        html += '<div>' + (w.isDouble ? '⚔⚔ Double a' : 'A') + 'ttack power: <span class="' + pwrCls + '">' + pwr.total.toFixed(1) + '</span>' + weakHint + ' ' +
+               '<span class="sub">(sum ' + rawSum + (w.isDouble ? ' × ' + AOE_DOUBLE_ATTACK_MULT : '') + ')</span></div>';
         if (w.attackDefender >= 0) html += '<div class="sub">Defender selected: #' + (w.attackDefender+1) + '. Re-open dialog by clicking the defender again.</div>';
-        else html += '<div class="sub">Click an adjacent enemy region as target.</div>';
+        else html += '<div class="sub">Click an adjacent enemy region as target. Your massed troops (' + rawSum + ') must outnumber it.</div>';
       }
     } else if (w.action === 'adjust') {
       const n = w.adjustTransfers.length;
-      const baseMode = !!w.adjustBaseMode;
       const tList = n ? w.adjustTransfers.map(t => '#' + (t.source+1) + '→#' + (t.dest+1) + ' (' + t.amount + ')').join(', ') : 'none yet';
-      const bl = (w.adjustBases && w.adjustBases.size)
-        ? [...w.adjustBases].map(i => '#' + (i+1)).join(', ') : 'none yet';
-      // Both transfers and base(s) go in the SAME Adjust turn. The pen toggle
-      // only chooses what a map-click adds; each section keeps its own picks.
-      html = '<div class="sub" style="opacity:.85;">One Adjust turn does both: move troops <em>and</em> fortify a base. Toggle the pen to pick what a click adds; both submit together.</div>';
-      html += '<div style="margin-top:5px;">↔ <strong>Transfers</strong> (<span class="pwr">' + n + '</span>): <span class="sub">' + tList + '</span></div>';
-      const groupCount = playerComponents(planner).length;
-      const baseSet = w.adjustBases ? w.adjustBases.size : 0;
-      html += '<div>🛡 <strong>Base(s)</strong>: <span class="pwr">' + bl + '</span> ' +
-              '<span class="sub">(' + baseSet + '/' + groupCount + ' used - one base per separate territory group)</span></div>';
-      if (baseMode) {
-        const perBase = baseSet > 0 ? Math.round(100 / baseSet) : 100;
-        html += '<div class="sub" style="margin-top:4px;">🛡 Base pen ON: click a border territory to fortify it (click again to remove). You have <span class="pwr">' + groupCount + '</span> separate territory group' + (groupCount === 1 ? '' : 's') + ', so up to <span class="pwr">' + groupCount + '</span> base' + (groupCount === 1 ? '' : 's') + ' (one per group). The 100% defense pool splits evenly across bases (now ' + perBase + '% each), and each base\'s benefit falls with graph distance.</div>';
-      } else if (w.adjustSourceSel >= 0) {
-        html += '<div class="sub" style="margin-top:4px;">↔ Source #' + (w.adjustSourceSel+1) + ' selected: click an adjacent friendly destination.</div>';
+      html += '<div>🌙 ↔ <strong>Transfers</strong> (<span class="pwr">' + n + '</span>): <span class="sub">' + tList + '</span></div>';
+      if (w.adjustSourceSel >= 0) {
+        html += '<div class="sub" style="margin-top:4px;">Source #' + (w.adjustSourceSel+1) + ' selected: click an adjacent friendly destination.</div>';
       } else {
-        html += '<div class="sub" style="margin-top:4px;">↔ Transfer pen ON: click a source you own (≥ 2 troops), then an adjacent own territory. Cap = floor(source/2), one transfer per source.</div>';
+        html += '<div class="sub" style="margin-top:4px;">Click a source you own (≥ 2 troops), then an adjacent own territory. Cap = floor(source/2), one transfer per source. Bases are set with the daytime 🛡 Defend action.</div>';
       }
-      const penLabel = baseMode ? '↔ Switch to troop transfers' : '🛡 Switch to base marking';
-      html += '<div class="sub" style="margin-top:6px;"><button class="actionBtn" style="padding:4px 10px; font-size:12px; background:rgba(251,191,36,.18); border-color:rgba(251,191,36,.5);" onclick="toggleAdjustBaseMode()">' + penLabel + '</button></div>';
     } else if (w.action === 'claim') {
       const allClaims = w.claims || [];
       const nonEmpty = allClaims.filter(cl => cl.contributions.length > 0);
       const grandTotal = nonEmpty.reduce((s, cl) => s + cl.contributions.reduce((a, c) => a + c.amount, 0), 0);
       const focused = w.claimTargetSel;
       if (allClaims.length === 0 && w.claimSourceSel < 0) {
-        html = '<div class="sub">Click adjacent grays to add claim targets. For each, click your own territories (≥ 2 troops) to stack troops. You can claim multiple grays in one turn, but each of your territories can supply only ONE gray.</div>';
+        html += '<div class="sub">Click ONE adjacent gray as this action\'s target, then click your own territories (≥ 2 troops) to stack troops into it. Each Claim action takes one gray and costs 1 AP; a second gray needs another action point.</div>';
       } else if (focused < 0 && w.claimSourceSel >= 0) {
-        html = '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to add a claim target.</div>';
+        html += '<div class="sub">Source #' + (w.claimSourceSel+1) + ' queued. Click an adjacent gray to add a claim target.</div>';
       } else {
         const summary = nonEmpty.length === 0
           ? '<div class="sub">No contributions yet. Click adjacent own territories (≥ 2 troops) to fund your claim.</div>'
@@ -4962,10 +5657,10 @@ function render() {
         const focusInfo = focused >= 0
           ? '<div class="sub">Focused: gray #' + (focused+1) + '. Click own territory to add to it, click another gray to switch focus.</div>'
           : '<div class="sub">Click a gray to focus it and add contributors.</div>';
-        html = summary + focusInfo;
+        html += summary + focusInfo;
       }
     } else if (w.action === 'pass') {
-      html = '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
+      html += '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
     }
     banner.innerHTML = html;
     banner.classList.remove('hidden');
@@ -4974,17 +5669,28 @@ function render() {
     submitBar.classList.remove('hidden');
     const submitBtn = document.getElementById('aoeSubmitBtn');
     const clearBtn = document.getElementById('aoeClearBtn');
-    let adjustBaseChanged = false;
-    if (w.action === 'adjust' && w.adjustBases) {
-      const curBases = new Set(regions.map((r, i) => i).filter(i => regions[i].owner === planner && regions[i].isBase));
-      adjustBaseChanged = (w.adjustBases.size !== curBases.size) || [...w.adjustBases].some(b => !curBases.has(b));
-    }
-    const canSubmit = (w.action === 'pass')
+    const workingReady = (w.action === 'pass')
       || (w.action === 'attack' && w.attackGroup.size > 0 && w.attackDefender >= 0)
-      || (w.action === 'adjust' && (w.adjustTransfers.length > 0 || adjustBaseChanged))
+      || (w.action === 'defend' && w.defendBases && w.defendBases.size > 0)
+      || (w.action === 'adjust' && w.adjustTransfers.length > 0)
       || (w.action === 'claim'  && (w.claims || []).some(cl => cl.contributions.length > 0));
-    submitBtn.disabled = !canSubmit;
-    clearBtn.style.display = w.action ? '' : 'none';
+    const addBtn = document.getElementById('aoeAddActionBtn');
+    if (aoeMultiMode()) {
+      addBtn.classList.remove('hidden');
+      addBtn.disabled = !workingReady || w.action === 'pass' || aoeApLeft() <= 0;
+      addBtn.textContent = '＋ Add to Plan (' + aoeApLeft() + ' AP left)';
+      submitBtn.disabled = !(workingReady || aoeComposed.length > 0);
+      const total = aoeComposed.length + ((workingReady && w.action !== 'pass') ? 1 : 0);
+      submitBtn.textContent = (w.action === 'pass' || total === 0)
+        ? 'Submit Plan'
+        : 'Submit Plan (' + total + ' action' + (total === 1 ? '' : 's') + ')';
+      clearBtn.style.display = (w.action || aoeComposed.length) ? '' : 'none';
+    } else {
+      addBtn.classList.add('hidden');
+      submitBtn.disabled = !workingReady;
+      submitBtn.textContent = 'Submit Plan';
+      clearBtn.style.display = w.action ? '' : 'none';
+    }
   } else if (gameMode === 'aoe' && phase === 'battle') {
     bar.classList.add('hidden');
     submitBar.classList.add('hidden');
@@ -5031,7 +5737,7 @@ function computeAttackTargets(player, group) {
     const def = regions[idx];
     const allAdj = group.every(g => isAdjacent(g, idx));
     if (!allAdj) { map.set(idx, { beatable: false }); continue; }
-    const pwr = aoePower(group);
+    const pwr = aoePower(group, aoeWorking && aoeWorking.isDouble);
     map.set(idx, { beatable: pwr.total > effectiveDefense(idx) });
   }
   return map;
@@ -5194,16 +5900,16 @@ function cpuClassicAttack() {
 /* Build all legal Attack candidates for player against current regions[].
    Each: { group:[idx], defender:idx, pwr, defense, kind:'win'|'maybe'|'fail',
            failDmg, successAttrition, killValue, failureDefRem }. */
-function enumerateAttackCandidates(player) {
+function enumerateAttackCandidates(player, includeDoubles) {
   const opp = otherPlayer(player);
   const out = [];
+  const doubles = includeDoubles && aoeDoublesAllowed();
   for (const def of regions) {
     if (def.owner !== opp) continue;
     const adj = def.neighbors.filter(n => regions[n] && regions[n].owner === player);
     if (adj.length === 0) continue;
     const groups = [];
     groups.push(adj.slice());
-    // singletons (1v1 coin-flip candidate)
     for (const g of adj) if (adj.length > 1) groups.push([g]);
     // sortedAsc removing weakest
     const sortedAsc = adj.slice().sort((a, b) => regions[a].troops - regions[b].troops);
@@ -5213,23 +5919,36 @@ function enumerateAttackCandidates(player) {
       const key = G.slice().sort((a, b) => a - b).join(',');
       if (seen.has(key)) continue;
       seen.add(key);
-      // Skip forbidden trivial 1v1 (1-troop solo attacker vs 1-troop defender).
-      if (G.length === 1 && regions[G[0]] && regions[G[0]].troops === 1 && def.troops === 1) continue;
-      const pwr = aoePower(G);
+      // Surround gate: massed troops must outnumber the target.
       const defenseVal = effectiveDefense(def.id);
-      let kind;
-      if (pwr.total > defenseVal) kind = 'win';
-      else kind = 'fail';
-      out.push({
-        group: G, defender: def.id,
-        pwr, defense: defenseVal, kind,
-        killValue: def.troops,
-        successAttrition: Math.ceil(defenseVal / 2),
-        failDmg: Math.ceil(defenseVal / 2)
-      });
+      // What the target looks like if its owner spends a Defend on it this
+      // same day: reinforced garrison AND a 25% bite out of our power.
+      const defendedVal = defenseVal + aoeDefendRegenForBase(def.id, def.owner, null, 1);
+      for (const isDouble of (doubles ? [false, true] : [false])) {
+        const pwr = aoePower(G, isDouble);
+        const capture = doubleAttackCapture(defenseVal);
+        out.push({
+          group: G, defender: def.id, double: isDouble,
+          pwr, defense: defenseVal,
+          kind: pwr.total > defenseVal ? 'win' : 'fail',
+          // An attack that still lands after a Defend is a plan; one that only
+          // works against an idle defender is a gamble.
+          robust: pwr.total / (defendedVal / Math.max(1, defenseVal)) > defendedVal,
+          killValue: def.troops,
+          successAttrition: isDouble ? capture.total : Math.ceil(defenseVal / 2),
+          garrison: isDouble ? capture.garrison : 0,
+          failDmg: aoeAttritionFrom(defenseVal, aoeAttackPowerFactor(isDouble))
+        });
+      }
     }
   }
   return out;
+}
+
+/* Turn an attack candidate into an attack action. */
+function attackActionFrom(c, player) {
+  return { type: 'attack', player, group: c.group, defender: c.defender,
+           double: !!c.double, autoBleed: true, failDist: null, successDist: null };
 }
 
 function enumerateClaimCandidates(player) {
@@ -5265,19 +5984,7 @@ function enumerateAdjustCandidates(player) {
 
 function cpuTurnAoeBattle(player, difficulty) {
   if (phase !== 'battle' || aoeSubmitted[player] || aoeRevealing) return;
-  let plan = null;
-  const attacks = enumerateAttackCandidates(player);
-  const claims = enumerateClaimCandidates(player);
-  const adjusts = enumerateAdjustCandidates(player);
-
-  if (difficulty === 'easy') {
-    plan = randomEasyPlan(player, attacks, claims, adjusts);
-  } else if (difficulty === 'medium') {
-    plan = mediumPlan(player, attacks, claims, adjusts);
-  } else {
-    plan = hardPlan(player, attacks, claims, adjusts);
-  }
-  if (!plan) plan = { type: 'pass', player };
+  const plan = cpuPlanForRound(player, difficulty) || { type: 'pass', player };
   aoePlans[player] = plan;
   aoeSubmitted[player] = true;
   aoePassFlags[player] = (plan.type === 'pass');
@@ -5285,37 +5992,230 @@ function cpuTurnAoeBattle(player, difficulty) {
   aoeAfterSubmit();
 }
 
-function randomEasyPlan(player, attacks, claims, adjusts) {
+/* Pure planner for the current round's day/night window. Reused by the CPU
+   turn and by headless simulation. */
+function cpuPlanForRound(player, difficulty) {
+  if (aoeIsNightRound()) {
+    const adjusts = enumerateAdjustCandidates(player);
+    if (difficulty === 'easy') {
+      if (adjusts.length && Math.random() < 0.75) {
+        const c = adjusts[Math.floor(Math.random() * adjusts.length)];
+        return { type: 'adjust', player, transfers: [{ source: c.source, dest: c.dest, amount: Math.max(1, Math.floor(c.cap / 2)) }], bases: null };
+      }
+      return { type: 'pass', player };
+    }
+    const bAd = bestAdjust(adjusts, player);
+    return bAd ? bAd.plan : { type: 'pass', player };
+  }
+  if (aoeMultiMode()) return cpuComposeDay(player, difficulty);
+  const attacks = enumerateAttackCandidates(player);
+  const claims = enumerateClaimCandidates(player);
+  if (difficulty === 'easy') return randomEasyDayPlan(player, attacks, claims);
+  if (difficulty === 'medium') return mediumDayPlan(player, attacks, claims);
+  return hardDayPlan(player, attacks, claims);
+}
+
+/* Territories of `player` whose adjacent enemy force already exceeds their
+   effective defense: the spots worth fortifying before attacking. */
+function cpuThreatenedCount(player) {
+  const opp = otherPlayer(player);
+  let n = 0;
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    let atk = 0;
+    for (const nb of r.neighbors) if (regions[nb] && regions[nb].owner === opp) atk += regions[nb].troops;
+    if (atk > effectiveDefense(r.id)) n++;
+  }
+  return n;
+}
+
+/* Spend the day's action points. Difficulty changes judgement, not budget:
+   a marginal attack is a bad trade (a projected win only lands about half the
+   time), so the stronger tiers demand a clearly positive score and shore up a
+   threatened border first, while easy takes long-odds attacks. */
+function cpuComposeDay(player, difficulty) {
+  cpuDifficulty = difficulty;
+  const budget = aoeMaxActions(), maxA = aoeMaxAttacks(), maxD = aoeMaxDefends();
+  const acts = [];
+  const usedDefenders = new Set(), usedSources = new Set(), usedBases = new Set();
+  let attacksTaken = 0, defendsTaken = 0, dayValue = 0;
+  const apLeft = () => budget - aoeApUsedBy(acts);
+
+  const prof = (difficulty === 'easy')
+      ? { floor: -1.5, secondFloor: 0,   maxClaims: 1, maxDefends: 1,    threatAware: false, doubleEdge: Infinity }
+    : (difficulty === 'medium')
+      ? { floor: 0.5,  secondFloor: 2,   maxClaims: 2, maxDefends: maxD, threatAware: false, doubleEdge: 1.35 }
+      : { floor: 1,    secondFloor: 2.5, maxClaims: 3, maxDefends: maxD, threatAware: true,  doubleEdge: 1.15 };
+
+  // A territory that is marching out this turn cannot also dig in.
+  const usedAttackers = new Set();
+  function addDefend() {
+    if (defendsTaken >= prof.maxDefends) return false;
+    if (aoeActionApCost('defend', defendsTaken) > apLeft()) return false;
+    const skip = new Set(usedBases);
+    for (const g of usedAttackers) skip.add(g);
+    const b = cpuPickBestBase(player, skip);
+    if (b < 0) return false;
+    usedBases.add(b);
+    acts.push({ type: 'defend', player, bases: [b] });
+    dayValue += scoreDefendAction(player, b, 1);
+    defendsTaken++;
+    return true;
+  }
+
+  const scoredAll = enumerateAttackCandidates(player, true)
+    .map(a => ({ a, s: scoreAttack(a, player) }))
+    .sort((x, y) => y.s - x.s);
+
+  // Shore up a border that is already losing before spending on offense.
+  if (prof.threatAware && cpuThreatenedCount(player) > 0) addDefend();
+
+  for (const { a, s } of scoredAll) {
+    if (a.double) continue;
+    if (attacksTaken >= maxA) break;
+    if (s <= prof.floor) break;
+    if (aoeActionApCost('attack', attacksTaken) > apLeft()) break;
+    // A second attack costs 2 AP, so it must outbid a claim plus a defend.
+    if (attacksTaken >= 1 && s <= prof.secondFloor) break;
+    if (usedDefenders.has(a.defender)) continue;
+    if (a.group.some(g => usedBases.has(g))) continue;
+    if (a.group.some(g => usedAttackers.has(g))) continue;
+    usedDefenders.add(a.defender);
+    for (const g of a.group) usedAttackers.add(g);
+    attacksTaken++;
+    acts.push(attackActionFrom(a, player));
+    dayValue += s;
+  }
+
+  if (apLeft() > 0) {
+    const bC = bestClaim(enumerateClaimCandidates(player), player);
+    if (bC) {
+      let taken = 0;
+      for (const cl of bC.plan.claims) {
+        if (apLeft() <= 0 || taken >= prof.maxClaims) break;
+        if (cl.contributions.some(c => usedSources.has(c.source))) continue;
+        for (const c of cl.contributions) usedSources.add(c.source);
+        acts.push({ type: 'claim', player, claims: [{ target: cl.target, contributions: cl.contributions }] });
+        dayValue += scoreClaimAction(cl);
+        taken++;
+      }
+    }
+  }
+
+  while (addDefend()) { /* spend leftover points fortifying */ }
+
+  // A double action spends the day outright, so it is taken only when it beats
+  // the whole piecemeal day by a clear margin.
+  if (aoeDoublesAllowed() && Number.isFinite(prof.doubleEdge)) {
+    const bar = Math.max(1, dayValue) * prof.doubleEdge;
+    let bestDouble = null, bestScore = bar;
+    for (const { a, s } of scoredAll) {
+      if (!a.double || a.kind !== 'win') continue;
+      if (s > bestScore) { bestScore = s; bestDouble = attackActionFrom(a, player); }
+    }
+    const db = cpuPickBestBase(player, null, 2);
+    if (db >= 0) {
+      const ds = scoreDefendAction(player, db, 2);
+      if (ds > bestScore) { bestScore = ds; bestDouble = { type: 'defend', player, bases: [db], double: true }; }
+    }
+    if (bestDouble) return { type: 'multi', player, actions: [bestDouble] };
+  }
+
+  if (acts.length === 0) return { type: 'pass', player };
+  return { type: 'multi', player, actions: acts };
+}
+
+function randomEasyDayPlan(player, attacks, claims) {
   const opts = [];
   if (attacks.length) opts.push('attack');
   if (claims.length)  opts.push('claim');
-  if (adjusts.length) opts.push('adjust');
+  if (cpuPickBestBase(player) >= 0) opts.push('defend');
   opts.push('pass');
   const pick = opts[Math.floor(Math.random() * opts.length)];
   if (pick === 'attack') {
     const c = attacks[Math.floor(Math.random() * attacks.length)];
-    return { type: 'attack', player, group: c.group, defender: c.defender, autoBleed: true, failDist: null, successDist: null };
+    return attackActionFrom(c, player);
   }
   if (pick === 'claim') {
     const c = claims[Math.floor(Math.random() * claims.length)];
     const amt = Math.max(1, Math.floor(c.cap / 2));
     return { type: 'claim', player, claims: [{ target: c.target, contributions: [{ source: c.source, amount: amt }] }] };
   }
-  if (pick === 'adjust') {
-    const c = adjusts[Math.floor(Math.random() * adjusts.length)];
-    const amt = Math.max(1, Math.floor(c.cap / 2));
-    return { type: 'adjust', player, transfers: [{ source: c.source, dest: c.dest, amount: amt }] };
+  if (pick === 'defend') {
+    const b = cpuPickBestBase(player);
+    if (b >= 0) return { type: 'defend', player, bases: [b] };
   }
   return { type: 'pass', player };
 }
 
+/* Territory swing is worth AOE_REGION_WORTH troops of material. A razing
+   single attack costs the defender a region; a converting double attack costs
+   them one and gains us one. The defender may reinforce after our plan is
+   locked, so a projected win is discounted rather than treated as certain. */
+const AOE_REGION_WORTH = 8;
 function scoreAttack(c, player) {
-  // kill_value − failure_risk * failure_damage
-  let risk;
-  if (c.kind === 'win') risk = 0.05;
-  else risk = 0.95;
-  const score = c.killValue * (1 - risk) - c.failDmg * risk - c.group.length * 0.5;
-  return score;
+  // Defends both reinforce and blunt, so a marginal attack is a coin flip, and
+  // an attack that cannot reach the target's number at all only ever softens.
+  const hopeless = c.pwr.total <= c.defense * 0.8;
+  const risk = hopeless ? 1
+             : (c.kind !== 'win') ? 0.9
+             : c.robust ? (c.double ? 0.1 : 0.15)
+             : (c.double ? 0.4 : 0.55);
+  const swing = c.double ? 2 : 1;
+  const winValue = swing * AOE_REGION_WORTH + c.killValue - c.successAttrition;
+  // A repelled push still bleeds the target in proportion to what we landed.
+  const failValue = -c.failDmg + aoeAttritionFrom(c.pwr.total, 1) * 0.5;
+  return winValue * (1 - risk) + failValue * risk - c.group.length * 0.5;
+}
+
+/* Value of a Claim action on the same scale as scoreAttack: a gray taken is a
+   region gained, paid for with the troops that march into it. */
+function scoreClaimAction(cl) {
+  const sent = cl.contributions.reduce((a, c) => a + c.amount, 0);
+  return AOE_REGION_WORTH * 0.75 + sent * 0.1;
+}
+
+/* Value of a Defend action, scaled by what it actually saves. Adjacent enemy
+   troops above the territory's own count are what makes it attackable at all,
+   so reinforcement that lifts it back over that line is worth a whole region;
+   reinforcement that only slows the fall is worth much less. */
+function scoreDefendAction(player, idx, level) {
+  if (idx < 0 || !regions[idx]) return 0;
+  const r = regions[idx];
+  const opp = otherPlayer(player);
+  let pressure = 0;
+  for (const n of r.neighbors) if (regions[n] && regions[n].owner === opp) pressure += regions[n].troops;
+  const regen = aoeDefendRegenForBase(idx, player, null, level);
+  let value = regen * 0.35 + pressure * 0.05;
+  // Repelling means the blunted attack no longer clears the reinforced garrison.
+  const repels = (lvl) => {
+    const reinforced = r.troops + aoeDefendRegenForBase(idx, player, null, lvl);
+    const f = r.troops > 0 ? reinforced / r.troops : 1;
+    return pressure / f <= reinforced;
+  };
+  if (pressure > r.troops) {
+    value += repels(level)
+      ? AOE_REGION_WORTH * 1.2
+      : AOE_REGION_WORTH * 0.3 * (level === 2 ? 1.4 : 1);
+    // What a Double Defend buys that a plain Defend cannot: holding a line the
+    // single would lose, and denying a double attack the conversion.
+    if (level === 2) {
+      if (!repels(1)) value += AOE_REGION_WORTH;
+      value += AOE_REGION_WORTH * 0.4;
+    }
+  }
+  // Credit the aura on each threatened neighbour it would newly save.
+  const rings = AOE_AURA_RING[level] || AOE_AURA_RING[1];
+  for (const n of r.neighbors) {
+    const rn = regions[n];
+    if (!rn || rn.owner !== player) continue;
+    let np = 0;
+    for (const m of rn.neighbors) if (regions[m] && regions[m].owner === opp) np += regions[m].troops;
+    if (np <= rn.troops) continue;
+    const f = 1 + rings[0];
+    value += (np / f <= rn.troops * f) ? AOE_REGION_WORTH * 0.9 : AOE_REGION_WORTH * 0.2;
+  }
+  return value;
 }
 function bestAttack(attacks, player) {
   let best = null, bestS = -Infinity;
@@ -5324,7 +6224,7 @@ function bestAttack(attacks, player) {
     if (s > bestS) { bestS = s; best = c; }
   }
   if (!best || bestS <= 0) return null;
-  return { plan: { type: 'attack', player, group: best.group, defender: best.defender, autoBleed: true, failDist: null, successDist: null }, score: bestS };
+  return { plan: attackActionFrom(best, player), score: bestS };
 }
 
 function bestClaim(claims, player) {
@@ -5413,53 +6313,79 @@ function bestAdjust(adjusts, player) {
     let s = (dstEnemy - srcEnemy) * 2 + c.cap * 0.3;
     if (s > bestS) { bestS = s; best = c; }
   }
-  // Medium/hard CPU fortifies a base when it doesn't already hold one and is
-  // established enough to spare a turn (bases persist across rounds).
-  let bases = null;
-  if (cpuDifficulty !== 'easy' && aoePlayerOwnedCount(player) >= 3 &&
-      !regions.some(r => r.owner === player && r.isBase)) {
-    const picks = cpuPickBases(player);
-    if (picks.length) bases = picks;
-  }
-  if (!best || bestS <= 0) {
-    if (bases) return { plan: { type: 'adjust', player, transfers: [], bases }, score: 1.5 };
-    return null;
-  }
+  if (!best || bestS <= 0) return null;
   const amt = Math.max(1, Math.min(best.cap, Math.ceil(best.cap * 0.9)));
-  const plan = { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }] };
-  if (bases) { plan.bases = bases; bestS += 1.5; }
-  return { plan, score: bestS };
+  return { plan: { type: 'adjust', player, transfers: [{ source: best.source, dest: best.dest, amount: amt }], bases: null }, score: bestS };
 }
 
-function mediumPlan(player, attacks, claims, adjusts) {
+/* Most pressured border territory worth fortifying, skipping any already
+   picked this turn. Returns -1 when nothing is worth fortifying. */
+function cpuPickBestBase(player, excludeBases, level) {
+  let best = -1, bestS = 0;
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    if (excludeBases && excludeBases.has(r.id)) continue;
+    if (!isBorderTerritory(r.id, player) && !r.isBase) continue;
+    const s = scoreDefendAction(player, r.id, level || 1);
+    if (s > bestS) { bestS = s; best = r.id; }
+  }
+  return best;
+}
+
+/* Defend candidate. Score rises with enemy pressure on the border. */
+function bestDefend(player) {
+  const pick = cpuPickBestBase(player);
+  if (pick < 0) return null;
+  const picks = [pick];
+  const opp = otherPlayer(player);
+  let threat = 0;
+  for (const r of regions) {
+    if (r.owner !== player) continue;
+    for (const n of r.neighbors) if (regions[n] && regions[n].owner === opp) threat += regions[n].troops;
+  }
+  const score = aoeDefendRegenPreview(player, picks) * 0.4 + threat * 0.05;
+  return { plan: { type: 'defend', player, bases: picks }, score };
+}
+
+/* bestClaim ranks several grays; a Claim ACTION may only take one, so
+   single-action planners use just the top-ranked gray. */
+function topClaimPlan(bC, player) {
+  if (!bC) return null;
+  const list = planClaimList(bC.plan);
+  if (!list.length) return null;
+  return { type: 'claim', player,
+           claims: [{ target: list[0].target, contributions: list[0].contributions }] };
+}
+
+function mediumDayPlan(player, attacks, claims) {
   const bA = bestAttack(attacks, player);
   if (bA && bA.score > 0) return bA.plan;
-  const bC = bestClaim(claims, player);
-  if (bC) return bC.plan;
-  const bAd = bestAdjust(adjusts, player);
-  if (bAd) return bAd.plan;
+  const bC = topClaimPlan(bestClaim(claims, player), player);
+  if (bC) return bC;
+  const bD = bestDefend(player);
+  if (bD) return bD.plan;
   return { type: 'pass', player };
 }
 
-function hardPlan(player, attacks, claims, adjusts) {
+function hardDayPlan(player, attacks, claims) {
   const opp = otherPlayer(player);
   const oppAttacks = enumerateAttackCandidates(opp);
   const oppClaims = enumerateClaimCandidates(opp);
-  const oppAdjusts = enumerateAdjustCandidates(opp);
   const oppCands = [];
   oppCands.push({ type: 'pass', player: opp });
   for (const a of oppAttacks.slice(0, 3)) {
-    oppCands.push({ type: 'attack', player: opp, group: a.group, defender: a.defender, autoBleed: true, failDist: null, successDist: null });
+    oppCands.push(attackActionFrom(a, opp));
   }
   for (const c of oppClaims.slice(0, 2)) {
     const amt = Math.max(1, Math.ceil(c.cap * 0.8));
     oppCands.push({ type: 'claim', player: opp, claims: [{ target: c.target, contributions: [{ source: c.source, amount: amt }] }] });
   }
+  const oppD = bestDefend(opp); if (oppD) oppCands.push(oppD.plan);
 
   const ourCands = [];
   const bA = bestAttack(attacks, player); if (bA) ourCands.push(bA.plan);
-  const bC = bestClaim(claims, player);   if (bC) ourCands.push(bC.plan);
-  const bAd = bestAdjust(adjusts, player);if (bAd) ourCands.push(bAd.plan);
+  const bC = topClaimPlan(bestClaim(claims, player), player); if (bC) ourCands.push(bC);
+  const bD = bestDefend(player);          if (bD) ourCands.push(bD.plan);
   ourCands.push({ type: 'pass', player });
 
   // Score each our-cand by simulating against opp-cands (average outcome)
@@ -5477,7 +6403,7 @@ function hardPlan(player, attacks, claims, adjusts) {
 
 function simulateScore(myPlan, oppPlan, player) {
   // Snapshot (include isBase — resolveAoeRound mutates it via base plans).
-  const snap = regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase }));
+  const snap = regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase, defendLevel: r.defendLevel || 0 }));
   const planA = (myPlan && myPlan.player === 1) ? myPlan : (oppPlan && oppPlan.player === 1 ? oppPlan : null);
   const planB = (myPlan && myPlan.player === 2) ? myPlan : (oppPlan && oppPlan.player === 2 ? oppPlan : null);
   try {
@@ -5490,7 +6416,8 @@ function simulateScore(myPlan, oppPlan, player) {
   }
   // Restore
   for (let i = 0; i < regions.length; i++) {
-    regions[i].owner = snap[i].owner; regions[i].troops = snap[i].troops; regions[i].isBase = snap[i].isBase;
+    regions[i].owner = snap[i].owner; regions[i].troops = snap[i].troops;
+    regions[i].isBase = snap[i].isBase; regions[i].defendLevel = snap[i].defendLevel;
   }
   return (myRegs - oppRegs) * 5 + (myTr - oppTr) * 0.5;
 }
@@ -5589,7 +6516,7 @@ async function createRoom() {
         guestPlayer: myPlayer === 1 ? 2 : 1,
         firstPlayer: 1,
         totalTroops, gameMode, fogOfWar,
-        turnMode, fixedTurnCount, preAllocRandom,
+        turnMode, fixedTurnCount, preAllocRandom, actionsPerDay,
         assignQuantumSetting,
         map: serializeMap(map)
       });
@@ -5627,6 +6554,7 @@ function handlePeerData(d) {
       if (typeof d.fogOfWar === 'boolean') fogOfWar = d.fogOfWar;
       if (typeof d.turnMode === 'string') turnMode = d.turnMode;
       if (typeof d.fixedTurnCount === 'number') fixedTurnCount = d.fixedTurnCount;
+      if (typeof d.actionsPerDay === 'number') actionsPerDay = (d.actionsPerDay === 3) ? 3 : 1;
       if (typeof d.preAllocRandom === 'boolean') preAllocRandom = d.preAllocRandom;
       if (typeof d.assignQuantumSetting === 'number') assignQuantumSetting = d.assignQuantumSetting;
       if (d.map) {
@@ -5671,11 +6599,6 @@ function handlePeerData(d) {
         aoeRevealing = true;
         render();
         aoePerformResolutionWithSeed(d.rng_seed);
-      }
-      break;
-    case 'aoe-acquire':
-      if (phase === 'battle' && gameMode === 'aoe' && typeof d.defIdx === 'number') {
-        applyAcquisitionContribs({ defIdx: d.defIdx, player: d.player }, d.contribs || {});
       }
       break;
     case 'aoe-attrition':
@@ -5742,8 +6665,7 @@ function endGame() {
 
   let reason;
   if (p1Regs === 0 || p2Regs === 0) reason = 'One side has no territories left.';
-  else if (bothPlayersStuckAtOnes && bothPlayersStuckAtOnes()) reason = 'All territories at 1 troop — no further moves possible.';
-  else if (aoeMaxRounds > 0 && aoeRound > aoeMaxRounds) reason = 'Turn limit reached (' + aoeMaxRounds + ' rounds).';
+  else if (gameMode === 'aoe' && aoeDayCapReached()) reason = 'Day limit reached (' + aoeMaxRounds + ' days).';
   else if (p1Regs !== p2Regs) reason = 'Most regions controlled.';
   else if (p1Tr !== p2Tr) reason = 'Region tie — won on troop count.';
   else reason = 'Same regions and troops on both sides.';
@@ -5826,30 +6748,73 @@ function renderRulesCard() {
     body =
       '<h2>How to Play — Aggression: Age of Empires</h2>' +
       assignBlock +
-      '<h3>Phase 2 · Battle (parallel turns)</h3>' +
-      '<p>Each round, BOTH players privately pick one action; actions reveal and resolve simultaneously. The game lasts ⌊total_regions / 2⌋ rounds.</p>' +
+      '<h3>Phase 2 · Battle (day/night parallel turns)</h3>' +
+      '<p>Each round, BOTH players privately plan; plans reveal and resolve simultaneously. Rounds alternate ☀ <strong>Day</strong> (Attack, Defend, Claim, or Pass) and 🌙 <strong>Night</strong> (Adjust troops or Pass). Only DAYS count against the turn limit; nights are free repositioning windows.</p>' +
+      (actionsPerDay === 3
+        ? '<h3>Day actions (3 AP per day)</h3>' +
+          '<ul>' +
+            '<li>Each day you spend <strong>3 action points</strong>. Most actions cost 1 AP; your SECOND attack and your SECOND defend each cost 2 AP; a <strong>double attack</strong> or <strong>double defend</strong> costs all 3.</li>' +
+            '<li>Legal days: attack + attack, defend + defend, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, one double attack, or one double defend.</li>' +
+            '<li>Build an action on the map, then press <strong>＋ Add to Plan</strong>. Switching action type banks a finished action automatically. Press × on a listed action to drop it. Submit sends the whole set.</li>' +
+            '<li>No two attacks may target the same territory, no two claims the same gray, and each territory may supply only one claim.</li>' +
+            '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then attack slot 2, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
+            '<li>Mutual clashes auto-distribute their attrition evenly in 3-action days (no per-clash prompt).</li>' +
+          '</ul>'
+        : '<h3>Day actions (1 per day)</h3><p>Each day you pick a single action: Attack, Defend, Claim, or Pass. Double actions need the 3-action day.</p>') +
       '<h3>Action ⚔ Attack</h3>' +
       '<ul>' +
         '<li>Pick a subset G of your territories, all adjacent to one enemy defender D.</li>' +
-        '<li>Power = sum(troops in G) + Σ_{i&lt;j} (g<sub>i</sub>/10)·(g<sub>j</sub>/10) (cooperation bonus).</li>' +
-        '<li>Defense = D.troops.</li>' +
-        '<li><strong>Power &gt; Defense → win:</strong> D wiped. Attackers pay ceil(D/2) attrition. You may then place up to ⌊remaining_troops/2⌋ into the conquered territory to claim it.</li>' +
-        '<li><strong>Else (power ≤ defense) → fail:</strong> attackers take ceil(def/2) attrition distributed across attacking group. Defender takes floor(def/2) but survives. No territorial change.</li>' +
-        '<li><strong>1v1 attacks are not allowed</strong> — a single 1-troop attacker on a 1-troop defender is forbidden.</li>' +
+        '<li><strong>No strength requirement:</strong> any group of your territories may attack any adjacent enemy territory, even a much stronger one. There is no surrounding or cooperation bonus. Punching up is legal; failing at it is expensive.</li>' +
+        '<li>Power = sum(troops in G). Defense = the target\'s troops at resolution time, after its own Defend has landed.</li>' +
+        '<li><strong>A dug-in target blunts the strike:</strong> whatever factor a territory scaled its own power up by, it scales an incoming attack down by the same factor. A Defend takes a territory to 1.5x, so an attack lands at 1/1.5 of its power; a Double Defend takes it to 2.5x and lands attacks at 1/2.5. This decides the outcome only. <strong>Attrition on both sides is still measured against raw power</strong>, so blunting a strike never spares the attacker.</li>' +
+        '<li><strong>Power &gt; Defense (win):</strong> D is razed to <strong>gray</strong> and its troops are gone. A single attack does NOT take the ground; the ruin can be Claimed on a later turn by either side. Attackers pay ceil(D/2) attrition.</li>' +
+        '<li><strong>Else (repelled):</strong> both sides bleed and no ground changes hands. The attackers lose half the defence they could not break; the defender loses half the power that actually landed.</li>' +
+      '</ul>' +
+      '<h3>Power factors and attrition</h3>' +
+      '<p>Every attrition figure in the game has one shape:</p>' +
+      '<p style="text-align:center;"><strong>your loss = (the opposing side\'s FULL power) / 2</strong></p>' +
+      '<p>Full, not scaled. The blunting that decides who wins the fight never reduces the bill either side pays, and your own multiplier does not discount it.</p>' +
+      '<p>So <strong>whatever multiplies your power divides your attrition.</strong> Worked example, 2 troops double attacking a 4-troop territory at ' + AOE_DOUBLE_ATTACK_MULT + 'x:</p>' +
+      '<ul>' +
+        '<li>Attacker power = 2 x ' + AOE_DOUBLE_ATTACK_MULT + ' = ' + (2 * AOE_DOUBLE_ATTACK_MULT) + ', against a defence of 4.</li>' +
+        '<li>Attacker loss = (4 / 2) / ' + AOE_DOUBLE_ATTACK_MULT + ' = ' + ((4 / 2) / AOE_DOUBLE_ATTACK_MULT).toFixed(1) + ', which rounds to ' + Math.round((4 / 2) / AOE_DOUBLE_ATTACK_MULT) + '.</li>' +
+        '<li>Defender loss = (' + (2 * AOE_DOUBLE_ATTACK_MULT) + ' / 2) / 1 = ' + ((2 * AOE_DOUBLE_ATTACK_MULT) / 2) + '.</li>' +
+      '</ul>' +
+      '<p>Attrition rounds half up: exactly 0.5 becomes 1, anything below 0.5 becomes 0, so a strike too weak to matter does no damage at all.</p>' +
+      '<ul>' +
+        '<li>A Defend that lifts a territory from 10 troops to 15 multiplied its power by 1.5, so it bleeds 1.5x less AND blunts incoming attacks by 1.5x. A Double Defend to 25 does both at 2.5x. The factor is the one actually realised, so a reinforcement clipped by the quantum cap buys proportionally less of both.</li>' +
+        '<li>A Double Attack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power, so its attrition is divided by ' + AOE_DOUBLE_ATTACK_MULT + 'x, whether it wins, is repelled, or meets a Defend or Double Defend. The garrison it sends into a captured territory is a transfer rather than attrition, so it is not scaled.</li>' +
+        '<li>In a clash each side divides its own attrition by its own power factor.</li>' +
+      '</ul>' +
+      '<h3>Action ⚔⚔ Double Attack (3 AP)</h3>' +
+      '<ul>' +
+        '<li>The whole day spent on ONE target. Every attacking stack fights at <strong>' + AOE_DOUBLE_ATTACK_MULT + 'x power</strong>, and it scales the defence it faces down by the same ' + AOE_DOUBLE_ATTACK_MULT + 'x.</li>' +
+        '<li><strong>On a win the territory CONVERTS to you</strong> instead of being razed, as a sudden invasion. You pay half the defence in attrition; a QUARTER of the defending garrison changes sides and holds the ground for you. None of that garrison is drawn from your own stacks.</li>' +
+        '<li>On a loss it is an ordinary failed attack, and its attrition is still divided by ' + AOE_DOUBLE_ATTACK_MULT + 'x. No ground taken.</li>' +
+        '<li>A double attack that meets a single or double attack becomes a <strong>clash</strong>. Higher power wins. If the winner is the double attack, its rules prevail: it takes its reduced damage and converts the territory. If it loses, it just eats the damage.</li>' +
+        '<li><strong>Fortress rule:</strong> a 🛡🛡 double-defended territory can be broken but never converted. A winning double attack razes it to gray instead, so the defender loses the stack but the attacker gains no ground.</li>' +
       '</ul>' +
       '<p><strong>Attack chain:</strong> if A attacks B and B attacks C, then B→C resolves first, then A→B resolves against updated state.</p>' +
-      '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), the engagement resolves as a mutual clash — both sides take damage proportional to the other\'s power, no territorial change.</p>' +
-      '<h3>Action ↔ Adjust troops</h3>' +
+      '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), both sides take damage proportional to the other\'s power and no ground changes hands, unless a winning double attack is involved.</p>' +
+      '<h3>Action 🛡 Defend / 🛡🛡 Double Defend</h3>' +
       '<ul>' +
-        '<li>A single Adjust turn does BOTH, in any combination: move troops AND fortify a defense base. Use the pen toggle in the banner to pick what a map-click adds; both sets submit together.</li>' +
-        '<li><strong>Transfers:</strong> set one or more (source to an adjacent friendly dest), each amount ≤ ⌊source/2⌋. Each source appears in at most one transfer; a dest may receive multiple.</li>' +
-        '<li><strong>Base:</strong> fortify one border territory per SEPARATE (disconnected) territory group. Most positions are one connected blob, so that is one base; if your territory is split into N disconnected groups you may set N bases, one each. The 100% defense pool splits evenly across your bases (1 base = full +50% defense and -25% attrition at its territory, 2 bases = half each, etc.), and each base\'s benefit falls with graph distance. Bases persist across rounds, so you can set a base once and keep transferring in later turns.</li>' +
-        '<li>Resolution order makes Adjust a defense option: transfers and base both apply in Step 1, before attacks resolve, so a defender can reinforce and fortify the same territory an attacker is about to hit.</li>' +
+        '<li>Each Defend action fortifies exactly ONE border territory. A second Defend the same day costs 2 AP; a Double Defend costs all 3 and fortifies one territory twice as hard.</li>' +
+        '<li><strong>Reinforcement:</strong> Defend adds 50% of the territory\'s current troops, Double Defend adds 150%, capped at ' + assignQuantum + ' and ' + Math.round(assignQuantum * 1.5) + ' respectively. So under a Double Defend 10 troops become 25 and 6 become 15. It lands BEFORE attacks resolve, so a defended territory is fought at its reinforced strength.</li>' +
+        '<li><strong>Blunting:</strong> a territory scales an incoming attack down by the same factor it scaled itself up, so a Defend at 1.5x lands attacks at 1/1.5 and a Double Defend at 2.5x lands them at 1/2.5.</li>' +
+        '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. Overlapping auras take the best boost rather than stacking.</li>' +
+        '<li><strong>Fortress:</strong> a double-defended territory can never be converted, only razed. It is the answer to a double attack.</li>' +
+        '<li><strong>An attack on a defended territory becomes a clash:</strong> the attack was declared against the pre-round count, so the reinforcement can turn a sure thing into a bloody draw.</li>' +
+        '<li>Fortification is temporary: it applies to that round\'s resolution only, and every round starts with a clean map.</li>' +
+      '</ul>' +
+      '<h3>Action ↔ Adjust troops (night)</h3>' +
+      '<ul>' +
+        '<li>Night-only: move troops between your own adjacent territories. Set one or more transfers (source to an adjacent friendly dest), each amount ≤ ⌊source/2⌋. Each source appears in at most one transfer; a dest may receive multiple.</li>' +
+        '<li>Both players adjust simultaneously at night; no combat happens. Massing troops on a border telegraphs your dawn attack, so night moves are also mind games.</li>' +
       '</ul>' +
       '<h3>Action ▣ Claim a gray</h3>' +
       '<ul>' +
-        '<li>Pick one adjacent gray as target, then stack contributions from any of your adjacent territories (≥ 2 troops each, ≤ ⌊source/2⌋ per source). Claim power = sum of contributions (no coop bonus).</li>' +
-        '<li>One target per turn; each source may contribute at most once.</li>' +
+        '<li>Pick one adjacent gray as target, then stack contributions from any of your adjacent territories (≥ 2 troops each, ≤ ⌊source/2⌋ per source). Claim power = sum of contributions.</li>' +
+        '<li><strong>One gray per Claim action</strong> (1 AP each), so grabbing two grays costs 2 AP. Each source may contribute to at most one claim per turn.</li>' +
         '<li>Uncontested: gray becomes yours with Σ amount troops; each contributing source loses its sent amount.</li>' +
         '<li>Contested: larger total wins. Winner takes the gray with (winner power) − ⌈(loser power)/2⌉ troops; winner sources each lose their full sent amount. Loser sources take ⌈loser power /2⌉ damage spread proportionally and keep the rest.</li>' +
         '<li>Tied: gray stays gray; each side takes ⌈power/2⌉ damage spread proportionally across its contributions, remainder returns to sources.</li>' +
@@ -5866,8 +6831,8 @@ function renderRulesCard() {
       '<h3>Victory</h3>' +
       '<ul>' +
       (turnMode === 'dynamic'
-        ? '<li><strong>Dynamic mode:</strong> game ends after ⌊3N/4⌋ rounds (N = assigned territories), or earlier if all territories hit 1 troop, both players Pass, or one player has zero territories.</li>'
-        : '<li><strong>Fixed mode:</strong> game ends after ' + (fixedTurnCount > 0 ? fixedTurnCount : '⌊total_regions / 2⌋') + ' rounds, or when both players Pass in the same round, or one player has zero territories.</li>') +
+        ? '<li><strong>Dynamic mode:</strong> game ends after ⌊3N/4⌋ DAYS (N = assigned territories; nights are free), or earlier if both players Pass in the same round, or one player has zero territories.</li>'
+        : '<li><strong>Fixed mode:</strong> game ends after ' + (fixedTurnCount > 0 ? fixedTurnCount : '⌊total_regions / 2⌋') + ' DAYS (nights are free), or when both players Pass in the same round, or one player has zero territories.</li>') +
       '<li>Most owned regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
       mapBlock;
   } else {
@@ -5899,15 +6864,28 @@ window.AG = {
   state: () => ({ regions, gridSize }),
   setRegions: (rs, gs) => { regions = rs; if (gs) gridSize = gs; },
   autoBleedDist,
-  resolveAoeRound, mulberry32,
+  resolveAoeRound, resolveAoeRoundMulti, mulberry32,
   resolveMutualClash, isMutualAttackClash,
   applyAdjustmentsToState, applyAoeEffects,
-  enumerateAttackCandidates, enumerateClaimCandidates,
+  enumerateAttackCandidates, enumerateClaimCandidates, enumerateAdjustCandidates,
   assignCaptureScan,
   regionVisibleTo,
+  aoePower, aoeDefendRegenForBase, doubleAttackCapture, aoeAttritionFrom, aoeRoundAttrition,
+  cpuPlanForRound, cpuComposeDay, validatePlan, aoeApUsedBy,
+  aoePlayerOwnedCount, playerComponents, legalDeployInfo, applyAssignCaptures,
+  generateMatrixMap, generateGeoMap,
+  sanitizeBases,
   setFog: (f) => { fogOfWar = f; },
   setGameMode: (g) => { gameMode = g; },
-  setPhase: (p) => { phase = p; }
+  setPhase: (p) => { phase = p; },
+  setAoeRound: (r) => { aoeRound = r; },
+  getAoeRound: () => aoeRound,
+  setActionsPerDay: (n) => { actionsPerDay = n; },
+  setAssignQuantum: (q) => { assignQuantum = q; },
+  setCpuDifficulty: (d) => { cpuDifficulty = d; },
+  setMode: (m) => { mode = m; },
+  setPlayers: (p1, p2) => { p1Remaining = p1; p2Remaining = p2; },
+  setCurrentPlayer: (p) => { currentPlayer = p; }
 };
 
   </script>
