@@ -413,6 +413,29 @@
     .region.base2 { box-shadow: inset 0 0 0 4px rgba(180,83,9,.95), inset 0 0 0 6px rgba(251,191,36,.9), 0 0 18px rgba(180,83,9,.55); }
     .region.baseSel { outline: 2px dashed #fbbf24; outline-offset: -4px; }
     .region.baseCand { outline: 2px dotted rgba(251,191,36,.55); outline-offset: -4px; cursor: pointer; }
+
+    /* Defend aura: the power boost a Defend lends the territories around it.
+       Drawn as a thin inner ring plus a percentage badge, deliberately lighter
+       than the base shield so the defend itself still reads as the strongpoint. */
+    .region-aura {
+      position: absolute; bottom: 2px; right: 4px;
+      font-size: 9px; font-weight: 800; line-height: 1;
+      color: #fde68a; text-shadow: 0 1px 3px rgba(0,0,0,.9);
+      display: none; pointer-events: none; z-index: 7;
+    }
+    .region.tiny .region-aura { font-size: 7px; bottom: 1px; right: 2px; }
+    .region.aura .region-aura { display: block; }
+    .region.aura::before {
+      content: ''; position: absolute; inset: 3px;
+      border: 1px dashed rgba(251,191,36,.45);
+      border-radius: 4px; pointer-events: none; z-index: 3;
+    }
+    .region.aura2::before { border-color: rgba(251,191,36,.7); border-style: solid; }
+    .region.aura3::before {
+      border-color: rgba(253,224,71,.9); border-style: solid; border-width: 2px;
+    }
+    .region.fogged .region-aura, .region.eliminated .region-aura { display: none; }
+    .region.fogged::before, .region.eliminated::before { display: none; }
     /* Go-like deployment legality */
     .region.deployIllegal { opacity: .4; cursor: not-allowed; }
     .region.deployLegal { outline: 2px dashed rgba(134,239,172,.7); outline-offset: -4px; cursor: pointer; }
@@ -750,6 +773,29 @@
     .map-container.geo-map g.region.base polygon { stroke: #fbbf24; stroke-width: 0.9; }
     .map-container.geo-map g.region.base2 polygon { stroke: #b45309; stroke-width: 1.8; }
     .map-container.geo-map g.region.baseSel polygon { stroke: #fbbf24; stroke-width: 0.7; stroke-dasharray: 1.5 1; }
+    /* Aura on the geo map rides its own inset polygon so it can sit inside a
+       base's stroke rather than replacing it. */
+    .map-container.geo-map g.region polygon.aura-ring { display: none; fill: none; }
+    .map-container.geo-map g.region text.region-aura { display: none; }
+    .map-container.geo-map g.region.aura polygon.aura-ring {
+      display: block; stroke: rgba(251,191,36,.5);
+      stroke-width: 0.35; stroke-dasharray: 1.2 .9;
+    }
+    .map-container.geo-map g.region.aura2 polygon.aura-ring {
+      stroke: rgba(251,191,36,.8); stroke-width: 0.5; stroke-dasharray: none;
+    }
+    .map-container.geo-map g.region.aura3 polygon.aura-ring {
+      stroke: rgba(253,224,71,.95); stroke-width: 0.7; stroke-dasharray: none;
+    }
+    .map-container.geo-map g.region.aura text.region-aura {
+      display: block; fill: #fde68a; font-size: 1.9px; font-weight: 800;
+      text-anchor: middle; dominant-baseline: middle;
+      paint-order: stroke; stroke: rgba(0,0,0,.75); stroke-width: 0.5;
+    }
+    .map-container.geo-map g.region.fogged text.region-aura,
+    .map-container.geo-map g.region.eliminated text.region-aura { display: none; }
+    .map-container.geo-map g.region.fogged polygon.aura-ring,
+    .map-container.geo-map g.region.eliminated polygon.aura-ring { display: none; }
     .map-container.geo-map g.region.baseCand polygon { stroke: rgba(251,191,36,.6); stroke-width: 0.5; }
     .map-container.geo-map g.region.deployLegal polygon { stroke: rgba(134,239,172,.8); stroke-width: 0.6; }
     .map-container.geo-map g.region.deployIllegal { opacity: .4; }
@@ -1860,7 +1906,8 @@ function startGame(mapData) {
     tiny: !!r.tiny,
     isGeo: !!r.isGeo,
     neighbors: r.neighbors.slice(),
-    owner: 0, troops: 0, isBase: false, defendLevel: 0, defendFactor: 1
+    owner: 0, troops: 0, isBase: false, defendLevel: 0, defendFactor: 1,
+    auraFactor: 1, auraBonus: 0
   }));
   // Sync mapType from incoming map data (important for online guest).
   mapType = (regions[0] && regions[0].isGeo) ? 'geo' : 'matrix';
@@ -1981,6 +2028,7 @@ function buildMatrixMapDom(container) {
     if (r.tiny) div.classList.add('tiny');
     div.innerHTML = '<div class="region-label">' + (r.id + 1) + '</div>' +
                     '<div class="region-troops"></div>' +
+                    '<div class="region-aura"></div>' +
                     '<div class="region-base">🛡️</div>';
     div.onclick = () => onRegionClick(r.id);
     container.appendChild(div);
@@ -2002,6 +2050,15 @@ function buildGeoMapDom(container) {
     const poly = document.createElementNS(NS, 'polygon');
     poly.setAttribute('points', r.poly.map(p => p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' '));
     g.appendChild(poly);
+
+    // Aura ring: the same outline pulled 14% toward the centroid so it reads as
+    // an inner band and never covers the base stroke on the border itself.
+    const auraRing = document.createElementNS(NS, 'polygon');
+    auraRing.setAttribute('class', 'aura-ring');
+    auraRing.setAttribute('points', r.poly.map(pt =>
+      (r.cx + (pt[0] - r.cx) * 0.86).toFixed(3) + ',' +
+      (r.cy + (pt[1] - r.cy) * 0.86).toFixed(3)).join(' '));
+    g.appendChild(auraRing);
 
     const troops = document.createElementNS(NS, 'text');
     troops.setAttribute('class', 'region-troops');
@@ -2029,6 +2086,12 @@ function buildGeoMapDom(container) {
       t.textContent = m.ch;
       g.appendChild(t);
     }
+
+    const auraTxt = document.createElementNS(NS, 'text');
+    auraTxt.setAttribute('class', 'region-aura');
+    auraTxt.setAttribute('x', r.cx.toFixed(2));
+    auraTxt.setAttribute('y', (r.cy + (r.tiny ? 4.2 : 6.4)).toFixed(2));
+    g.appendChild(auraTxt);
 
     g.addEventListener('click', () => onRegionClick(r.id));
     svg.appendChild(g);
@@ -2675,10 +2738,16 @@ function aoeDefendLevelAt(idx, state) {
    the one actually realised, so a reinforcement clipped by the quantum cap buys
    proportionally less protection. */
 const AOE_AURA_RING = { 1: [0.25], 2: [0.25, 0.10] };
+/* Ceiling on the stacked aura bonus. Two Defends is the most a day can buy and
+   a territory sitting in the inner ring of both reaches exactly this. */
+const AOE_AURA_BONUS_CAP = 0.5;
 
 /* A defend lends nearby own territories a flat power boost for this round only.
    No troops appear and it expires with the round. Rings are walked
-   geographically; only own territories receive it, and the best boost wins. */
+   geographically and only own territories receive it. Boosts from separate
+   defends add up, so two defends placed side by side each stand inside the
+   other's ring and both come out stronger than either alone. Within one defend
+   a territory is reached once, so its own rings never compound. */
 function applyDefendAura(player, idx, level) {
   const rings = AOE_AURA_RING[level] || AOE_AURA_RING[1];
   const seen = new Set([idx]);
@@ -2693,23 +2762,43 @@ function applyDefendAura(player, idx, level) {
         seen.add(n); next.push(n);
         const rn = regions[n];
         if (!rn || rn.owner !== player) continue;
-        rn.auraFactor = Math.max(rn.auraFactor || 1, 1 + rings[ring]);
+        rn.auraBonus = Math.min(AOE_AURA_BONUS_CAP, (rn.auraBonus || 0) + rings[ring]);
+        rn.auraFactor = 1 + rn.auraBonus;
       }
     }
     frontier = next;
   }
 }
-function aoeAuraFactorAt(idx, state) {
+function aoeAuraBonusAt(idx, state) {
   state = state || regions;
   const r = state[idx];
-  return (r && r.auraFactor > 1) ? r.auraFactor : 1;
+  if (!r) return 0;
+  if (typeof r.auraBonus === 'number') return Math.max(0, r.auraBonus);
+  return Math.max(0, (r.auraFactor || 1) - 1);
 }
+function aoeAuraFactorAt(idx, state) {
+  return 1 + aoeAuraBonusAt(idx, state);
+}
+/* Map classes for a stacked aura bonus: three tiers so a single outer ring, a
+   single inner ring, and overlapping rings are told apart at a glance. */
+function auraClassFor(bonus) {
+  if (!(bonus > 0.001)) return '';
+  if (bonus >= 0.35) return ' aura aura3';
+  if (bonus >= 0.24) return ' aura aura2';
+  return ' aura aura1';
+}
+function setAuraBadge(el, bonus) {
+  const t = el.querySelector('.region-aura');
+  if (t) t.textContent = (bonus > 0.001) ? ('+' + Math.round(bonus * 100) + '%') : '';
+}
+/* A territory's own reinforcement and the auras reaching it are separate
+   sources, so the aura adds on top of the factor the defend itself bought. */
 function aoeDefendPowerFactorAt(idx, state) {
   state = state || regions;
   const r = state[idx];
   if (!r) return 1;
   const own = (typeof r.defendFactor === 'number' && r.defendFactor > 1) ? r.defendFactor : 1;
-  return Math.max(own, aoeAuraFactorAt(idx, state));
+  return own + aoeAuraBonusAt(idx, state);
 }
 function aoeAttackPowerFactor(isDouble) {
   return isDouble ? AOE_DOUBLE_ATTACK_MULT : 1;
@@ -2871,7 +2960,7 @@ function effectiveDefense(idx) { return effectiveDefenseForState(idx, regions); 
 /* Set `player`'s bases to exactly `bases` on the live regions[]. */
 function applyBasesForPlayer(player, bases) {
   if (!Array.isArray(bases)) return;
-  for (const r of regions) if (r.owner === player) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
+  for (const r of regions) if (r.owner === player) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; r.auraBonus = 0; }
   for (const b of bases) if (regions[b] && regions[b].owner === player) {
     regions[b].isBase = true;
     regions[b].defendLevel = Math.max(1, regions[b].defendLevel || 0);
@@ -2879,7 +2968,7 @@ function applyBasesForPlayer(player, bases) {
 }
 /* A base only survives on an owned territory; clear stale bases after combat. */
 function sanitizeBases() {
-  for (const r of regions) if (r.owner !== 1 && r.owner !== 2) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
+  for (const r of regions) if (r.owner !== 1 && r.owner !== 2) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; r.auraBonus = 0; }
 }
 
 /* Placement legality for `player` during deployment.
@@ -3067,6 +3156,7 @@ function resolveSingleAttack(plan, post, rng, opts) {
                    groupTroops: G.reduce((m, g) => { m[g] = post[g].troops; return m; }, {}),
                    rawDefense: def.troops, isDouble, defendLevel: defLevel,
                    defendFactor: defFactor,
+                   auraBonus: aoeAuraBonusAt(D, post),
                    attackFactor: aoeAttackPowerFactor(isDouble),
                    facedDefense,
                    clash: defLevel > 0, outcome: null };
@@ -3743,20 +3833,40 @@ function captureBoardSnapshot(label, plans) {
   const snap = {
     label: label || ('Round ' + aoeRound),
     round: aoeRound,
-    state: regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase, defendLevel: r.defendLevel || 0 })),
+    state: regions.map(r => ({ owner: r.owner, troops: r.troops, isBase: r.isBase,
+                               defendLevel: r.defendLevel || 0,
+                               defendFactor: r.defendFactor || 1,
+                               auraBonus: r.auraBonus || 0 })),
     priorPlans: plans || null,
     deploy: { p1: typeof p1Remaining === 'number' ? p1Remaining : null,
               p2: typeof p2Remaining === 'number' ? p2Remaining : null }
   };
   boardHistory.push(snap);
   renderHistoryNav();
+  return snap;
+}
+
+/* Defends and their auras are applied during resolution, after the plans
+   snapshot is taken, so the snapshot is stamped with them once the round has
+   run. Ownership stays as the snapshot recorded it, since that is who held the
+   ground when the shields went up. */
+function stampSnapshotDefenses(snap) {
+  if (!snap || !Array.isArray(snap.state)) return;
+  for (let i = 0; i < snap.state.length; i++) {
+    const r = regions[i], s = snap.state[i];
+    if (!r || !s) continue;
+    s.isBase = !!r.isBase;
+    s.defendLevel = r.defendLevel || 0;
+    s.defendFactor = r.defendFactor || 1;
+    s.auraBonus = r.auraBonus || 0;
+  }
 }
 
 function aoeStartRound() {
   aoeRound++;
   // Bases are temporary: a Defend fortifies its territory for that round's
   // resolution only. Every round starts with a clean map.
-  for (const r of regions) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; }
+  for (const r of regions) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; r.auraBonus = 0; }
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
   aoePassFlags = { 1: false, 2: false };
@@ -4196,7 +4306,7 @@ function aoePerformResolutionWithSeed(rngSeed) {
     const thisRound = aoeRound;
     // Snapshot the pre-resolution state with plans attached — this is the
     // "attack pattern" view in history (board still untouched, arrows drawn).
-    captureBoardSnapshot('Plans for ' + aoeRoundLabel(thisRound), { 1: planA, 2: planB });
+    const plansSnap = captureBoardSnapshot('Plans for ' + aoeRoundLabel(thisRound), { 1: planA, 2: planB });
     const preSnap = regions.map(r => r.troops);
     const preOwners = regions.map(r => r.owner);
     aoePendingRoundSummary = { round: thisRound, preOwners };
@@ -4204,6 +4314,7 @@ function aoePerformResolutionWithSeed(rngSeed) {
     const opts = { canDefer: aoeAttritionDeferral(planA, planB), slot: 0 };
     const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed, opts)
                         : resolveAoeRound(planA, planB, rngSeed, opts);
+    stampSnapshotDefenses(plansSnap);
     flashOutcomes(res);
     setTimeout(() => {
       clearIntentArrows();
@@ -5095,6 +5206,9 @@ function applyHistoryView() {
     else if (s.owner === 2) cls += ' p2';
     else cls += ' empty unoccupied';
     if (s.isBase && (s.owner === 1 || s.owner === 2)) cls += (s.defendLevel >= 2) ? ' base base2' : ' base';
+    const snapAura = (s.owner === 1 || s.owner === 2) ? Math.max(0, s.auraBonus || 0) : 0;
+    cls += auraClassFor(snapAura);
+    setAuraBadge(el, snapAura);
     el.setAttribute('class', cls);
     const tEl = el.querySelector('.region-troops');
     if (s.owner <= 0) tEl.textContent = '';
@@ -5261,6 +5375,8 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       const lvl = plan.double ? 2 : 1;
       const pool = (typeof plan.regenApplied === 'number') ? plan.regenApplied : aoeDefendRegenPreview(p, plan.bases, lvl);
       const baseTxt = plan.bases.map(b => regionRef(b)).join(', ');
+      // Read live: a second Defend later in the same day can brace this one.
+      const auraGot = plan.bases.length ? aoeAuraBonusAt(plan.bases[0]) : 0;
       return [{
         kind: cls,
         html: '<strong>' + playerName(p) + '</strong> ' + (plan.double ? '🛡🛡 double defended ' : '🛡 defended ') + baseTxt +
@@ -5268,7 +5384,14 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
                         : ' (fortified)') +
               (plan.defendFactorApplied > 1
                 ? ', raising its power ' + plan.defendFactorApplied.toFixed(2) + 'x and scaling incoming attacks down by the same'
-                : '') + ', with neighbours braced at +' + Math.round(AOE_AURA_RING[lvl][0] * 100) + '% this round.'
+                : '') +
+              (auraGot > 0.001
+                ? ', itself standing in +' + Math.round(auraGot * 100) + '% of aura for a combined ' +
+                  ((plan.defendFactorApplied || 1) + auraGot).toFixed(2) + 'x'
+                : '') +
+              ', with neighbours braced at +' + Math.round(AOE_AURA_RING[lvl][0] * 100) + '%' +
+              (lvl === 2 ? ' and the ring beyond at +' + Math.round(AOE_AURA_RING[2][1] * 100) + '%' : '') +
+              ' this round, stacking with any other defend reaching them.'
       }];
     }
     if (plan.type === 'claim') {
@@ -5375,14 +5498,18 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       const defTag = ' <span class="neutral">(' + playerName(defOwner) + '\'s)</span>';
       // Trailing note rather than an inline aside, so the outcome clause reads cleanly.
       const auraNote = (!attackLog.defendLevel && attackLog.defendFactor > 1)
-        ? ' <span style="color:#fbbf24;">Target was braced by a nearby \U0001f6e1 defend: power x' +
+        ? ' <span style="color:#fbbf24;">Target was braced by nearby 🛡 defends: +' +
+          Math.round((attackLog.defendFactor - 1) * 100) + '% aura, power x' +
           attackLog.defendFactor.toFixed(2) + '.</span>'
+        : '';
+      const auraShare = (attackLog.auraBonus > 0.001)
+        ? ', including +' + Math.round(attackLog.auraBonus * 100) + '% from a nearby defend'
         : '';
       const defNote = attackLog.defendLevel
         ? ' <span style="color:#fbbf24;">Target was ' +
           (attackLog.defendLevel === 2 ? '🛡🛡 double defended' : '🛡 defended') +
           ': reinforced to ' + attackLog.defense +
-          (attackLog.defendFactor > 1 ? ' (power x' + attackLog.defendFactor.toFixed(2) +
+          (attackLog.defendFactor > 1 ? ' (power x' + attackLog.defendFactor.toFixed(2) + auraShare +
             ', blunting the strike by the same)' : '') + '.</span>'
         : '';
       const defTag2 = '';
@@ -5607,6 +5734,9 @@ function render() {
     if ((r.owner === 1 || r.owner === 2) && r.isBase && !editingBases) {
       cls += (r.defendLevel >= 2) ? ' base base2' : ' base';
     }
+    const liveAura = (r.owner === 1 || r.owner === 2) ? aoeAuraBonusAt(idx) : 0;
+    cls += auraClassFor(liveAura);
+    setAuraBadge(el, liveAura);
     if (validTargets && validTargets.has(idx)) { cls += ' target'; clickable = true; }
     if (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn() && validTargets) {
       const opp = otherPlayer(currentPlayer);
@@ -7005,7 +7135,7 @@ function renderRulesCard() {
         '<li>Each Defend action fortifies exactly ONE border territory. A second Defend the same day costs 2 AP; a Double Defend costs all 3 and fortifies one territory twice as hard.</li>' +
         '<li><strong>Reinforcement:</strong> Defend adds 50% of the territory\'s current troops, Double Defend adds 150%, capped at ' + assignQuantum + ' and ' + Math.round(assignQuantum * 1.5) + ' respectively. So under a Double Defend 10 troops become 25 and 6 become 15. It lands BEFORE attacks resolve, so a defended territory is fought at its reinforced strength.</li>' +
         '<li><strong>Blunting:</strong> a territory scales an incoming attack down by the same factor it scaled itself up, so a Defend at 1.5x lands attacks at 1/1.5 and a Double Defend at 2.5x lands them at 1/2.5.</li>' +
-        '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. Overlapping auras take the best boost rather than stacking.</li>' +
+        '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. <strong>Overlapping auras stack:</strong> the bonuses from separate Defends add up, capped at +50%, so two Defends placed side by side each sit in the other\'s ring and both gain +25% on top of their own reinforcement. A territory\'s own reinforcement and the aura reaching it add too, so a Defend at 1.5x standing in a +25% ring fights at 1.75x. Auras are drawn on the map as a thin inner ring with the percentage, and the history arrows replay them for past rounds.</li>' +
         '<li><strong>Fortress:</strong> a double-defended territory can never be converted, only razed. It is the answer to a double attack.</li>' +
         '<li><strong>An attack on a defended territory becomes a clash:</strong> the attack was declared against the pre-round count, so the reinforcement can turn a sure thing into a bloody draw. The same cuts the other way: a target that spent troops on a claim is fought at what it has left.</li>' +
         '<li>Fortification is temporary: it applies to that round\'s resolution only, and every round starts with a clean map.</li>' +
