@@ -919,7 +919,7 @@
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> - two phases: Assign (alternate fixed placements, Go-style surround captures, pie rule) then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
+        <strong>Age of Empires</strong> - Assign (alternate fixed placements, Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
       </div>
     </div>
 
@@ -1204,6 +1204,11 @@ let assignQuantum = 10;       // resolved troops-per-placement for this game
 let assignCount = 0;          // total placements made so far (both players)
 let assignSwapDecided = false;// pie rule: P2's swap decision made (or N/A)
 let assignFirstIdx = -1;      // region of the opening placement (pie rule target)
+/* Refund groups owed to each player for territories wiped by a surround, each
+   worth half the troops that were on the lost territory. Placed after the
+   assign phase, at most one group per territory. */
+let assignRefunds = { 1: [], 2: [] };
+let refundPlaced = new Set(); // regions that already received a refund group
 
 let regions = [];
 let gridSize = 8;
@@ -1919,6 +1924,8 @@ function startGame(mapData) {
   assignQuantum = resolvedAssignQuantum();
   assignCount = 0;
   assignFirstIdx = -1;
+  assignRefunds = { 1: [], 2: [] };
+  refundPlaced = new Set();
   // Pie rule only applies to the AoE assign phase with manual placement.
   assignSwapDecided = (gameMode !== 'aoe' || preAllocRandom);
   aoeResetAll();
@@ -2113,13 +2120,28 @@ function updateDeployBar() {
       playerLabel(1) + ' opened with ' + amt + ' troops on #' + (assignFirstIdx + 1) +
       '. Take that placement as yours, or place your own.';
   }
-  if (phase !== 'deploy' || !canIControlCurrentTurn()) { bar.classList.add('hidden'); return; }
+  if (phase !== 'deploy' && phase !== 'refund') { bar.classList.add('hidden'); return; }
+  if (!canIControlCurrentTurn()) { bar.classList.add('hidden'); return; }
   bar.classList.remove('hidden');
   const remaining = getCurrentRemaining();
   const range = document.getElementById('deployRange');
   const allBtn = document.getElementById('deployAllBtn');
   const oneBtn = document.getElementById('deployOneBtn');
   const ql = document.getElementById('deployQuotaLabel');
+  const randBtn = document.getElementById('randomAllocBtn');
+  if (randBtn) randBtn.style.display = (phase === 'refund') ? 'none' : '';
+  if (phase === 'refund') {
+    const groups = refundGroupsFor(currentPlayer);
+    range.style.display = 'none';
+    allBtn.style.display = 'none';
+    oneBtn.style.display = 'none';
+    document.getElementById('deployAmount').textContent = groups[0] || 0;
+    if (ql) {
+      ql.textContent = 'refund group' + (groups.length === 1 ? '' : 's') + ': ' + groups.length +
+                       ' left (one per territory)';
+    }
+    return;
+  }
   if (gameMode === 'aoe') {
     // Assign phase: fixed quantum, no slider.
     const amt = Math.min(assignQuantum, remaining);
@@ -2269,12 +2291,19 @@ function assignCaptureScan(placer, placedIdx, owners, troops) {
 }
 
 /* Applies surround captures for a live placement. Wiped territories revert to
-   unclaimed (owner 0) and their troops are lost. Returns the wiped list. */
+   unclaimed (owner 0) and their troops are lost. The player who lost each one
+   is owed a refund group worth half its garrison, spendable once the assign
+   phase ends. Returns the wiped list. */
 function applyAssignCaptures(placer, placedIdx) {
   const owners = regions.map(r => r.owner);
   const troops = regions.map(r => r.troops);
   const wiped = assignCaptureScan(placer, placedIdx, owners, troops);
-  for (const idx of wiped) { regions[idx].owner = 0; regions[idx].troops = 0; }
+  const victim = otherPlayer(placer);
+  for (const idx of wiped) {
+    const refund = Math.floor(regions[idx].troops / 2);
+    if (refund > 0) assignRefunds[victim].push(refund);
+    regions[idx].owner = 0; regions[idx].troops = 0;
+  }
   return wiped;
 }
 
@@ -2283,15 +2312,21 @@ function postDeployBookkeeping(idx, player) {
   if (gameMode !== 'aoe') return;
   assignCount++;
   if (assignCount === 1) assignFirstIdx = idx;
+  const before = assignRefunds[otherPlayer(player)].length;
   const wiped = applyAssignCaptures(player, idx);
   if (wiped.length > 0) {
     const lost = wiped.map(i => regionRef(i)).join(', ');
+    const gained = assignRefunds[otherPlayer(player)].slice(before);
+    const refundNote = gained.length > 0
+      ? ' <em>' + playerName(otherPlayer(player)) + ' is owed ' + gained.length +
+        ' refund group' + (gained.length === 1 ? '' : 's') + ' (' + gained.join(' + ') + ' troops).</em>'
+      : '';
     appendLogEntry({
       title: null,
       lines: [{
         kind: classOfPlayer(player),
         html: '<strong>' + playerName(player) + '</strong> surrounded and wiped ' + lost +
-              ' (placement at ' + regionRef(idx) + ').'
+              ' (placement at ' + regionRef(idx) + ').' + refundNote
       }]
     });
     flashMessage(playerLabel(player) + ' surrounded and wiped ' + wiped.length +
@@ -2383,6 +2418,19 @@ function onRegionClick(idx) {
     return;
   }
 
+  if (phase === 'refund') {
+    if (!canIControlCurrentTurn()) { flashMessage(mode === 'online' ? "Opponent's turn" : "Other player's turn", 'warn'); return; }
+    if (refundGroupsFor(currentPlayer).length === 0) return;
+    if (region.owner !== currentPlayer) { flashMessage('Refund groups go on your own territories', 'warn'); return; }
+    if (refundPlaced.has(idx)) { flashMessage('That territory already took a refund group', 'warn'); return; }
+    applyRefund(idx, currentPlayer);
+    if (mode === 'online' && conn && conn.open) {
+      conn.send({ type: 'refund', idx, player: currentPlayer });
+    }
+    afterRefundMove();
+    return;
+  }
+
   if (phase === 'attack') {
     // Classic
     if (!canIControlCurrentTurn()) { flashMessage(mode === 'online' ? "Opponent's turn" : "Other player's turn", 'warn'); return; }
@@ -2405,20 +2453,104 @@ function onRegionClick(idx) {
   }
 }
 
+/* ─── AoE Refund phase: spending what the surrounds gave back ───
+   A player whose territory was wiped during assign holds one refund group per
+   loss, each worth half that territory's garrison. Groups go onto territories
+   the player still owns, one group per territory, so the payout concentrates
+   a few stacks instead of restoring the lost ground. Groups a player cannot
+   place (fewer surviving territories than groups) are forfeit. */
+function refundGroupsFor(player) { return assignRefunds[player] || []; }
+function refundTotalPending() {
+  return refundGroupsFor(1).length + refundGroupsFor(2).length;
+}
+function legalRefundTargets(player) {
+  const set = new Set();
+  if (refundGroupsFor(player).length === 0) return set;
+  for (const r of regions) {
+    if (r.owner === player && !refundPlaced.has(r.id)) set.add(r.id);
+  }
+  return set;
+}
+function refundPlayerCanPlace(player) { return legalRefundTargets(player).size > 0; }
+
+/* Drops every group a player has no room for and says so in the log. */
+function forfeitRefunds(player) {
+  const groups = refundGroupsFor(player);
+  if (groups.length === 0) return;
+  const total = groups.reduce((a, b) => a + b, 0);
+  assignRefunds[player] = [];
+  appendLogEntry({
+    title: null,
+    lines: [{ kind: classOfPlayer(player),
+              html: '<strong>' + playerName(player) + '</strong> has no territory left to hold ' +
+                    groups.length + ' refund group' + (groups.length === 1 ? '' : 's') +
+                    '; ' + total + ' troop' + (total === 1 ? '' : 's') + ' forfeit.' }]
+  });
+}
+
+function startRefundPhase() {
+  phase = 'refund';
+  refundPlaced = new Set();
+  for (const p of [1, 2]) if (!refundPlayerCanPlace(p)) forfeitRefunds(p);
+  if (refundTotalPending() === 0) { startAoeBattle(); return; }
+  currentPlayer = refundGroupsFor(firstPlayer).length > 0 ? firstPlayer : otherPlayer(firstPlayer);
+  appendLogEntry({
+    title: 'Refund placement',
+    lines: [{ kind: 'system',
+              html: 'Territories lost to a surround pay back half their garrison. ' +
+                    'Each group goes onto a territory you still hold, one group per territory.' }]
+  });
+  flashMessage('Assign phase done. Place your refund groups.', 'good');
+  updateDeployBar(); render();
+  maybeTriggerCpuTurn();
+}
+
+/* Places the next group owed to `player` onto `idx`. */
+function applyRefund(idx, player) {
+  const groups = refundGroupsFor(player);
+  if (groups.length === 0) return 0;
+  const amt = groups.shift();
+  const r = regions[idx];
+  r.troops += amt;
+  refundPlaced.add(idx);
+  lastMoveRegion = idx;
+  appendLogEntry({
+    title: null,
+    lines: [{ kind: classOfPlayer(player),
+              html: '<strong>' + playerName(player) + '</strong> placed a refund group of ' + amt +
+                    ' on ' + regionRef(idx) + ' (now ' + r.troops + ' troops).' }]
+  });
+  return amt;
+}
+
+/* Hands the refund turn on, forfeiting what neither side can place. */
+function afterRefundMove() {
+  for (const p of [1, 2]) if (!refundPlayerCanPlace(p)) forfeitRefunds(p);
+  if (refundTotalPending() === 0) { startAoeBattle(); return; }
+  const next = otherPlayer(currentPlayer);
+  if (refundGroupsFor(next).length > 0) currentPlayer = next;
+  updateDeployBar(); render();
+  maybeTriggerCpuTurn();
+}
+
+function startAoeBattle() {
+  phase = 'battle';
+  aoeRound = 0;
+  const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
+  if (turnMode === 'fixed') {
+    aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
+  } else {
+    aoeMaxRounds = Math.floor(3 * owned / 4);
+  }
+  flashMessage('Battle begins!', 'good');
+  updateDeployBar(); render();
+  aoeStartRound();
+}
+
 /* Transition out of deployment into the battle/attack phase. */
 function finishDeploy() {
   if (gameMode === 'aoe') {
-    phase = 'battle';
-    aoeRound = 0;
-    { const owned = regions.filter(r => r.owner === 1 || r.owner === 2).length;
-    if (turnMode === 'fixed') {
-      aoeMaxRounds = fixedTurnCount > 0 ? fixedTurnCount : Math.floor(regions.length / 2);
-    } else {
-      aoeMaxRounds = Math.floor(3 * owned / 4);
-    }}
-    flashMessage('Assign phase done. Battle begins!', 'good');
-    render();
-    aoeStartRound();
+    startRefundPhase();
   } else {
     phase = 'attack';
     currentPlayer = firstPlayer;
@@ -5624,6 +5756,8 @@ function render() {
   const validTargets = (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn())
     ? new Set(validTargetsForPlayer(currentPlayer)) : null;
 
+  const refundLegal = (phase === 'refund' && canIControlCurrentTurn())
+    ? legalRefundTargets(currentPlayer) : null;
   const deployLegal = (phase === 'deploy' && canIControlCurrentTurn())
     ? legalDeployInfo(currentPlayer).set : null;
 
@@ -5728,6 +5862,10 @@ function render() {
       if (deployLegal && deployLegal.has(idx)) { cls += ' deployLegal'; clickable = true; }
       else cls += ' deployIllegal';
     }
+    if (refundLegal && r.owner === currentPlayer) {
+      if (refundLegal.has(idx)) { cls += ' deployLegal'; clickable = true; }
+      else cls += ' deployIllegal';
+    }
     // Committed base badge — suppressed while editing bases in adjust mode so
     // the planned (baseSel) selection previews instead.
     const editingBases = aoeUiVisible && aoeWorking.action === 'defend' && aoeWorking.defendBases;
@@ -5813,8 +5951,16 @@ function render() {
   document.getElementById('p1Troops').textContent = p1Tr;
   document.getElementById('p2Regions').textContent = p2Regs;
   document.getElementById('p2Troops').textContent = p2Tr;
-  document.getElementById('p1Remaining').textContent = (phase === 'deploy') ? p1Remaining : '–';
-  document.getElementById('p2Remaining').textContent = (phase === 'deploy') ? p2Remaining : '–';
+  const remText = (p) => {
+    if (phase === 'deploy') return p === 1 ? p1Remaining : p2Remaining;
+    if (phase === 'refund') {
+      const g = refundGroupsFor(p);
+      return g.length > 0 ? g.reduce((a, b) => a + b, 0) + ' (' + g.length + ')' : '–';
+    }
+    return '–';
+  };
+  document.getElementById('p1Remaining').textContent = remText(1);
+  document.getElementById('p2Remaining').textContent = remText(2);
 
   document.getElementById('p1Card').classList.toggle('active',
     (phase === 'battle' && aoePlanningPlayer === 1 && !aoeRevealing) ||
@@ -5862,12 +6008,13 @@ function render() {
                       : (mode === 'cpu')   ? (currentPlayer === myPlayer ? 'Your turn' : "CPU's turn")
                                             : (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
       pl.textContent = 'Phase 2 · Aggression';
-    } else if (phase === 'deploy') {
+    } else if (phase === 'deploy' || phase === 'refund') {
       ti.className = 'turn-indicator ' + (currentPlayer === 1 ? 'p1' : 'p2');
       ti.textContent = (mode === 'local') ? "Player " + currentPlayer + "'s turn"
                       : (mode === 'cpu')   ? (currentPlayer === myPlayer ? 'Your turn' : "CPU's turn")
                                             : (currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn");
-      pl.textContent = gameMode === 'aoe' ? 'Phase 1 · Assign' : 'Phase 1 · Deployment';
+      pl.textContent = (phase === 'refund') ? 'Phase 1b · Refund'
+                     : gameMode === 'aoe'   ? 'Phase 1 · Assign' : 'Phase 1 · Deployment';
     }
   }
 
@@ -6045,9 +6192,9 @@ function render() {
     submitBar.classList.add('hidden');
   }
 
-  // Hide deploy bar when not deploying
+  // Placement bar shows only while a player is placing troops.
   const dep = document.getElementById('deployBar');
-  if (phase !== 'deploy' || !canIControlCurrentTurn()) dep.classList.add('hidden');
+  if ((phase !== 'deploy' && phase !== 'refund') || !canIControlCurrentTurn()) dep.classList.add('hidden');
   else dep.classList.remove('hidden');
 
   // Arrows overlay only during reveal
@@ -6088,7 +6235,39 @@ function cpuTakeTurn() {
   if (mode !== 'cpu' || phase === 'over') return;
   if (currentPlayer === myPlayer) return;
   if (phase === 'deploy') cpuDeploy();
+  else if (phase === 'refund') cpuRefund();
   else if (phase === 'attack') cpuClassicAttack();
+}
+
+/* Refund groups go where they buy the most: a frontline territory that can
+   threaten an enemy stack, with the existing garrison as the tie-break so the
+   payout concentrates. Easy difficulty places at random. */
+function cpuRefund() {
+  const me = currentPlayer;
+  const targets = [...legalRefundTargets(me)];
+  if (targets.length === 0) { afterRefundMove(); return; }
+  let pick;
+  if (cpuDifficulty === 'easy') {
+    pick = targets[Math.floor(Math.random() * targets.length)];
+  } else {
+    const opp = otherPlayer(me);
+    const amt = refundGroupsFor(me)[0] || 0;
+    let best = -Infinity;
+    for (const idx of targets) {
+      const r = regions[idx];
+      let enemyAdj = 0, beatable = 0;
+      for (const nid of r.neighbors) {
+        const nb = regions[nid];
+        if (!nb || nb.owner !== opp) continue;
+        enemyAdj++;
+        if (r.troops + amt > nb.troops) beatable++;
+      }
+      const score = beatable * 12 + enemyAdj * 4 + r.troops * 0.5;
+      if (score > best) { best = score; pick = idx; }
+    }
+  }
+  applyRefund(pick, me);
+  afterRefundMove();
 }
 
 function cpuDeploy() {
@@ -6903,6 +7082,14 @@ function handlePeerData(d) {
         afterDeployMove();
       }
       break;
+    case 'refund':
+      if (phase === 'refund' && typeof d.idx === 'number' && regions[d.idx] &&
+          regions[d.idx].owner === d.player && !refundPlaced.has(d.idx) &&
+          refundGroupsFor(d.player).length > 0) {
+        applyRefund(d.idx, d.player);
+        afterRefundMove();
+      }
+      break;
     case 'assign-swap':
       if (phase === 'deploy' && gameMode === 'aoe') assignTakeSwap(true);
       break;
@@ -7070,6 +7257,15 @@ function renderRulesCard() {
       '<li><strong>Surround capture (Go-style):</strong> your placement wipes an adjacent enemy territory T if your troops on T\'s neighbors exceed T\'s troops plus the troops on T\'s friendly neighbors. Wiped territories lose their troops and revert to unclaimed, so they can be re-assigned.</li>' +
       '<li>Captures cascade: a wiped territory no longer supports its neighbors, which are re-checked.</li>' +
       '<li>Captures only trigger from the placing player\'s move; you must commit a placement to spring the trap.</li>' +
+    '</ul>' +
+    '<h3>Phase 1b · Refund</h3>' +
+    '<ul>' +
+      '<li>Every territory you lose to a surround pays back a <strong>refund group</strong> worth half its garrison, held until the assign phase ends.</li>' +
+      '<li>Players then alternate placing one group at a time onto a territory they still hold. <strong>One group per territory</strong>, so the payout spreads across separate stacks instead of piling onto one.</li>' +
+      '<li>A territory that takes a group goes from ' + resolvedAssignQuantum() + ' to ' +
+        Math.floor(resolvedAssignQuantum() * 3 / 2) + ' troops: dense enough to break one ordinary stack in battle, not enough to run over the board.</li>' +
+      '<li>You stay down on territory count; the ground you lost stays on the map as unclaimed and either side can Claim it during battle.</li>' +
+      '<li>Groups you have no room for (fewer surviving territories than groups) are forfeit.</li>' +
     '</ul>';
   const mapBlock =
     '<h3>Map Types</h3>' +
