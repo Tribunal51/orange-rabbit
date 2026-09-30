@@ -914,12 +914,12 @@
     <div class="setupSection">
       <div class="setupLabel">Game Mode</div>
       <div id="gameModeToggle" class="modeToggle">
-        <button class="modeBtn selected" onclick="setGameMode('classic')">Classic</button>
-        <button class="modeBtn" onclick="setGameMode('aoe')">Age of Empires</button>
+        <button class="modeBtn" onclick="setGameMode('classic')">Classic</button>
+        <button class="modeBtn selected" onclick="setGameMode('aoe')">Age of Empires</button>
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> - Assign (alternate fixed placements, Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
+        <strong>Age of Empires</strong> - Assign (alternate fixed placements, optional Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
       </div>
     </div>
 
@@ -967,8 +967,8 @@
     <div class="setupSection">
       <div class="setupLabel">Map Type</div>
       <div id="mapTypeToggle" class="modeToggle">
-        <button class="modeBtn selected" onclick="setMapType('matrix')">Matrix</button>
-        <button class="modeBtn" onclick="setMapType('geo')">Geographic</button>
+        <button class="modeBtn" onclick="setMapType('matrix')">Matrix</button>
+        <button class="modeBtn selected" onclick="setMapType('geo')">Geographic</button>
       </div>
     </div>
 
@@ -982,7 +982,7 @@
         <input type="number" id="regionsCustom" class="numInput" min="4" max="50" value="20">
         <span class="helpText" style="margin-top:0;">4 – 50 regions</span>
       </div>
-      <div id="regionsAutoHint" class="helpText">Auto: ~<span id="autoRegionsPreview">20</span> regions for current troop count</div>
+      <div id="regionsAutoHint" class="helpText">Auto: ~<span id="autoRegionsPreview">35</span> regions <span id="autoRegionsBasis">(3.5 × troops per placement)</span></div>
     </div>
 
     <div class="setupSection" id="fogSection">
@@ -994,17 +994,26 @@
       <div class="helpText">When on, you only see opponent territories that touch your own. Otherwise the whole map is visible.</div>
     </div>
 
-    <div class="setupSection hidden" id="assignQuantumSection">
+    <div class="setupSection" id="assignQuantumSection">
       <div class="setupLabel">Troops per Placement (Age of Empires only)</div>
       <div class="numRow">
-        <input type="number" id="assignQuantumInput" class="numInput" min="0" max="999" value="0"
+        <input type="number" id="assignQuantumInput" class="numInput" min="0" max="999" value="10"
           oninput="onAssignQuantumInput()">
         <span class="helpText" style="margin-top:0;">0 = auto (<span id="assignQuantumPreview">10</span>)</span>
       </div>
       <div class="helpText">Assign phase: players alternate placing this many troops per turn onto an empty region. Auto = total troops / 10.</div>
     </div>
 
-    <div class="setupSection" id="actionsPerDaySection" style="display:none;">
+    <div class="setupSection" id="goCaptureSection">
+      <div class="setupLabel">Go (Age of Empires only)</div>
+      <div id="goCaptureToggle" class="modeToggle">
+        <button class="modeBtn" onclick="setGoCapture(true)">Enabled</button>
+        <button class="modeBtn selected" onclick="setGoCapture(false)">Disabled</button>
+      </div>
+      <div class="helpText">Enabled: assign-phase placements can surround-capture enemy territories. Disabled: no captures, place anywhere empty.</div>
+    </div>
+
+    <div class="setupSection" id="actionsPerDaySection">
       <div class="setupLabel">Actions per Day (Age of Empires only)</div>
       <div id="actionsPerDayToggle" class="modeToggle">
         <button class="modeBtn" onclick="setActionsPerDay(1)">1 Action</button>
@@ -1013,7 +1022,7 @@
       <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. A 2nd attack or 2nd defend costs 2 AP, and a double attack or double defend costs all 3. Legal days: attack/attack, defend/defend, attack/defend/claim, attack/claim/claim, defend/claim/claim, claim/claim/claim, double attack, double defend. Nights stay one Adjust.</div>
     </div>
 
-    <div class="setupSection" id="turnModeSection" style="display:none;">
+    <div class="setupSection" id="turnModeSection">
       <div class="setupLabel">Win Condition (Age of Empires only)</div>
       <div id="turnModeToggle" class="modeToggle">
         <button class="modeBtn selected" onclick="setTurnMode('dynamic')">Dynamic</button>
@@ -1188,16 +1197,17 @@ let mode = 'local';            // 'cpu' | 'local' | 'online'
 let cpuDifficulty = 'medium';
 let goFirstSelected = true;
 let totalTroops = 100;
-let mapType = 'matrix';
+let mapType = 'geo';
 let regionsMode = 'auto';
 let regionsCustomVal = 20;
-let gameMode = 'classic';      // 'classic' | 'aoe'
+let gameMode = 'aoe';          // 'classic' | 'aoe'
 let fogOfWar = false;
+let goCaptureEnabled = false; // AoE assign phase: surround captures and the suicide rule
 let turnMode = 'dynamic';     // 'fixed' | 'dynamic'
 let fixedTurnCount = 0;       // 0 = auto (regions/2), else user-specified
 let actionsPerDay = 3;        // AoE battle: actions a player composes per day round (1 or 3)
 let preAllocRandom = false;   // both players get random deployment, skip deploy phase
-let assignQuantumSetting = 0; // AoE assign phase: troops per placement, 0 = auto (ceil(total/10))
+let assignQuantumSetting = 10; // AoE assign phase: troops per placement, 0 = auto (ceil(total/10))
 
 /* AoE assign-phase runtime */
 let assignQuantum = 10;       // resolved troops-per-placement for this game
@@ -1290,13 +1300,25 @@ let peer = null, conn = null, isHost = false;
 let myPlayer = 0;
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
+const MIN_REGIONS = 4;
+const MAX_REGIONS = 50;
+const AOE_REGIONS_PER_QUANTUM = 3.5;
+
 function autoRegionsForTroops(troops) {
   const r = Math.round(troops / 5);
   return Math.max(6, Math.min(30, r));
 }
+function autoRegionsForQuantum(quantum) {
+  const r = Math.round(AOE_REGIONS_PER_QUANTUM * quantum);
+  return Math.max(MIN_REGIONS, Math.min(MAX_REGIONS, r));
+}
+function autoNumRegions() {
+  if (gameMode === 'aoe') return autoRegionsForQuantum(resolvedAssignQuantum());
+  return autoRegionsForTroops(totalTroops);
+}
 function effectiveNumRegions() {
-  if (regionsMode === 'auto') return autoRegionsForTroops(totalTroops);
-  return Math.max(4, Math.min(50, regionsCustomVal | 0));
+  if (regionsMode === 'auto') return autoNumRegions();
+  return Math.max(MIN_REGIONS, Math.min(MAX_REGIONS, regionsCustomVal | 0));
 }
 function playerLabel(p) {
   if (mode === 'local') return 'Player ' + p;
@@ -1334,8 +1356,10 @@ function setGameMode(g) {
   });
   document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
   document.getElementById('assignQuantumSection').classList.toggle('hidden', g !== 'aoe');
+  document.getElementById('goCaptureSection').classList.toggle('hidden', g !== 'aoe');
   document.getElementById('turnModeSection').style.display = (g === 'aoe') ? '' : 'none';
   document.getElementById('actionsPerDaySection').style.display = (g === 'aoe') ? '' : 'none';
+  updateAutoRegionsPreview();
 }
 
 function setActionsPerDay(n) {
@@ -1356,6 +1380,7 @@ function resolvedAssignQuantum() {
 function onAssignQuantumInput() {
   const v = parseInt(document.getElementById('assignQuantumInput').value, 10);
   if (Number.isFinite(v) && v >= 0) assignQuantumSetting = Math.min(999, v);
+  updateAutoRegionsPreview();
 }
 
 function setTurnMode(m) {
@@ -1448,8 +1473,18 @@ function setFog(on) {
   });
 }
 
+function setGoCapture(on) {
+  goCaptureEnabled = !!on;
+  document.querySelectorAll('#goCaptureToggle .modeBtn').forEach((b, i) => {
+    b.classList.toggle('selected', [true, false][i] === goCaptureEnabled);
+  });
+}
+
 function updateAutoRegionsPreview() {
-  document.getElementById('autoRegionsPreview').textContent = autoRegionsForTroops(totalTroops);
+  document.getElementById('autoRegionsPreview').textContent = autoNumRegions();
+  document.getElementById('autoRegionsBasis').textContent = gameMode === 'aoe'
+    ? '(3.5 × troops per placement)'
+    : 'for current troop count';
   document.getElementById('assignQuantumPreview').textContent = autoAssignQuantum(totalTroops);
 }
 
@@ -1948,7 +1983,7 @@ function startGame(mapData) {
     lines: [{
       kind: 'system',
       html: gameMode === 'aoe'
-        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + assignQuantum + ' troops/placement · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '')
+        ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + assignQuantum + ' troops/placement · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '') + (goCaptureEnabled ? '' : ' · Go off')
         : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
     }]
   });
@@ -2295,6 +2330,7 @@ function assignCaptureScan(placer, placedIdx, owners, troops) {
    is owed a refund group worth half its garrison, spendable once the assign
    phase ends. Returns the wiped list. */
 function applyAssignCaptures(placer, placedIdx) {
+  if (!goCaptureEnabled) return [];
   const owners = regions.map(r => r.owner);
   const troops = regions.map(r => r.troops);
   const wiped = assignCaptureScan(placer, placedIdx, owners, troops);
@@ -3113,7 +3149,7 @@ function sanitizeBases() {
 function legalDeployInfo(player) {
   const set = new Set();
   for (const r of regions) if (r.owner === 0) set.add(r.id);
-  if (gameMode !== 'aoe') return { tier: 0, set };
+  if (gameMode !== 'aoe' || !goCaptureEnabled) return { tier: 0, set };
   const remaining = player === 1 ? p1Remaining : p2Remaining;
   const amt = Math.min(assignQuantum, remaining);
   const opp = otherPlayer(player);
@@ -6304,7 +6340,7 @@ function cpuDeploy() {
       }
       let s = openAdj * 0.5 + ownAdj * 0.2 + (cpuDifficulty === 'hard' ? oppAdj * 1.2 : oppAdj * 0.4);
       s += (r.w * r.h / (gridSize * gridSize)) * 5; s += Math.random() * 0.2;
-      if (isAoe) {
+      if (isAoe && goCaptureEnabled) {
         // Reward placements that surround-capture enemy territory.
         const owners = regions.map(x => x.owner), troops = regions.map(x => x.troops);
         owners[r.id] = me; troops[r.id] += aoeAmt;
@@ -7029,7 +7065,7 @@ async function createRoom() {
         firstPlayer: 1,
         totalTroops, gameMode, fogOfWar,
         turnMode, fixedTurnCount, preAllocRandom, actionsPerDay,
-        assignQuantumSetting,
+        assignQuantumSetting, goCaptureEnabled,
         map: serializeMap(map)
       });
       startGame(map);
@@ -7069,6 +7105,7 @@ function handlePeerData(d) {
       if (typeof d.actionsPerDay === 'number') actionsPerDay = (d.actionsPerDay === 3) ? 3 : 1;
       if (typeof d.preAllocRandom === 'boolean') preAllocRandom = d.preAllocRandom;
       if (typeof d.assignQuantumSetting === 'number') assignQuantumSetting = d.assignQuantumSetting;
+      if (typeof d.goCaptureEnabled === 'boolean') goCaptureEnabled = d.goCaptureEnabled;
       if (d.map) {
         startGame(deserializeMap(d.map));
       }
@@ -7254,10 +7291,13 @@ function renderRulesCard() {
     '<ul>' +
       '<li>Players alternate placing a fixed stack of <strong>' + resolvedAssignQuantum() + ' troops</strong> onto an empty region, until both sides have placed all their troops.</li>' +
       '<li><strong>Pie rule:</strong> after Player 1\'s opening placement, Player 2 may either take that placement over as their own (Player 1 then places next) or place normally. This keeps the opening fair: an overly strong first placement just gets stolen.</li>' +
-      '<li><strong>Surround capture (Go-style):</strong> your placement wipes an adjacent enemy territory T if your troops on T\'s neighbors exceed T\'s troops plus the troops on T\'s friendly neighbors. Wiped territories lose their troops and revert to unclaimed, so they can be re-assigned.</li>' +
-      '<li>Captures cascade: a wiped territory no longer supports its neighbors, which are re-checked.</li>' +
-      '<li>Captures only trigger from the placing player\'s move; you must commit a placement to spring the trap.</li>' +
+      (goCaptureEnabled
+        ? '<li><strong>Surround capture (Go-style):</strong> your placement wipes an adjacent enemy territory T if your troops on T\'s neighbors exceed T\'s troops plus the troops on T\'s friendly neighbors. Wiped territories lose their troops and revert to unclaimed, so they can be re-assigned.</li>' +
+          '<li>Captures cascade: a wiped territory no longer supports its neighbors, which are re-checked.</li>' +
+          '<li>Captures only trigger from the placing player\'s move; you must commit a placement to spring the trap.</li>'
+        : '<li><strong>Go disabled:</strong> no surround captures. Place on any empty region.</li>') +
     '</ul>' +
+    (!goCaptureEnabled ? '' :
     '<h3>Phase 1b · Refund</h3>' +
     '<ul>' +
       '<li>Every territory you lose to a surround pays back a <strong>refund group</strong> worth half its garrison, held until the assign phase ends.</li>' +
@@ -7266,7 +7306,7 @@ function renderRulesCard() {
         Math.floor(resolvedAssignQuantum() * 3 / 2) + ' troops: dense enough to break one ordinary stack in battle, not enough to run over the board.</li>' +
       '<li>You stay down on territory count; the ground you lost stays on the map as unclaimed and either side can Claim it during battle.</li>' +
       '<li>Groups you have no room for (fewer surviving territories than groups) are forfeit.</li>' +
-    '</ul>';
+    '</ul>');
   const mapBlock =
     '<h3>Map Types</h3>' +
     '<ul><li><strong>Matrix:</strong> a grid of rectangles. Two regions are neighbours if they share an edge.</li>' +
@@ -7410,6 +7450,7 @@ window.AG = {
   generateMatrixMap, generateGeoMap,
   sanitizeBases,
   setFog: (f) => { fogOfWar = f; },
+  setGoCapture: (on) => { goCaptureEnabled = on; },
   setGameMode: (g) => { gameMode = g; },
   setPhase: (p) => { phase = p; },
   setAoeRound: (r) => { aoeRound = r; },
