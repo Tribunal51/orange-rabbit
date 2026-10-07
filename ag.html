@@ -400,6 +400,8 @@
     .region.dim { opacity: .55; }
     .region.tiny .region-troops { font-size: 16px; }
     .region.tiny .region-label { font-size: 9px; letter-spacing: .5px; }
+    .region .region-troops.projected { display: block; font-size: 18px; color: #fde68a; }
+    .region.tiny .region-troops.projected { font-size: 12px; }
 
     /* Defense base (AoE) */
     .region-base {
@@ -824,6 +826,8 @@
       stroke-dasharray: 0.8 0.8;
     }
     .map-container.geo-map g.region.unoccupied text.region-troops { display: none; }
+    .map-container.geo-map g.region text.region-troops.projected { display: inline; font-size: 4px; fill: #fde68a; }
+    .map-container.geo-map g.region.tiny text.region-troops.projected { font-size: 2.8px; }
     .map-container.geo-map g.region.eliminated polygon {
       fill: rgba(20,10,30,.55);
       stroke: rgba(255,80,80,.35);
@@ -1234,7 +1238,6 @@ let aoeRound = 0;
 let aoeMaxRounds = 0;
 let aoePlans = { 1: null, 2: null };
 let aoeSubmitted = { 1: false, 2: false };
-let aoePassFlags = { 1: false, 2: false };
 let aoePlanningPlayer = 1;     // whose plan UI is currently shown (local/cpu/online-self)
 let aoeRevealing = false;
 let aoeHandoffPending = false;
@@ -1546,7 +1549,6 @@ function aoeResetAll() {
   aoeComposed = [];
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
-  aoePassFlags = { 1: false, 2: false };
   aoeRevealing = false;
   aoeHandoffPending = false;
   aoeWorking = makeEmptyWorking();
@@ -4037,7 +4039,6 @@ function aoeStartRound() {
   for (const r of regions) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; r.auraBonus = 0; }
   aoePlans = { 1: null, 2: null };
   aoeSubmitted = { 1: false, 2: false };
-  aoePassFlags = { 1: false, 2: false };
   aoeWorking = makeEmptyWorking();
   aoeComposed = [];
   aoeRevealing = false;
@@ -4231,7 +4232,6 @@ function aoeSubmitPlan() {
   if (err) { flashMessage(err, 'bad'); return; }
   aoePlans[p] = plan;
   aoeSubmitted[p] = true;
-  aoePassFlags[p] = (plan.type === 'pass');
 
   if (mode === 'online' && conn && conn.open) {
     conn.send({ type: 'aoe-plan', player: p, plan: serializePlan(plan) });
@@ -4657,13 +4657,7 @@ function openAttritionModal(side, callback) {
 
 function aoePostResolution() {
   appendRoundOwnerSummary();
-  // Termination: both pass in the same DAY round. A night double-pass just
-  // advances to dawn (having nothing to move at night is not surrender).
-  if (aoePassFlags[1] && aoePassFlags[2] && !aoeIsNightRound()) { endGame(); return; }
-  // Or someone has 0 territories?
   if (aoePlayerOwnedCount(1) === 0 || aoePlayerOwnedCount(2) === 0) { endGame(); return; }
-  // Note: stuck-at-ones no longer ends the game; Defend regen can rebuild an
-  // army of 1-troop garrisons. A dead position ends via mutual Pass instead.
 
   // Otherwise next round
   aoeStartRound();
@@ -4713,6 +4707,40 @@ function aoeProjectedComposed() {
   const act = buildPlanFromWorking(aoePlanningPlayer);
   if (!act || composedAdditionError(aoePlanningPlayer, act)) return aoeComposed;
   return aoeComposed.concat([act]);
+}
+
+const AOE_PREVIEW_REGION_FIELDS = ['owner', 'troops', 'isBase', 'defendLevel', 'defendFactor', 'auraFactor', 'auraBonus'];
+const AOE_PREVIEW_RNG_SEED = 1;
+
+/* The planning player's plan as Submit would send it, or null while nothing is finished. */
+function aoePreviewPlan() {
+  const player = aoePlanningPlayer;
+  if (aoeWorking.action === 'pass') return null;
+  if (!aoeMultiMode()) {
+    const plan = buildPlanFromWorking(player);
+    return (plan && plan.type !== 'pass' && !validatePlan(plan)) ? plan : null;
+  }
+  const actions = aoeProjectedComposed();
+  return actions.length ? { type: 'multi', player, actions } : null;
+}
+
+/* Per-region { owner, troops } after the planning player's plan resolves
+   against an opponent who passes, or null while there is no finished plan.
+   The live board is left exactly as it was. */
+function aoeUncontestedOutcome() {
+  const preview = aoePreviewPlan();
+  if (!preview) return null;
+  const plan = JSON.parse(JSON.stringify(preview));
+  const planA = plan.player === 1 ? plan : null;
+  const planB = plan.player === 2 ? plan : null;
+  const saved = regions.map(r => AOE_PREVIEW_REGION_FIELDS.map(f => r[f]));
+  try {
+    if (plan.type === 'multi') resolveAoeRoundMulti(planA, planB, AOE_PREVIEW_RNG_SEED, null);
+    else resolveAoeRound(planA, planB, AOE_PREVIEW_RNG_SEED, null);
+    return regions.map(r => ({ owner: r.owner, troops: r.troops }));
+  } finally {
+    regions.forEach((r, i) => AOE_PREVIEW_REGION_FIELDS.forEach((f, j) => { r[f] = saved[i][j]; }));
+  }
 }
 
 function setAoeUiAction(action) {
@@ -5129,7 +5157,7 @@ function openPassConfirmModal() {
   host.innerHTML =
     '<div class="aoe-modal"><div class="aoe-modal-card aoe-pass-confirm-card">' +
       '<h3>Pass this round?</h3>' +
-      '<div class="modal-info">If both players pass in the SAME round, the game ends and scores are tallied.</div>' +
+      '<div class="modal-info">You take no action this round. The game continues.</div>' +
       '<div class="modal-foot">' +
         '<button class="actionBtn primary" id="passYes">Yes, pass</button>' +
         '<button class="actionBtn" id="passNo">Cancel</button>' +
@@ -5280,10 +5308,20 @@ function renderBattleLog() {
   body.innerHTML = html;
   if (historyViewIdx >= 0) {
     const target = body.querySelector('.history-highlight');
-    if (target) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (target) scrollLogEntryIntoView(body, target);
   } else {
     body.scrollTop = body.scrollHeight;
   }
+}
+
+/* Scrolls only the log panel; Element.scrollIntoView also scrolls the page. */
+function scrollLogEntryIntoView(container, entry) {
+  const box = container.getBoundingClientRect();
+  const row = entry.getBoundingClientRect();
+  let delta = 0;
+  if (row.top < box.top) delta = row.top - box.top;
+  else if (row.bottom > box.bottom) delta = Math.min(row.bottom - box.bottom, row.top - box.top);
+  if (delta !== 0) container.scrollBy({ top: delta, behavior: 'smooth' });
 }
 
 function historyLogIndex() {
@@ -5379,6 +5417,7 @@ function applyHistoryView() {
     setAuraBadge(el, snapAura);
     el.setAttribute('class', cls);
     const tEl = el.querySelector('.region-troops');
+    tEl.classList.remove('projected');
     if (s.owner <= 0) tEl.textContent = '';
     else tEl.textContent = s.troops > 0 ? s.troops : '';
   });
@@ -5824,6 +5863,8 @@ function render() {
     }
   }
 
+  const uncontested = aoeUiVisible ? aoeUncontestedOutcome() : null;
+
   let attackHighlights = null;
   let adjustHighlights = null;
   let claimHighlights = null;
@@ -5973,8 +6014,13 @@ function render() {
     el.setAttribute('class', cls);
     if (el.title !== undefined) el.title = '';
     const tEl = el.querySelector('.region-troops');
-    if (r.owner === -1 || r.owner === 0) tEl.textContent = '';
-    else tEl.textContent = (r.troops > 0 ? r.troops : '');
+    const liveTroops = (r.owner === 1 || r.owner === 2) ? r.troops : 0;
+    const after = uncontested && uncontested[idx];
+    const afterTroops = (after && (after.owner === 1 || after.owner === 2)) ? after.troops : 0;
+    const projected = !!after && (after.owner !== r.owner || afterTroops !== liveTroops);
+    tEl.classList.toggle('projected', projected);
+    if (projected) tEl.textContent = (liveTroops > 0 ? liveTroops : '') + '→' + afterTroops;
+    else tEl.textContent = (liveTroops > 0 ? liveTroops : '');
   });
 
   // Score panel
@@ -6176,7 +6222,10 @@ function render() {
         html += summary + focusInfo;
       }
     } else if (w.action === 'pass') {
-      html += '<div class="sub">Pass — if BOTH players pass this round, game ends.</div>';
+      html += '<div class="sub">Pass: take no action this round.</div>';
+    }
+    if (uncontested) {
+      html += '<div class="sub" style="margin-top:4px;">Yellow <span class="pwr">a→b</span> numbers on the map: troops after this round if your opponent does nothing.</div>';
     }
     banner.innerHTML = html;
     banner.classList.remove('hidden');
@@ -6535,7 +6584,6 @@ function cpuTurnAoeBattle(player, difficulty) {
   const plan = cpuPlanForRound(player, difficulty) || { type: 'pass', player };
   aoePlans[player] = plan;
   aoeSubmitted[player] = true;
-  aoePassFlags[player] = (plan.type === 'pass');
   flashMessage('CPU planned: ' + plan.type, 'good');
   aoeAfterSubmit();
 }
@@ -7146,7 +7194,6 @@ function handlePeerData(d) {
         }
         aoePlans[d.player] = d.plan;
         aoeSubmitted[d.player] = true;
-        aoePassFlags[d.player] = (d.plan.type === 'pass');
         if (aoeSubmitted[1] && aoeSubmitted[2]) aoeBeginReveal();
         else render();
       }
@@ -7391,7 +7438,7 @@ function renderRulesCard() {
         '<li>Tied: gray stays gray; each side takes ⌈power/2⌉ damage spread proportionally across its contributions, remainder returns to sources. Survivors only return to a source still in your hands.</li>' +
       '</ul>' +
       '<h3>Action ⏭ Pass</h3>' +
-      '<p>If BOTH players Pass in the SAME round, game ends early and scores tally.</p>' +
+      '<p>Take no action this round. Passing never ends the game, even when both players pass.</p>' +
       '<h3>Resolution order</h3>' +
       '<ol style="padding-left:22px;">' +
         '<li>Step 1: adjustments applied atomically against pre-round counts.</li>' +
@@ -7405,8 +7452,8 @@ function renderRulesCard() {
       '<h3>Victory</h3>' +
       '<ul>' +
       (turnMode === 'dynamic'
-        ? '<li><strong>Dynamic mode:</strong> game ends after ⌊3N/4⌋ DAYS (N = assigned territories; nights are free), or earlier if both players Pass in the same round, or one player has zero territories.</li>'
-        : '<li><strong>Fixed mode:</strong> game ends after ' + (fixedTurnCount > 0 ? fixedTurnCount : '⌊total_regions / 2⌋') + ' DAYS (nights are free), or when both players Pass in the same round, or one player has zero territories.</li>') +
+        ? '<li><strong>Dynamic mode:</strong> game ends after ⌊3N/4⌋ DAYS (N = assigned territories; nights are free), or earlier if one player has zero territories.</li>'
+        : '<li><strong>Fixed mode:</strong> game ends after ' + (fixedTurnCount > 0 ? fixedTurnCount : '⌊total_regions / 2⌋') + ' DAYS (nights are free), or earlier if one player has zero territories.</li>') +
       '<li>Most owned regions wins. Tiebreaker: most troops. Else draw.</li></ul>' +
       mapBlock;
   } else {
