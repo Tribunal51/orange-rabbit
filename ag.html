@@ -4724,7 +4724,7 @@ function aoePreviewPlan() {
   return actions.length ? { type: 'multi', player, actions } : null;
 }
 
-/* Per-region { owner, troops } after the planning player's plan resolves
+/* Per-region { owner, troops, auraBonus } after the planning player's plan resolves
    against an opponent who passes, or null while there is no finished plan.
    The live board is left exactly as it was. */
 function aoeUncontestedOutcome() {
@@ -4737,7 +4737,7 @@ function aoeUncontestedOutcome() {
   try {
     if (plan.type === 'multi') resolveAoeRoundMulti(planA, planB, AOE_PREVIEW_RNG_SEED, null);
     else resolveAoeRound(planA, planB, AOE_PREVIEW_RNG_SEED, null);
-    return regions.map(r => ({ owner: r.owner, troops: r.troops }));
+    return regions.map((r, i) => ({ owner: r.owner, troops: r.troops, auraBonus: aoeAuraBonusAt(i) }));
   } finally {
     regions.forEach((r, i) => AOE_PREVIEW_REGION_FIELDS.forEach((f, j) => { r[f] = saved[i][j]; }));
   }
@@ -4766,6 +4766,7 @@ function setAoeUiAction(action) {
   }
   if (base === 'pass') {
     // Submit immediately after a brief confirm
+    render();
     openPassConfirmModal();
     return;
   }
@@ -5949,9 +5950,11 @@ function render() {
     if ((r.owner === 1 || r.owner === 2) && r.isBase && !editingBases) {
       cls += (r.defendLevel >= 2) ? ' base base2' : ' base';
     }
+    const after = uncontested && uncontested[idx];
     const liveAura = (r.owner === 1 || r.owner === 2) ? aoeAuraBonusAt(idx) : 0;
-    cls += auraClassFor(liveAura);
-    setAuraBadge(el, liveAura);
+    const shownAura = after ? Math.max(liveAura, after.auraBonus) : liveAura;
+    cls += auraClassFor(shownAura);
+    setAuraBadge(el, shownAura);
     if (validTargets && validTargets.has(idx)) { cls += ' target'; clickable = true; }
     if (gameMode === 'classic' && phase === 'attack' && canIControlCurrentTurn() && validTargets) {
       const opp = otherPlayer(currentPlayer);
@@ -6015,7 +6018,6 @@ function render() {
     if (el.title !== undefined) el.title = '';
     const tEl = el.querySelector('.region-troops');
     const liveTroops = (r.owner === 1 || r.owner === 2) ? r.troops : 0;
-    const after = uncontested && uncontested[idx];
     const afterTroops = (after && (after.owner === 1 || after.owner === 2)) ? after.troops : 0;
     const projected = !!after && (after.owner !== r.owner || afterTroops !== liveTroops);
     tEl.classList.toggle('projected', projected);
@@ -6225,7 +6227,10 @@ function render() {
       html += '<div class="sub">Pass: take no action this round.</div>';
     }
     if (uncontested) {
-      html += '<div class="sub" style="margin-top:4px;">Yellow <span class="pwr">a→b</span> numbers on the map: troops after this round if your opponent does nothing.</div>';
+      const projectsAura = uncontested.some(o => o.auraBonus > 0);
+      html += '<div class="sub" style="margin-top:4px;">Yellow <span class="pwr">a→b</span> numbers on the map: troops after this round if your opponent does nothing.' +
+              (projectsAura ? ' <span class="pwr">+%</span> badges: the defend bonus each of your territories gets this round.' : '') +
+              '</div>';
     }
     banner.innerHTML = html;
     banner.classList.remove('hidden');
