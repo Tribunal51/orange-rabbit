@@ -1023,7 +1023,7 @@
         <button class="modeBtn" onclick="setActionsPerDay(1)">1 Action</button>
         <button class="modeBtn selected" onclick="setActionsPerDay(3)">3 Actions</button>
       </div>
-      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. A 2nd attack or 2nd defend costs 2 AP, and a double attack or double defend costs all 3. Legal days: attack/attack, defend/defend, attack/defend/claim, attack/claim/claim, defend/claim/claim, claim/claim/claim, double attack, double defend. Nights stay one Adjust.</div>
+      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs all 3. Nights stay one Adjust.</div>
     </div>
 
     <div class="setupSection" id="turnModeSection">
@@ -1371,7 +1371,7 @@ function setActionsPerDay(n) {
     b.classList.toggle('selected', [1, 3][i] === actionsPerDay);
   });
   document.getElementById('actionsPerDayHint').innerHTML = actionsPerDay === 3
-    ? '<strong>3 Actions:</strong> each day you spend 3 action points. A 2nd attack or 2nd defend costs 2 AP, and a double attack or double defend costs all 3. Legal days: attack/attack, defend/defend, attack/defend/claim, attack/claim/claim, defend/claim/claim, claim/claim/claim, double attack, double defend. Nights stay one Adjust.'
+    ? '<strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs all 3. Nights stay one Adjust.'
     : '<strong>1 Action:</strong> each day you pick a single action (attack, defend, or claim). Double actions need the 3-action day. Nights stay one Adjust.';
 }
 
@@ -2717,10 +2717,11 @@ function checkClassicProgress() {
 
 /* ═══════════════════════════ AoE — UTILITIES ═══════════════════════════ */
 
-/* Power multipliers, all self-applied. A plain attack is 1x, a Defend takes its
-   territory to 1.5x, a Double Attack fights at 2x, a Double Defend holds at
-   2.5x. Each also scales an opposing push down by the same factor. */
-const AOE_DOUBLE_ATTACK_MULT = 2;
+/* Power multipliers, all self-applied. A plain attack is 1x, a Double Attack
+   fights at AOE_DOUBLE_ATTACK_MULT, and a Defend or Double Defend raises its
+   territory's power through the troops it adds. Neither side's boost changes
+   the other side's power. */
+const AOE_DOUBLE_ATTACK_MULT = 1.5;
 
 /* Attack power = plain sum of the attacking group's troops, times the double
    attack multiplier when the action is a double attack. There is no
@@ -2902,11 +2903,10 @@ function aoeDefendLevelAt(idx, state) {
   const r = state[idx];
   return (r && r.defendLevel) ? r.defendLevel : 0;
 }
-/* Whatever multiplies your power divides your attrition. A Defend that lifts a
-   territory from 10 troops to 15 multiplied its power by 1.5, so it bleeds 1.5x
-   less; a Double Attack fighting at 2.5x power bleeds 2.5x less. The factor is
-   the one actually realised, so a reinforcement clipped by the quantum cap buys
-   proportionally less protection. */
+/* A defended territory that holds divides its losses by its power factor: the
+   growth its reinforcement actually bought plus any aura reaching it. A Defend
+   that lifts 10 troops to 15 bleeds 1.5x less. A reinforcement clipped by the
+   quantum cap buys proportionally less protection. */
 const AOE_AURA_RING = { 1: [0.25], 2: [0.25, 0.10] };
 /* Ceiling on the stacked aura bonus. Two Defends is the most a day can buy and
    a territory sitting in the inner ring of both reaches exactly this. */
@@ -2978,19 +2978,15 @@ function aoeRoundAttrition(x) {
   return Math.max(0, Math.round(x));
 }
 
-/* Every attrition figure has the same shape: you lose half the opposing side's
-   FULL power. The scaling that decides who wins never shrinks the bill either
-   side pays, and a territory's own multiplier does not discount it.
+/* Every attrition figure has the same shape: you lose half the power passed in.
    ownPowerFactor is accepted so call sites read symmetrically, and is unused. */
 function aoeAttritionFrom(opposingPower, ownPowerFactor) {
   return aoeRoundAttrition(opposingPower / 2);
 }
 /* Action-point budget for the current round. Nights are always a single
-   Adjust. Days grant 3 AP: most actions cost 1 AP, the SECOND attack and the
-   SECOND defend each cost 2 AP, and a double attack / double defend costs the
-   whole day (3 AP). Legal day mixes are therefore attack+attack,
-   defend+defend, attack+defend+claim, attack+claim+claim,
-   defend+claim+claim, claim+claim+claim, double attack, or double defend. */
+   Adjust. Days grant 3 AP: attack, defend and claim cost 1 AP each, with at
+   most 2 attacks and 2 defends, and a double attack / double defend costs the
+   whole day (3 AP). */
 function aoeMaxActions() {
   if (gameMode !== 'aoe') return 1;
   if (aoeIsNightRound()) return 1;
@@ -3002,7 +2998,6 @@ function aoeMaxDefends() { return aoeMaxActions() >= 3 ? 2 : 1; }
 function aoeDoublesAllowed() { return aoeMaxActions() >= 3; }
 function aoeActionApCost(type, priorOfSameType, isDouble) {
   if (isDouble && (type === 'attack' || type === 'defend')) return 3;
-  if ((type === 'attack' || type === 'defend') && priorOfSameType >= 1) return 2;
   return 1;
 }
 function aoeApUsedBy(actions) {
@@ -3310,15 +3305,11 @@ function resolveSingleAttack(plan, post, rng, opts) {
   const defLevel = aoeDefendLevelAt(D, post);
   const defenseValue = effectiveDefenseForState(D, post);
   const defFactor = aoeDefendPowerFactorAt(D, post);
-  // Whatever factor a territory scaled its own power up by, it scales an
-  // incoming strike down by the same factor. This decides the outcome only:
-  // the attrition both sides pay is still measured against raw power, so a
-  // defend never makes its attacker bleed less.
+  // Each side's boost lifts only its own power: the attack is compared with the
+  // defence as both stand, with no scaling of either by the other side.
   const pwr = aoePowerFromState(G, post, isDouble);
-  const landedPower = pwr.total / defFactor;
-  // Symmetric to the defender's blunting: a double attack scales the defence it
-  // faces down by its own multiplier. Outcome only, exactly like the blunting.
-  const facedDefense = defenseValue / aoeAttackPowerFactor(isDouble);
+  const landedPower = pwr.total;
+  const facedDefense = defenseValue;
   const effects = [];
 
   const attLog = { player, group: G.slice(), defender: D, power: landedPower, rawPower: pwr.total,
@@ -3388,10 +3379,11 @@ function resolveSingleAttack(plan, post, rng, opts) {
     return { effects, log: attLog, pending };
   }
 
-  // Repelled: both sides bleed and no territory changes hands. Each pays half the
-  // other's full power, before any of the scaling that decided the outcome.
+  // Repelled: both sides bleed and no territory changes hands. The attacker pays
+  // half the defence. The defender pays half the attack, and a defended territory
+  // divides that by its power factor, its reinforcement plus any aura reaching it.
   const attackerDmg = aoeAttritionFrom(defenseValue, aoeAttackPowerFactor(isDouble));
-  const defenderDmg = aoeAttritionFrom(pwr.total, defFactor);
+  const defenderDmg = aoeAttritionFrom(defLevel > 0 ? pwr.total / defFactor : pwr.total, defFactor);
   let dist;
   if (plan.failDist) {
     let sum = 0; for (const g of G) sum += (plan.failDist[g] | 0);
@@ -3674,13 +3666,11 @@ function isMutualAttackClash(planA, planB) {
    dialog when manual) and otherwise falls back to autoBleed (overflow allowed,
    since side-wide damage may exceed any individual region's troops). */
 function resolveMutualClash(planA, planB, post) {
-  // Raw power drives the attrition each side pays. The ground being fought over
-  // scales an incoming strike down by the factor it scaled itself up, and that
-  // scaled figure is what decides who wins the clash.
+  // Each side's own power decides the clash and sets the attrition the other pays.
   const rawA = aoePowerFromState(planA.group, post, planA.double).total;
   const rawB = aoePowerFromState(planB.group, post, planB.double).total;
-  const powerA = rawA / aoeDefendPowerFactorAt(planA.defender, post);
-  const powerB = rawB / aoeDefendPowerFactorAt(planB.defender, post);
+  const powerA = rawA;
+  const powerB = rawB;
   const dmgToA = aoeAttritionFrom(powerB, aoeAttackPowerFactor(planA.double));
   const dmgToB = aoeAttritionFrom(powerA, aoeAttackPowerFactor(planB.double));
 
@@ -4190,7 +4180,7 @@ function aoeActionSummary(a) {
 function aoeComposedStripHtml() {
   const max = aoeMaxActions();
   let html = '<div style="margin-bottom:6px;">AP <span class="pwr">' + aoeApUsedBy(aoeComposed) + '/' + max + '</span>' +
-             ' <span class="sub">(2nd attack or 2nd defend costs 2 AP; a double action costs 3)</span>';
+             ' <span class="sub">(1 AP per action, at most 2 attacks and 2 defends; a double action costs 3)</span>';
   if (aoeComposed.length === 0) {
     html += ' <span class="sub">none yet</span>';
   } else {
@@ -4290,7 +4280,7 @@ function validatePlan(plan) {
     const acts = Array.isArray(plan.actions) ? plan.actions : null;
     if (!acts || acts.length === 0) return 'Empty plan.';
     if (aoeApUsedBy(acts) > aoeMaxActions()) {
-      return 'Plan costs ' + aoeApUsedBy(acts) + ' AP; only ' + aoeMaxActions() + ' available (2nd attack and 2nd base cost 2 AP each).';
+      return 'Plan costs ' + aoeApUsedBy(acts) + ' AP; only ' + aoeMaxActions() + ' available (a double action costs 3 AP).';
     }
     let attacks = 0, defends = 0;
     const defenders = new Set(), targets = new Set(), claimSrc = new Set(), adjSrc = new Set(),
@@ -4982,7 +4972,7 @@ function openAttackConfirmModal(G, defenderIdx) {
             : 'On success: the territory is razed to gray and can be claimed later. Attackers lose <strong>' + successAttrition + '</strong> total attrition.<br>') +
           'If repelled: attackers lose <strong>' + failAttrition + '</strong> total. You place those losses across this group when the round resolves, whatever the final figure turns out to be. ' +
           'You may attack a stronger territory; the price of failing scales with what you could not break.<br>' +
-          '<em>If the defender plays Defend or Double Defend here it reinforces AND blunts your strike by the same factor, so this projection is a best case.' +
+          '<em>If the defender plays Defend or Double Defend here it adds troops, raising the defence you must beat, so this projection is a best case.' +
           (isDouble ? ' A double-defended territory can be broken but not converted.' : '') + '</em><br>' +
           '<em>If the opponent counter-attacks into this group, both sides take damage; only a winning double attack takes ground.</em>' +
         '</div>' +
@@ -5591,7 +5581,7 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
               (pool > 0 ? ', reinforcing <strong>+' + pool + '</strong> troops'
                         : ' (fortified)') +
               (plan.defendFactorApplied > 1
-                ? ', raising its power ' + plan.defendFactorApplied.toFixed(2) + 'x and scaling incoming attacks down by the same'
+                ? ', raising its power ' + plan.defendFactorApplied.toFixed(2) + 'x, which divides its losses if it holds'
                 : '') +
               (auraGot > 0.001
                 ? ', itself standing in +' + Math.round(auraGot * 100) + '% of aura for a combined ' +
@@ -5718,24 +5708,17 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
           (attackLog.defendLevel === 2 ? '🛡🛡 double defended' : '🛡 defended') +
           ': reinforced to ' + attackLog.defense +
           (attackLog.defendFactor > 1 ? ' (power x' + attackLog.defendFactor.toFixed(2) + auraShare +
-            ', blunting the strike by the same)' : '') + '.</span>'
+            ', which divides its losses if it holds)' : '') + '.</span>'
         : '';
       const defTag2 = '';
       const clashTag = attackLog.clash ? ' <em>Clash.</em>' : '';
       let outcomeLine;
-      const bluntTag = attackLog.defendFactor > 1
-        ? '<span style="color:#fbbf24;">, scaled down from ' + attackLog.rawPower.toFixed(1) +
-          ' by the target\'s ' + attackLog.defendFactor.toFixed(2) + 'x</span>'
-        : '';
-      const atkFactorNote = attackLog.attackFactor > 1
-        ? ' <span style="color:#7dd3fc;">Double attack: the defence it faced was scaled down ' + attackLog.attackFactor + 'x.</span>'
-        : '';
       if (attackLog.outcome === 'convert') {
-        outcomeLine = ' → <span style="color:#86efac;">captured</span>' + (bluntTag ? ' (power ' + attackLog.power.toFixed(1) + bluntTag + ')' : '') + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
+        outcomeLine = ' → <span style="color:#86efac;">captured</span>' + '' + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
                       ' invaded: <strong>' + attackLog.garrison + '</strong> of its garrison changed sides and now holds it. ' +
                       'Attackers paid <strong>' + attackLog.attrition + '</strong> in attrition [' + lossDetail + '].';
       } else if (attackLog.outcome === 'win') {
-        outcomeLine = ' → <span style="color:#86efac;">won</span>' + (bluntTag ? ' (power ' + attackLog.power.toFixed(1) + bluntTag + ')' : '') + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
+        outcomeLine = ' → <span style="color:#86efac;">won</span>' + '' + '.' + clashTag + ' ' + regionRef(plan.defender) + defTag + defTag2 +
                       (attackLog.fortressBlocked
                         ? ' broken, but a 🛡🛡 double defend <strong>denied the conversion</strong>: it is razed to gray, not taken.'
                         : ' razed to gray.') +
@@ -5743,14 +5726,14 @@ function buildAoeRoundLog(roundNum, planA, planB, res, preSnap) {
       } else if (attackLog.outcome === 'aborted') {
         outcomeLine = ' → <span style="color:#c4b5fd;">called off</span>: the attacking force was lost (or the target changed hands) before this strike landed.';
       } else if (attackLog.outcome === 'fail') {
-        outcomeLine = ' → <span style="color:#fca5a5;">repelled</span>.' + clashTag + ' (power ' + attackLog.power.toFixed(1) + bluntTag +
+        outcomeLine = ' → <span style="color:#fca5a5;">repelled</span>.' + clashTag + ' (power ' + attackLog.power.toFixed(1) +
                       ' vs defense ' + attackLog.defense + defTag2 +
                       '). Attacker losses: <strong>' + (attackLog.attackerDmg || totLoss) + '</strong> [' + lossDetail +
                       ']; defender ' + regionRef(plan.defender) + defTag + ' lost ' + (attackLog.defenderDmg || 0) + '.';
       } else {
         outcomeLine = '.';
       }
-      return [{ kind: cls, html: head + outcomeLine + defNote + auraNote + atkFactorNote }];
+      return [{ kind: cls, html: head + outcomeLine + defNote + auraNote }];
     }
     return [];
   }
@@ -6145,7 +6128,7 @@ function render() {
     if (!w.action) {
       html += night
         ? '<div class="sub">🌙 Night: ↔ Adjust troops (move only, no combat) or ⏭ Pass. Nights do not count against the day limit.</div>'
-        : '<div class="sub">☀ Day (3 AP): ⚔ Attack (1 AP, 2 AP for a second), 🛡 Defend (1 AP, 2 AP for a second), ▣ Claim a gray (1 AP), or spend the whole day on ⚔⚔ Double Attack / 🛡🛡 Double Defend (3 AP).</div>';
+        : '<div class="sub">☀ Day (3 AP): ⚔ Attack (1 AP, up to 2), 🛡 Defend (1 AP, up to 2), ▣ Claim a gray (1 AP), or spend the whole day on ⚔⚔ Double Attack / 🛡🛡 Double Defend (3 AP).</div>';
     } else if (w.action === 'defend') {
       const level = w.isDouble ? 2 : 1;
       const bl = (w.defendBases && w.defendBases.size)
@@ -6156,14 +6139,14 @@ function render() {
       html += '<div>' + (w.isDouble ? '🛡🛡 <strong>Double Defend</strong>' : '🛡 <strong>Defend</strong>') +
              ': <span class="pwr">' + bl + '</span> ' +
              '<span class="sub">(' + (w.isDouble ? 'costs the whole day: 3 AP'
-                                                 : isSecondBase ? 'SECOND defend today: costs 2 AP'
+                                                 : isSecondBase ? 'second defend today, the last allowed'
                                                                 : 'lasts this round only') + ')</span></div>';
       html += '<div class="sub" style="margin-top:4px;">Click a border territory to fortify it (click again to clear). ' +
               (pick >= 0
                 ? 'It reinforces <span class="pwr">+' + aoeDefendRegenForBase(pick, planner, null, level) + '</span> troops'
                 : 'It reinforces by ' + (w.isDouble ? '150%' : '50%') + ' of its troops (capped at ' +
                   Math.round(assignQuantum * AOE_DEFEND_REGEN_CAP[level]) + ')') +
-              ', applied BEFORE attacks resolve. Incoming attacks are scaled down by that same factor, and its own attrition is divided by it too. ' +
+              ', applied BEFORE attacks resolve. If it holds, its losses are divided by its power factor (its reinforcement plus any aura). ' +
               'Adjacent territories you own gain +' + Math.round(AOE_AURA_RING[level][0] * 100) + '% power for the round' +
               (level === 2 ? ', and the ring beyond them +' + Math.round(AOE_AURA_RING[2][1] * 100) + '%' : '') + '. ' +
               (w.isDouble ? 'A double-defended territory can be broken but never converted. ' : '') +
@@ -6523,8 +6506,7 @@ function enumerateAttackCandidates(player, includeDoubles) {
       seen.add(key);
       // Surround gate: massed troops must outnumber the target.
       const defenseVal = effectiveDefense(def.id);
-      // What the target looks like if its owner spends a Defend on it this
-      // same day: reinforced garrison AND a 25% bite out of our power.
+      // What the target looks like if its owner spends a Defend on it this same day.
       const defendedVal = defenseVal + aoeDefendRegenForBase(def.id, def.owner, null, 1);
       for (const isDouble of (doubles ? [false, true] : [false])) {
         const pwr = aoePower(G, isDouble);
@@ -6535,7 +6517,7 @@ function enumerateAttackCandidates(player, includeDoubles) {
           kind: pwr.total > defenseVal ? 'win' : 'fail',
           // An attack that still lands after a Defend is a plan; one that only
           // works against an idle defender is a gamble.
-          robust: pwr.total / (defendedVal / Math.max(1, defenseVal)) > defendedVal,
+          robust: pwr.total > defendedVal,
           killValue: def.troops,
           successAttrition: isDouble ? capture.total : Math.ceil(defenseVal / 2),
           garrison: isDouble ? capture.garrison : 0,
@@ -6676,7 +6658,7 @@ function cpuComposeDay(player, difficulty) {
     if (attacksTaken >= maxA) break;
     if (s <= prof.floor) break;
     if (aoeActionApCost('attack', attacksTaken) > apLeft()) break;
-    // A second attack costs 2 AP, so it must outbid a claim plus a defend.
+    // A second attack spends the AP a claim or a defend would use, so it must outbid one.
     if (attacksTaken >= 1 && s <= prof.secondFloor) break;
     if (usedDefenders.has(a.defender)) continue;
     if (a.group.some(g => usedBases.has(g))) continue;
@@ -6755,7 +6737,7 @@ function randomEasyDayPlan(player, attacks, claims) {
    locked, so a projected win is discounted rather than treated as certain. */
 const AOE_REGION_WORTH = 8;
 function scoreAttack(c, player) {
-  // Defends both reinforce and blunt, so a marginal attack is a coin flip, and
+  // A Defend can reinforce the target after we commit, so a marginal attack is a coin flip, and
   // an attack that cannot reach the target's number at all only ever softens.
   const hopeless = c.pwr.total <= c.defense * 0.8;
   const risk = hopeless ? 1
@@ -6788,12 +6770,8 @@ function scoreDefendAction(player, idx, level) {
   for (const n of r.neighbors) if (regions[n] && regions[n].owner === opp) pressure += regions[n].troops;
   const regen = aoeDefendRegenForBase(idx, player, null, level);
   let value = regen * 0.35 + pressure * 0.05;
-  // Repelling means the blunted attack no longer clears the reinforced garrison.
-  const repels = (lvl) => {
-    const reinforced = r.troops + aoeDefendRegenForBase(idx, player, null, lvl);
-    const f = r.troops > 0 ? reinforced / r.troops : 1;
-    return pressure / f <= reinforced;
-  };
+  // Repelling means the adjacent enemy force no longer clears the reinforced garrison.
+  const repels = (lvl) => pressure <= r.troops + aoeDefendRegenForBase(idx, player, null, lvl);
   if (pressure > r.troops) {
     value += repels(level)
       ? AOE_REGION_WORTH * 1.2
@@ -6814,7 +6792,7 @@ function scoreDefendAction(player, idx, level) {
     for (const m of rn.neighbors) if (regions[m] && regions[m].owner === opp) np += regions[m].troops;
     if (np <= rn.troops) continue;
     const f = 1 + rings[0];
-    value += (np / f <= rn.troops * f) ? AOE_REGION_WORTH * 0.9 : AOE_REGION_WORTH * 0.2;
+    value += (np <= rn.troops * f) ? AOE_REGION_WORTH * 0.9 : AOE_REGION_WORTH * 0.2;
   }
   return value;
 }
@@ -7374,8 +7352,8 @@ function renderRulesCard() {
       (actionsPerDay === 3
         ? '<h3>Day actions (3 AP per day)</h3>' +
           '<ul>' +
-            '<li>Each day you spend <strong>3 action points</strong>. Most actions cost 1 AP; your SECOND attack and your SECOND defend each cost 2 AP; a <strong>double attack</strong> or <strong>double defend</strong> costs all 3.</li>' +
-            '<li>Legal days: attack + attack, defend + defend, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, one double attack, or one double defend.</li>' +
+            '<li>Each day you spend <strong>3 action points</strong>. Attack, Defend and Claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A <strong>double attack</strong> or <strong>double defend</strong> costs all 3.</li>' +
+            '<li>Legal full days: attack + attack + claim, attack + attack + defend, attack + defend + defend, defend + defend + claim, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, one double attack, or one double defend.</li>' +
             '<li>Build an action on the map, then press <strong>＋ Add to Plan</strong>. Switching action type banks a finished action automatically. Press × on a listed action to drop it. Submit sends the whole set.</li>' +
             '<li>No two attacks may target the same territory, no two claims the same gray, and each territory may supply only one claim.</li>' +
             '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then attack slot 2, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
@@ -7387,42 +7365,43 @@ function renderRulesCard() {
         '<li>Pick a subset G of your territories, all adjacent to one enemy defender D.</li>' +
         '<li><strong>No strength requirement:</strong> any group of your territories may attack any adjacent enemy territory, even a much stronger one. There is no surrounding or cooperation bonus. Punching up is legal; failing at it is expensive.</li>' +
         '<li>Power = sum(troops in G). Defense = the target\'s troops at resolution time, after its own Defend has landed.</li>' +
-        '<li><strong>A dug-in target blunts the strike:</strong> whatever factor a territory scaled its own power up by, it scales an incoming attack down by the same factor. A Defend takes a territory to 1.5x, so an attack lands at 1/1.5 of its power; a Double Defend takes it to 2.5x and lands attacks at 1/2.5. This decides the outcome only. <strong>Attrition on both sides is still measured against raw power</strong>, so blunting a strike never spares the attacker.</li>' +
+        '<li><strong>Each side\'s boost counts on its own side only:</strong> a Defend or Double Defend raises the target\'s troops, a Double Attack raises the attack\'s power, and neither scales the other. The fight compares the attack\'s power with the target\'s defence as both stand.</li>' +
         '<li><strong>Power &gt; Defense (win):</strong> D is razed to <strong>gray</strong> and its troops are gone. A single attack does NOT take the ground; the ruin can be Claimed on a later turn by either side. Attackers pay ceil(D/2) attrition.</li>' +
-        '<li><strong>Else (repelled):</strong> both sides bleed and no ground changes hands. The attackers lose half the defence they could not break; the defender loses half the power that actually landed.</li>' +
+        '<li><strong>Else (repelled):</strong> both sides bleed and no ground changes hands. The attackers lose half the defence. The defender loses half the attack\'s power, and a defended territory divides that by its power factor: the growth its reinforcement bought plus any aura reaching it.</li>' +
         '<li><strong>Placing attacker losses:</strong> the total is fixed by the fight, but where it lands is yours to choose, subject to at least min(total, attackers) of them taking 1 or more. Left automatic, losses fall in proportion to what each territory committed, so a small contributor is not bled at the same flat rate as a stack ten times its size.</li>' +
       '</ul>' +
       '<h3>Power factors and attrition</h3>' +
       '<p>Every attrition figure in the game has one shape:</p>' +
-      '<p style="text-align:center;"><strong>your loss = (the opposing side\'s FULL power) / 2</strong></p>' +
-      '<p>Full, not scaled. The blunting that decides who wins the fight never reduces the bill either side pays, and your own multiplier does not discount it.</p>' +
-      '<p>So <strong>whatever multiplies your power divides your attrition.</strong> Worked example, 2 troops double attacking a 4-troop territory at ' + AOE_DOUBLE_ATTACK_MULT + 'x:</p>' +
+      '<p style="text-align:center;"><strong>your loss = (the opposing side\'s power) / 2</strong></p>' +
+      '<p>One exception: a Defended or Double Defended territory that holds divides its loss by its power factor (reinforcement plus any aura). Worked example, 8 troops double attacking a 10-troop territory that Defended to 15:</p>' +
       '<ul>' +
-        '<li>Attacker power = 2 x ' + AOE_DOUBLE_ATTACK_MULT + ' = ' + (2 * AOE_DOUBLE_ATTACK_MULT) + ', against a defence of 4.</li>' +
-        '<li>Attacker loss = (4 / 2) / ' + AOE_DOUBLE_ATTACK_MULT + ' = ' + ((4 / 2) / AOE_DOUBLE_ATTACK_MULT).toFixed(1) + ', which rounds to ' + Math.round((4 / 2) / AOE_DOUBLE_ATTACK_MULT) + '.</li>' +
-        '<li>Defender loss = (' + (2 * AOE_DOUBLE_ATTACK_MULT) + ' / 2) / 1 = ' + ((2 * AOE_DOUBLE_ATTACK_MULT) / 2) + '.</li>' +
+        '<li>Attacker power = 8 x ' + AOE_DOUBLE_ATTACK_MULT + ' = ' + (8 * AOE_DOUBLE_ATTACK_MULT) + ', against a defence of 15.</li>' +
+        ((8 * AOE_DOUBLE_ATTACK_MULT) > 15
+          ? '<li>' + (8 * AOE_DOUBLE_ATTACK_MULT) + ' beats 15, so the territory converts. The attacker loses 15 / 2 = 7.5, which rounds to 8.</li>'
+          : '<li>' + (8 * AOE_DOUBLE_ATTACK_MULT) + ' does not beat 15, so the attack is repelled. The attacker loses 15 / 2 = 7.5, which rounds to 8.</li>' +
+            '<li>The defender loses (' + (8 * AOE_DOUBLE_ATTACK_MULT) + ' / 2) / 1.5 = ' + ((8 * AOE_DOUBLE_ATTACK_MULT) / 2 / 1.5).toFixed(1) + ', which rounds to ' + Math.round((8 * AOE_DOUBLE_ATTACK_MULT) / 2 / 1.5) + '.</li>') +
       '</ul>' +
       '<p>Attrition rounds half up: exactly 0.5 becomes 1, anything below 0.5 becomes 0, so a strike too weak to matter does no damage at all.</p>' +
       '<ul>' +
-        '<li>A Defend that lifts a territory from 10 troops to 15 multiplied its power by 1.5, so it bleeds 1.5x less AND blunts incoming attacks by 1.5x. A Double Defend to 25 does both at 2.5x. The factor is the one actually realised, so a reinforcement clipped by the quantum cap buys proportionally less of both.</li>' +
-        '<li>A Double Attack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power, so its attrition is divided by ' + AOE_DOUBLE_ATTACK_MULT + 'x, whether it wins, is repelled, or meets a Defend or Double Defend. The garrison it sends into a captured territory is a transfer rather than attrition, so it is not scaled.</li>' +
-        '<li>In a clash each side divides its own attrition by its own power factor.</li>' +
+        '<li>A Defend that lifts a territory from 10 troops to 15 multiplied its power by 1.5, so if it holds it bleeds 1.5x less. A Double Defend to 25 does the same at 2.5x. The factor is the one actually realised, so a reinforcement clipped by the quantum cap buys proportionally less.</li>' +
+        '<li>A Double Attack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power. Its own losses are not reduced.</li>' +
+        '<li>In a clash each side loses half of the other side\'s power.</li>' +
       '</ul>' +
       '<h3>Action ⚔⚔ Double Attack (3 AP)</h3>' +
       '<ul>' +
-        '<li>The whole day spent on ONE target. Every attacking stack fights at <strong>' + AOE_DOUBLE_ATTACK_MULT + 'x power</strong>, and it scales the defence it faces down by the same ' + AOE_DOUBLE_ATTACK_MULT + 'x.</li>' +
+        '<li>The whole day spent on ONE target. Every attacking stack fights at <strong>' + AOE_DOUBLE_ATTACK_MULT + 'x power</strong>.</li>' +
         '<li><strong>On a win the territory CONVERTS to you</strong> instead of being razed, as a sudden invasion. You pay half the defence in attrition; a QUARTER of the defending garrison changes sides and holds the ground for you. None of that garrison is drawn from your own stacks.</li>' +
-        '<li>On a loss it is an ordinary failed attack, and its attrition is still divided by ' + AOE_DOUBLE_ATTACK_MULT + 'x. No ground taken.</li>' +
-        '<li>A double attack that meets a single or double attack becomes a <strong>clash</strong>. Higher power wins. If the winner is the double attack, its rules prevail: it takes its reduced damage and converts the territory. If it loses, it just eats the damage.</li>' +
+        '<li>On a loss it is an ordinary failed attack. No ground taken.</li>' +
+        '<li>A double attack that meets a single or double attack becomes a <strong>clash</strong>. Higher power wins. If the winner is the double attack, its rules prevail: it pays its attrition and converts the territory. If it loses, it just eats the damage.</li>' +
         '<li><strong>Fortress rule:</strong> a 🛡🛡 double-defended territory can be broken but never converted. A winning double attack razes it to gray instead, so the defender loses the stack but the attacker gains no ground.</li>' +
       '</ul>' +
       '<p><strong>Attack chain:</strong> if A attacks B and B attacks C, then B→C resolves first, then A→B resolves against updated state.</p>' +
       '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), both sides take damage proportional to the other\'s power and no ground changes hands, unless a winning double attack is involved.</p>' +
       '<h3>Action 🛡 Defend / 🛡🛡 Double Defend</h3>' +
       '<ul>' +
-        '<li>Each Defend action fortifies exactly ONE border territory. A second Defend the same day costs 2 AP; a Double Defend costs all 3 and fortifies one territory twice as hard.</li>' +
+        '<li>Each Defend action fortifies exactly ONE border territory. Up to two Defends a day at 1 AP each; a Double Defend costs all 3 and fortifies one territory twice as hard.</li>' +
         '<li><strong>Reinforcement:</strong> Defend adds 50% of the territory\'s current troops, Double Defend adds 150%, capped at ' + assignQuantum + ' and ' + Math.round(assignQuantum * 1.5) + ' respectively. So under a Double Defend 10 troops become 25 and 6 become 15. It lands BEFORE attacks resolve, so a defended territory is fought at its reinforced strength.</li>' +
-        '<li><strong>Blunting:</strong> a territory scales an incoming attack down by the same factor it scaled itself up, so a Defend at 1.5x lands attacks at 1/1.5 and a Double Defend at 2.5x lands them at 1/2.5.</li>' +
+        '<li><strong>Holding pays:</strong> a defended territory that survives an attack divides its losses by its power factor, 1.5x for a Defend and 2.5x for a Double Defend on 10 troops, plus any aura reaching it. It never changes the attacker\'s power.</li>' +
         '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. <strong>Overlapping auras stack:</strong> the bonuses from separate Defends add up, capped at +50%, so two Defends placed side by side each sit in the other\'s ring and both gain +25% on top of their own reinforcement. A territory\'s own reinforcement and the aura reaching it add too, so a Defend at 1.5x standing in a +25% ring fights at 1.75x. Auras are drawn on the map as a thin inner ring with the percentage, and the history arrows replay them for past rounds.</li>' +
         '<li><strong>Fortress:</strong> a double-defended territory can never be converted, only razed. It is the answer to a double attack.</li>' +
         '<li><strong>An attack on a defended territory becomes a clash:</strong> the attack was declared against the pre-round count, so the reinforcement can turn a sure thing into a bloody draw. The same cuts the other way: a target that spent troops on a claim is fought at what it has left.</li>' +
