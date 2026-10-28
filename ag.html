@@ -923,7 +923,7 @@
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> - Assign (alternate fixed placements, optional Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, or a whole-day double attack / double defend; night = adjust).
+        <strong>Age of Empires</strong> - Assign (alternate fixed placements, optional Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, double attack or double defend, with attacks limited by stamina; night = adjust).
       </div>
     </div>
 
@@ -1023,18 +1023,18 @@
         <button class="modeBtn" onclick="setActionsPerDay(1)">1 Action</button>
         <button class="modeBtn selected" onclick="setActionsPerDay(3)">3 Actions</button>
       </div>
-      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs all 3. Nights stay one Adjust.</div>
+      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack. Nights stay one Adjust.</div>
     </div>
 
     <div class="setupSection" id="turnModeSection">
       <div class="setupLabel">Win Condition (Age of Empires only)</div>
       <div id="turnModeToggle" class="modeToggle">
-        <button class="modeBtn selected" onclick="setTurnMode('dynamic')">Dynamic</button>
-        <button class="modeBtn" onclick="setTurnMode('fixed')">Fixed Turns</button>
+        <button class="modeBtn" onclick="setTurnMode('dynamic')">Dynamic</button>
+        <button class="modeBtn selected" onclick="setTurnMode('fixed')">Fixed Turns</button>
       </div>
-      <div id="turnModeHint" class="helpText"><strong>Dynamic:</strong> game ends after ⌊3N/4⌋ rounds (N = assigned territories), or earlier if all territories hit 1 troop. Most territories wins.</div>
-      <div id="fixedTurnRow" class="numRow hidden" style="margin-top:10px;">
-        <input type="number" id="fixedTurnInput" class="numInput" min="1" max="999" value="0"
+      <div id="turnModeHint" class="helpText"><strong>Fixed:</strong> game ends after the specified number of rounds. Set 0 for auto (⌊regions/2⌋).</div>
+      <div id="fixedTurnRow" class="numRow" style="margin-top:10px;">
+        <input type="number" id="fixedTurnInput" class="numInput" min="1" max="999" value="10"
           oninput="onFixedTurnInput()">
         <span class="helpText" style="margin-top:0;">0 = auto (⌊regions/2⌋)</span>
       </div>
@@ -1207,8 +1207,8 @@ let regionsCustomVal = 20;
 let gameMode = 'aoe';          // 'classic' | 'aoe'
 let fogOfWar = false;
 let goCaptureEnabled = false; // AoE assign phase: surround captures and the suicide rule
-let turnMode = 'dynamic';     // 'fixed' | 'dynamic'
-let fixedTurnCount = 0;       // 0 = auto (regions/2), else user-specified
+let turnMode = 'fixed';       // 'fixed' | 'dynamic'
+let fixedTurnCount = 10;      // 0 = auto (regions/2), else user-specified
 let actionsPerDay = 3;        // AoE battle: actions a player composes per day round (1 or 3)
 let preAllocRandom = false;   // both players get random deployment, skip deploy phase
 let assignQuantumSetting = 10; // AoE assign phase: troops per placement, 0 = auto (ceil(total/10))
@@ -1243,6 +1243,7 @@ let aoeRevealing = false;
 let aoeHandoffPending = false;
 let aoePendingAttrition = null;
 let aoePendingRoundSummary = null;
+let aoeStamina = { 1: 0, 2: 0 };
 
 /* Battle log: array of round entries.
    Each entry: { round, kind?, lines: [{ player, text, kind? }] }
@@ -1263,7 +1264,7 @@ let aoeWorking = makeEmptyWorking();
 function makeEmptyWorking() {
   return {
     action: null,           // 'attack' | 'adjust' | 'claim' | 'pass' | null
-    isDouble: false,        // attack/defend committed as a whole-day double action
+    isDouble: false,        // attack/defend committed as a double action
     attackGroup: new Set(),
     attackDefender: -1,
     attackAutoBleed: true,
@@ -1371,7 +1372,7 @@ function setActionsPerDay(n) {
     b.classList.toggle('selected', [1, 3][i] === actionsPerDay);
   });
   document.getElementById('actionsPerDayHint').innerHTML = actionsPerDay === 3
-    ? '<strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs all 3. Nights stay one Adjust.'
+    ? '<strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack. Nights stay one Adjust.'
     : '<strong>1 Action:</strong> each day you pick a single action (attack, defend, or claim). Double actions need the 3-action day. Nights stay one Adjust.';
 }
 
@@ -1553,6 +1554,7 @@ function aoeResetAll() {
   aoeHandoffPending = false;
   aoeWorking = makeEmptyWorking();
   aoePendingAttrition = null;
+  aoeStamina = { 1: AOE_STAMINA_START, 2: AOE_STAMINA_START };
 }
 
 function performRandomAllocation() {
@@ -2874,9 +2876,8 @@ function aoeRoundLabel(round) {
 }
 /* Defend levels: 1 = Defend, 2 = Double Defend. A Defend reinforces its
    territory by 50% of its troops and a Double Defend by 150%, capped at one
-   quantum and 1.5 quanta respectively. A Double Defend spends the whole day,
-   so it buys a great deal more than two of anything else: 10 troops become 25
-   and 6 become 15. */
+   quantum and 1.5 quanta respectively. 10 troops become 25 under a Double
+   Defend and 6 become 15. */
 const AOE_DEFEND_REGEN_FRAC = { 1: 0.5, 2: 1.5 };
 const AOE_DEFEND_REGEN_CAP = { 1: 1, 2: 1.5 };
 
@@ -2985,8 +2986,9 @@ function aoeAttritionFrom(opposingPower, ownPowerFactor) {
 }
 /* Action-point budget for the current round. Nights are always a single
    Adjust. Days grant 3 AP: attack, defend and claim cost 1 AP each, with at
-   most 2 attacks and 2 defends, and a double attack / double defend costs the
-   whole day (3 AP). */
+   most 2 attacks and 2 defends, and a double attack / double defend costs
+   2 AP, so it can share the day with one more action. */
+const AOE_DOUBLE_AP_COST = 2;
 function aoeMaxActions() {
   if (gameMode !== 'aoe') return 1;
   if (aoeIsNightRound()) return 1;
@@ -2994,11 +2996,41 @@ function aoeMaxActions() {
 }
 function aoeMaxAttacks() { return aoeMaxActions() >= 3 ? 2 : 1; }
 function aoeMaxDefends() { return aoeMaxActions() >= 3 ? 2 : 1; }
-/* True when the current settings leave room for a 3 AP double action. */
-function aoeDoublesAllowed() { return aoeMaxActions() >= 3; }
+/* True when the current settings leave room for a double action. */
+function aoeDoublesAllowed() { return aoeMaxActions() >= AOE_DOUBLE_AP_COST; }
 function aoeActionApCost(type, priorOfSameType, isDouble) {
-  if (isDouble && (type === 'attack' || type === 'defend')) return 3;
+  if (isDouble && (type === 'attack' || type === 'defend')) return AOE_DOUBLE_AP_COST;
   return 1;
+}
+
+/* Attack stamina: each player starts the battle with AOE_STAMINA_START and
+   gains AOE_STAMINA_PER_DAY at the start of every later day. Unspent stamina
+   carries over. A single attack spends 1 and a double attack 2. Defend and
+   Claim spend none. */
+const AOE_STAMINA_START = 1;
+const AOE_STAMINA_PER_DAY = 1;
+const AOE_DOUBLE_ATTACK_STAMINA = 2;
+function aoeAttackStaminaCost(isDouble) { return isDouble ? AOE_DOUBLE_ATTACK_STAMINA : 1; }
+function aoeStaminaUsedBy(actions) {
+  let used = 0;
+  for (const a of actions) if (a && a.type === 'attack') used += aoeAttackStaminaCost(a.double);
+  return used;
+}
+function aoeStaminaOf(player) { return aoeStamina[player] || 0; }
+/* Why `player` cannot add an attack on top of `actions`, or null when stamina covers it. */
+function aoeStaminaShortfall(player, actions, isDouble) {
+  const left = aoeStaminaOf(player) - aoeStaminaUsedBy(actions);
+  const cost = aoeAttackStaminaCost(isDouble);
+  if (cost <= left) return null;
+  return 'Not enough stamina: ' + (isDouble ? 'a double attack' : 'an attack') + ' needs ' + cost +
+         ', you have ' + Math.max(0, left) + ' left.';
+}
+/* Both players pay the stamina their day plans' attacks cost. */
+function aoeSpendStamina(planA, planB) {
+  for (const plan of [planA, planB]) {
+    if (!plan || !plan.player) continue;
+    aoeStamina[plan.player] = Math.max(0, aoeStaminaOf(plan.player) - aoeStaminaUsedBy(planActionList(plan)));
+  }
 }
 function aoeApUsedBy(actions) {
   let ap = 0, atk = 0, def = 0;
@@ -4024,6 +4056,9 @@ function stampSnapshotDefenses(snap) {
 
 function aoeStartRound() {
   aoeRound++;
+  if (!aoeIsNightRound() && aoeDayNumber() > 1) {
+    for (const p of [1, 2]) aoeStamina[p] = aoeStaminaOf(p) + AOE_STAMINA_PER_DAY;
+  }
   // Bases are temporary: a Defend fortifies its territory for that round's
   // resolution only. Every round starts with a clean map.
   for (const r of regions) { r.isBase = false; r.defendLevel = 0; r.defendFactor = 1; r.auraFactor = 1; r.auraBonus = 0; }
@@ -4083,6 +4118,8 @@ function composedAdditionError(player, act) {
     if (aoeComposedAttackCount() >= aoeMaxAttacks()) {
       return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
     }
+    const staminaErr = aoeStaminaShortfall(player, aoeComposed, act.double);
+    if (staminaErr) return staminaErr;
     for (const a of aoeComposed) {
       if (a.type === 'attack' && a.defender === act.defender) return 'Already attacking ' + regionRef(act.defender) + ' this turn.';
     }
@@ -4179,8 +4216,11 @@ function aoeActionSummary(a) {
 
 function aoeComposedStripHtml() {
   const max = aoeMaxActions();
+  const stamina = aoeStaminaOf(aoePlanningPlayer);
   let html = '<div style="margin-bottom:6px;">AP <span class="pwr">' + aoeApUsedBy(aoeComposed) + '/' + max + '</span>' +
-             ' <span class="sub">(1 AP per action, at most 2 attacks and 2 defends; a double action costs 3)</span>';
+             ' <span class="sub">(1 AP per action, at most 2 attacks and 2 defends; a double action costs ' + AOE_DOUBLE_AP_COST + ')</span>' +
+             ' · Stamina <span class="pwr">' + Math.max(0, stamina - aoeStaminaUsedBy(aoeComposed)) + '/' + stamina + '</span>' +
+             ' <span class="sub">(attack 1, double attack ' + AOE_DOUBLE_ATTACK_STAMINA + ', +' + AOE_STAMINA_PER_DAY + ' each new day)</span>';
   if (aoeComposed.length === 0) {
     html += ' <span class="sub">none yet</span>';
   } else {
@@ -4280,7 +4320,10 @@ function validatePlan(plan) {
     const acts = Array.isArray(plan.actions) ? plan.actions : null;
     if (!acts || acts.length === 0) return 'Empty plan.';
     if (aoeApUsedBy(acts) > aoeMaxActions()) {
-      return 'Plan costs ' + aoeApUsedBy(acts) + ' AP; only ' + aoeMaxActions() + ' available (a double action costs 3 AP).';
+      return 'Plan costs ' + aoeApUsedBy(acts) + ' AP; only ' + aoeMaxActions() + ' available (a double action costs ' + AOE_DOUBLE_AP_COST + ' AP).';
+    }
+    if (aoeStaminaUsedBy(acts) > aoeStaminaOf(plan.player)) {
+      return 'Plan needs ' + aoeStaminaUsedBy(acts) + ' stamina; only ' + aoeStaminaOf(plan.player) + ' left.';
     }
     let attacks = 0, defends = 0;
     const defenders = new Set(), targets = new Set(), claimSrc = new Set(), adjSrc = new Set(),
@@ -4335,6 +4378,8 @@ function validatePlan(plan) {
   }
   if (plan.type === 'attack') {
     if (plan.double && !aoeDoublesAllowed()) return 'Double Attack needs a 3-action day.';
+    const staminaErr = aoeStaminaShortfall(plan.player, [], plan.double);
+    if (staminaErr) return staminaErr;
     if (!Array.isArray(plan.group) || plan.group.length === 0) return 'Pick at least one attacking territory.';
     if (!attackPlanValid(plan.player, plan.group, plan.defender)) return 'Invalid attack plan (adjacency/ownership).';
     return null;
@@ -4470,6 +4515,7 @@ function aoePerformResolutionWithSeed(rngSeed) {
     aoePendingRoundSummary = { round: thisRound, preOwners };
     const isMulti = (planA && planA.type === 'multi') || (planB && planB.type === 'multi');
     const opts = { canDefer: aoeAttritionDeferral(planA, planB), slot: 0 };
+    aoeSpendStamina(planA, planB);
     const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed, opts)
                         : resolveAoeRound(planA, planB, rngSeed, opts);
     stampSnapshotDefenses(plansSnap);
@@ -4656,7 +4702,7 @@ function aoePostResolution() {
 /* ═══════════════════════════ AoE — ACTION-PICKER UI ═══════════════════════════ */
 
 /* `action` is one of attack | attack2 | defend | defend2 | adjust | claim | pass.
-   The `2` variants are the whole-day double actions. */
+   The `2` variants are the double actions. */
 /* Why an action type cannot be started right now, or null when it can.
    `composed` is the banked plan to price the action against; pass null to skip
    the cost checks and test only the phase and day/night gates. */
@@ -4669,6 +4715,10 @@ function aoeActionUnavailableReason(action, composed) {
   if (night && base !== 'adjust' && base !== 'pass') return 'Night: only Adjust or Pass.';
   if (!night && base === 'adjust') return 'Adjusting troops is a night action.';
   if (isDouble && !aoeDoublesAllowed()) return 'Double actions need a 3-action day.';
+  if (base === 'attack') {
+    const staminaErr = aoeStaminaShortfall(aoePlanningPlayer, composed || [], isDouble);
+    if (staminaErr) return staminaErr;
+  }
   // Passing costs nothing and ends the turn, so it is always on the table.
   if (!composed || !aoeMultiMode() || base === 'pass') return null;
 
@@ -6128,7 +6178,9 @@ function render() {
     if (!w.action) {
       html += night
         ? '<div class="sub">🌙 Night: ↔ Adjust troops (move only, no combat) or ⏭ Pass. Nights do not count against the day limit.</div>'
-        : '<div class="sub">☀ Day (3 AP): ⚔ Attack (1 AP, up to 2), 🛡 Defend (1 AP, up to 2), ▣ Claim a gray (1 AP), or spend the whole day on ⚔⚔ Double Attack / 🛡🛡 Double Defend (3 AP).</div>';
+        : aoeMultiMode()
+          ? '<div class="sub">☀ Day (' + aoeMaxActions() + ' AP): ⚔ Attack (1 AP, up to 2), 🛡 Defend (1 AP, up to 2), ▣ Claim a gray (1 AP), ⚔⚔ Double Attack or 🛡🛡 Double Defend (' + AOE_DOUBLE_AP_COST + ' AP, plus one more action). Attacks spend stamina (' + Math.max(0, aoeStaminaOf(planner) - aoeStaminaUsedBy(aoeComposed)) + ' left): 1 per attack, ' + AOE_DOUBLE_ATTACK_STAMINA + ' per double attack.</div>'
+          : '<div class="sub">☀ Day: pick one action, ⚔ Attack, 🛡 Defend or ▣ Claim a gray. An attack spends 1 stamina (' + aoeStaminaOf(planner) + ' left).</div>';
     } else if (w.action === 'defend') {
       const level = w.isDouble ? 2 : 1;
       const bl = (w.defendBases && w.defendBases.size)
@@ -6138,7 +6190,7 @@ function render() {
       const isSecondBase = !w.isDouble && aoeComposedDefendCount() >= 1;
       html += '<div>' + (w.isDouble ? '🛡🛡 <strong>Double Defend</strong>' : '🛡 <strong>Defend</strong>') +
              ': <span class="pwr">' + bl + '</span> ' +
-             '<span class="sub">(' + (w.isDouble ? 'costs the whole day: 3 AP'
+             '<span class="sub">(' + (w.isDouble ? 'costs ' + AOE_DOUBLE_AP_COST + ' AP'
                                                  : isSecondBase ? 'second defend today, the last allowed'
                                                                 : 'lasts this round only') + ')</span></div>';
       html += '<div class="sub" style="margin-top:4px;">Click a border territory to fortify it (click again to clear). ' +
@@ -6154,7 +6206,7 @@ function render() {
     } else if (w.action === 'attack') {
       const G = Array.from(w.attackGroup);
       if (G.length === 0) {
-        html += '<div class="sub">' + (w.isDouble ? '⚔⚔ Double Attack (3 AP): each attacking stack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power and a win CONVERTS the territory to you. ' : '') +
+        html += '<div class="sub">' + (w.isDouble ? '⚔⚔ Double Attack (' + AOE_DOUBLE_AP_COST + ' AP, ' + AOE_DOUBLE_ATTACK_STAMINA + ' stamina): each attacking stack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power and a win CONVERTS the territory to you. ' : '') +
                 'Click your own territories to add them to the attack group, then click an enemy region.</div>';
       } else {
         const pwr = aoePower(G, w.isDouble);
@@ -6488,7 +6540,8 @@ function cpuClassicAttack() {
 function enumerateAttackCandidates(player, includeDoubles) {
   const opp = otherPlayer(player);
   const out = [];
-  const doubles = includeDoubles && aoeDoublesAllowed();
+  if (aoeStaminaShortfall(player, [], false)) return out;
+  const doubles = includeDoubles && aoeDoublesAllowed() && !aoeStaminaShortfall(player, [], true);
   for (const def of regions) {
     if (def.owner !== opp) continue;
     const adj = def.neighbors.filter(n => regions[n] && regions[n].owner === player);
@@ -6527,6 +6580,12 @@ function enumerateAttackCandidates(player, includeDoubles) {
     }
   }
   return out;
+}
+
+/* True when two attack actions march out of a shared territory. */
+function attackGroupsOverlap(a, b) {
+  if (a.type !== 'attack' || b.type !== 'attack') return false;
+  return a.group.some(g => b.group.includes(g));
 }
 
 /* Turn an attack candidate into an attack action. */
@@ -6619,7 +6678,7 @@ function cpuThreatenedCount(player) {
 function cpuComposeDay(player, difficulty) {
   cpuDifficulty = difficulty;
   const budget = aoeMaxActions(), maxA = aoeMaxAttacks(), maxD = aoeMaxDefends();
-  const acts = [];
+  const acts = [], actValues = [];
   const usedDefenders = new Set(), usedSources = new Set(), usedBases = new Set();
   let attacksTaken = 0, defendsTaken = 0, dayValue = 0;
   const apLeft = () => budget - aoeApUsedBy(acts);
@@ -6641,7 +6700,8 @@ function cpuComposeDay(player, difficulty) {
     if (b < 0) return false;
     usedBases.add(b);
     acts.push({ type: 'defend', player, bases: [b] });
-    dayValue += scoreDefendAction(player, b, 1);
+    actValues.push(scoreDefendAction(player, b, 1));
+    dayValue += actValues[actValues.length - 1];
     defendsTaken++;
     return true;
   }
@@ -6658,6 +6718,7 @@ function cpuComposeDay(player, difficulty) {
     if (attacksTaken >= maxA) break;
     if (s <= prof.floor) break;
     if (aoeActionApCost('attack', attacksTaken) > apLeft()) break;
+    if (aoeStaminaShortfall(player, acts, false)) break;
     // A second attack spends the AP a claim or a defend would use, so it must outbid one.
     if (attacksTaken >= 1 && s <= prof.secondFloor) break;
     if (usedDefenders.has(a.defender)) continue;
@@ -6667,6 +6728,7 @@ function cpuComposeDay(player, difficulty) {
     for (const g of a.group) usedAttackers.add(g);
     attacksTaken++;
     acts.push(attackActionFrom(a, player));
+    actValues.push(s);
     dayValue += s;
   }
 
@@ -6679,7 +6741,8 @@ function cpuComposeDay(player, difficulty) {
         if (cl.contributions.some(c => usedSources.has(c.source))) continue;
         for (const c of cl.contributions) usedSources.add(c.source);
         acts.push({ type: 'claim', player, claims: [{ target: cl.target, contributions: cl.contributions }] });
-        dayValue += scoreClaimAction(cl);
+        actValues.push(scoreClaimAction(cl));
+        dayValue += actValues[actValues.length - 1];
         taken++;
       }
     }
@@ -6687,21 +6750,29 @@ function cpuComposeDay(player, difficulty) {
 
   while (addDefend()) { /* spend leftover points fortifying */ }
 
-  // A double action spends the day outright, so it is taken only when it beats
-  // the whole piecemeal day by a clear margin.
+  // A double action takes a day's worth of AP from the piecemeal plan, so a
+  // double plus its best companion must beat the piecemeal day by a clear margin.
   if (aoeDoublesAllowed() && Number.isFinite(prof.doubleEdge)) {
     const bar = Math.max(1, dayValue) * prof.doubleEdge;
-    let bestDouble = null, bestScore = bar;
+    const doubles = [];
     for (const { a, s } of scoredAll) {
-      if (!a.double || a.kind !== 'win') continue;
-      if (s > bestScore) { bestScore = s; bestDouble = attackActionFrom(a, player); }
+      if (a.double && a.kind === 'win') doubles.push({ act: attackActionFrom(a, player), s });
     }
     const db = cpuPickBestBase(player, null, 2);
-    if (db >= 0) {
-      const ds = scoreDefendAction(player, db, 2);
-      if (ds > bestScore) { bestScore = ds; bestDouble = { type: 'defend', player, bases: [db], double: true }; }
+    if (db >= 0) doubles.push({ act: { type: 'defend', player, bases: [db], double: true }, s: scoreDefendAction(player, db, 2) });
+    let bestDay = null, bestScore = bar;
+    for (const d of doubles) {
+      let companion = null, companionValue = 0;
+      for (let i = 0; i < acts.length; i++) {
+        if (actValues[i] <= companionValue) continue;
+        if (attackGroupsOverlap(d.act, acts[i])) continue;
+        if (validatePlan({ type: 'multi', player, actions: [d.act, acts[i]] }) !== null) continue;
+        companion = acts[i]; companionValue = actValues[i];
+      }
+      const total = d.s + companionValue;
+      if (total > bestScore) { bestScore = total; bestDay = companion ? [d.act, companion] : [d.act]; }
     }
-    if (bestDouble) return { type: 'multi', player, actions: [bestDouble] };
+    if (bestDay) return { type: 'multi', player, actions: bestDay };
   }
 
   if (acts.length === 0) return { type: 'pass', player };
@@ -7352,14 +7423,15 @@ function renderRulesCard() {
       (actionsPerDay === 3
         ? '<h3>Day actions (3 AP per day)</h3>' +
           '<ul>' +
-            '<li>Each day you spend <strong>3 action points</strong>. Attack, Defend and Claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A <strong>double attack</strong> or <strong>double defend</strong> costs all 3.</li>' +
-            '<li>Legal full days: attack + attack + claim, attack + attack + defend, attack + defend + defend, defend + defend + claim, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, one double attack, or one double defend.</li>' +
+            '<li>Each day you spend <strong>3 action points</strong>. Attack, Defend and Claim cost 1 AP each, with at most 2 attacks and 2 defends a day. A <strong>double attack</strong> or <strong>double defend</strong> costs ' + AOE_DOUBLE_AP_COST + ' AP, so it can be paired with one more attack, defend or claim.</li>' +
+            '<li>Legal full days: attack + attack + claim, attack + attack + defend, attack + defend + defend, defend + defend + claim, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, or a double attack or double defend plus one attack, defend or claim. A double attack and a double defend cannot share a day.</li>' +
+            '<li><strong>Stamina:</strong> attacks also spend stamina. Each player starts the battle with ' + AOE_STAMINA_START + ' and gains ' + AOE_STAMINA_PER_DAY + ' at the start of every new day, and unspent stamina carries over. An attack costs 1 and a double attack costs ' + AOE_DOUBLE_ATTACK_STAMINA + '. With no stamina left you cannot attack. Defend and Claim cost none.</li>' +
             '<li>Build an action on the map, then press <strong>＋ Add to Plan</strong>. Switching action type banks a finished action automatically. Press × on a listed action to drop it. Submit sends the whole set.</li>' +
             '<li>No two attacks may target the same territory, no two claims the same gray, and each territory may supply only one claim.</li>' +
             '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then attack slot 2, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
             '<li>Whoever pays attrition places it. After the round resolves you are asked to spread your own losses across the territories that took part, for every attack that bled and for a clash alike. An attack whose losses a later attack in the same round depends on is settled automatically instead, and so is any side played by the CPU.</li>' +
           '</ul>'
-        : '<h3>Day actions (1 per day)</h3><p>Each day you pick a single action: Attack, Defend, Claim, or Pass. Double actions need the 3-action day.</p>') +
+        : '<h3>Day actions (1 per day)</h3><p>Each day you pick a single action: Attack, Defend, Claim, or Pass. Double actions need the 3-action day. An attack spends 1 stamina: you start with ' + AOE_STAMINA_START + ', gain ' + AOE_STAMINA_PER_DAY + ' each new day, and cannot attack at 0.</p>') +
       '<h3>Action ⚔ Attack</h3>' +
       '<ul>' +
         '<li>Pick a subset G of your territories, all adjacent to one enemy defender D.</li>' +
@@ -7387,9 +7459,9 @@ function renderRulesCard() {
         '<li>A Double Attack fights at ' + AOE_DOUBLE_ATTACK_MULT + 'x power. Its own losses are not reduced.</li>' +
         '<li>In a clash each side loses half of the other side\'s power.</li>' +
       '</ul>' +
-      '<h3>Action ⚔⚔ Double Attack (3 AP)</h3>' +
+      '<h3>Action ⚔⚔ Double Attack (' + AOE_DOUBLE_AP_COST + ' AP, ' + AOE_DOUBLE_ATTACK_STAMINA + ' stamina)</h3>' +
       '<ul>' +
-        '<li>The whole day spent on ONE target. Every attacking stack fights at <strong>' + AOE_DOUBLE_ATTACK_MULT + 'x power</strong>.</li>' +
+        '<li>A heavy push on ONE target. Every attacking stack fights at <strong>' + AOE_DOUBLE_ATTACK_MULT + 'x power</strong>.</li>' +
         '<li><strong>On a win the territory CONVERTS to you</strong> instead of being razed, as a sudden invasion. You pay half the defence in attrition; a QUARTER of the defending garrison changes sides and holds the ground for you. None of that garrison is drawn from your own stacks.</li>' +
         '<li>On a loss it is an ordinary failed attack. No ground taken.</li>' +
         '<li>A double attack that meets a single or double attack becomes a <strong>clash</strong>. Higher power wins. If the winner is the double attack, its rules prevail: it pays its attrition and converts the territory. If it loses, it just eats the damage.</li>' +
@@ -7399,7 +7471,7 @@ function renderRulesCard() {
       '<p><strong>Mutual clash:</strong> if both players attack each other\'s stacks (each side\'s target is part of the other\'s attacking group), both sides take damage proportional to the other\'s power and no ground changes hands, unless a winning double attack is involved.</p>' +
       '<h3>Action 🛡 Defend / 🛡🛡 Double Defend</h3>' +
       '<ul>' +
-        '<li>Each Defend action fortifies exactly ONE border territory. Up to two Defends a day at 1 AP each; a Double Defend costs all 3 and fortifies one territory twice as hard.</li>' +
+        '<li>Each Defend action fortifies exactly ONE border territory. Up to two Defends a day at 1 AP each; a Double Defend costs ' + AOE_DOUBLE_AP_COST + ' AP and fortifies one territory twice as hard.</li>' +
         '<li><strong>Reinforcement:</strong> Defend adds 50% of the territory\'s current troops, Double Defend adds 150%, capped at ' + assignQuantum + ' and ' + Math.round(assignQuantum * 1.5) + ' respectively. So under a Double Defend 10 troops become 25 and 6 become 15. It lands BEFORE attacks resolve, so a defended territory is fought at its reinforced strength.</li>' +
         '<li><strong>Holding pays:</strong> a defended territory that survives an attack divides its losses by its power factor, 1.5x for a Defend and 2.5x for a Double Defend on 10 troops, plus any aura reaching it. It never changes the attacker\'s power.</li>' +
         '<li><strong>Nearby territories brace too:</strong> a Defend lends every adjacent territory you own <strong>+25% power</strong> for that round, and a Double Defend also reaches the ring beyond for <strong>+10%</strong>. This is power only. No troops appear, nothing is permanent, and it expires when the round ends. <strong>Overlapping auras stack:</strong> the bonuses from separate Defends add up, capped at +50%, so two Defends placed side by side each sit in the other\'s ring and both gain +25% on top of their own reinforcement. A territory\'s own reinforcement and the aura reaching it add too, so a Defend at 1.5x standing in a +25% ring fights at 1.75x. Auras are drawn on the map as a thin inner ring with the percentage, and the history arrows replay them for past rounds.</li>' +
