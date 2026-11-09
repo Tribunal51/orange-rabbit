@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Black Box</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cell: min(40px, calc((100vw - 92px) / 10));
+      --p1: #38bdf8;
+      --p2: #f472b6;
+      --ray: #fbbf24;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(ellipse at top, #1c1917 0%, #0c0a09 60%, #000 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 16px 60px;
+    }
+
+    .hidden { display: none !important; }
+
+    h1 { font-size: 32px; margin-bottom: 6px; letter-spacing: 1px; }
+    .setup-sub { opacity: .55; font-size: 14px; margin-bottom: 30px; text-align: center; max-width: 420px; }
+
+    .homeLink {
+      position: fixed; top: 16px; left: 20px;
+      color: rgba(255,255,255,.7); text-decoration: none;
+      font-size: 14px; z-index: 100;
+    }
+    .homeLink:hover { color: #fff; }
+
+    /* setup */
+    #setup { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+    .setupSection { margin-bottom: 20px; width: 380px; max-width: 100%; }
+    .setupLabel {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; opacity: .6; margin-bottom: 8px;
+    }
+    .setupHint { font-size: 12px; opacity: .45; margin-top: 6px; line-height: 1.4; }
+    .modeToggle { display: flex; gap: 6px; }
+    .modeBtn {
+      flex: 1; padding: 10px 0;
+      border: 1px solid rgba(251,191,36,.25); border-radius: 10px;
+      background: rgba(251,191,36,.05); color: rgba(255,255,255,.7);
+      font-size: 14px; cursor: pointer; transition: .2s;
+    }
+    .modeBtn.selected {
+      background: rgba(251,191,36,.22); color: #fff;
+      font-weight: bold; border-color: rgba(251,191,36,.6);
+    }
+
+    .startBtn, .actionBtn {
+      padding: 14px 50px; font-size: 17px;
+      font-weight: bold; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #1c1917; cursor: pointer; transition: .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .startBtn { margin-top: 18px; }
+    .startBtn:hover, .actionBtn:hover:not(:disabled) { transform: scale(1.04); }
+    .actionBtn { padding: 10px 22px; font-size: 14px; }
+    .actionBtn:disabled { opacity: .35; cursor: default; }
+    .ghostBtn {
+      padding: 10px 22px; font-size: 14px; border-radius: 12px;
+      background: rgba(255,255,255,.06); color: rgba(255,255,255,.8);
+      border: 1px solid rgba(255,255,255,.15); cursor: pointer;
+    }
+    .ghostBtn:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .rulesLink {
+      margin-top: 16px; font-size: 13px; color: rgba(255,255,255,.5);
+      cursor: pointer; text-decoration: underline;
+    }
+    .rulesLink:hover { color: #fff; }
+
+    /* placement and cover screens */
+    #place, #cover { display: flex; flex-direction: column; align-items: center; margin-top: 20px; text-align: center; }
+    #place h2, #cover h2 { font-size: 24px; margin-bottom: 6px; }
+    #place p, #cover p { opacity: .6; font-size: 14px; margin-bottom: 18px; }
+    .row-btns { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
+
+    /* game header */
+    #game { display: flex; flex-direction: column; align-items: center; width: 100%; margin-top: 20px; }
+    .turn-indicator {
+      padding: 6px 16px; border-radius: 20px; font-size: 13px;
+      font-weight: bold; letter-spacing: .5px; margin-bottom: 10px;
+      background: rgba(251,191,36,.15); color: #fde68a;
+      border: 1px solid rgba(251,191,36,.4);
+    }
+    .turn-indicator.p0 { background: rgba(56,189,248,.2); color: #7dd3fc; border-color: rgba(56,189,248,.4); }
+    .turn-indicator.p1 { background: rgba(244,114,182,.2); color: #f9a8d4; border-color: rgba(244,114,182,.4); }
+    .message {
+      min-height: 22px; font-size: 14px; margin-bottom: 14px; text-align: center;
+      color: rgba(255,255,255,.8);
+    }
+    .message.warn { color: #fca5a5; }
+    .message.good { color: #86efac; }
+
+    .boards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+
+    .panel {
+      padding: 12px; border-radius: 18px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.08);
+      transition: .2s;
+    }
+    .panel.p0 { border-color: rgba(56,189,248,.3); }
+    .panel.p1 { border-color: rgba(244,114,182,.3); }
+    .panel.active { background: rgba(255,255,255,.07); box-shadow: 0 0 22px rgba(251,191,36,.18); }
+    .panel.inactive { opacity: .55; }
+    .panel-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 8px; font-size: 14px; gap: 10px;
+    }
+    .pname { font-weight: 800; }
+    .panel.p0 .pname { color: #7dd3fc; }
+    .panel.p1 .pname { color: #f9a8d4; }
+    .pscore { opacity: .8; }
+    .pscore b { font-size: 18px; }
+    .panel-sub { font-size: 12px; opacity: .5; margin-bottom: 8px; }
+    .panel-actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+
+    /* board */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(10, var(--cell));
+      grid-template-rows: repeat(10, var(--cell));
+      gap: 2px;
+      user-select: none;
+    }
+    .corner { }
+    .port {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: rgba(255,255,255,.25);
+      border-radius: 50%; cursor: pointer; transition: .15s;
+      font-weight: 700;
+    }
+    .port.open:hover { background: rgba(251,191,36,.25); color: #fde68a; }
+    .port.locked { cursor: default; }
+    .port.used {
+      color: #fff; font-size: 13px; border: 2px solid transparent;
+    }
+    .port.hit { background: #b91c1c; }
+    .port.reflect { background: #6b7280; }
+    .port.by0 { border-color: var(--p1); }
+    .port.by1 { border-color: var(--p2); }
+
+    .cell {
+      background: #1c1917;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background .15s;
+      position: relative;
+    }
+    .cell:hover { background: #292524; }
+    .cell.locked { cursor: default; }
+    .cell.locked:hover { background: #1c1917; }
+    .cell.mark::after, .cell.atom::after {
+      content: ''; width: 60%; height: 60%; border-radius: 50%;
+    }
+    .cell.mark::after { background: radial-gradient(circle at 35% 35%, #fde68a, #d97706); }
+    .cell.atom::after { background: radial-gradient(circle at 35% 35%, #e7e5e4, #57534e); }
+    .cell.correct::after { background: radial-gradient(circle at 35% 35%, #bbf7d0, #16a34a); }
+    .cell.missed::after { background: radial-gradient(circle at 35% 35%, #e7e5e4, #57534e); outline: 2px dashed #f87171; outline-offset: 2px; }
+    .cell.wrong::after {
+      content: '✕'; width: auto; height: auto; background: none;
+      color: #f87171; font-weight: 900; font-size: calc(var(--cell) * .5);
+    }
+
+    .legend {
+      display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+      font-size: 12px; opacity: .6; margin-top: 18px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chip { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+
+    .game-btns { display: flex; gap: 10px; margin-top: 20px; }
+
+    /* overlay */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.75);
+      display: flex; align-items: center; justify-content: center; z-index: 200;
+      padding: 20px;
+    }
+    .overlay-card {
+      background: #1c1917; border: 1px solid rgba(251,191,36,.3);
+      border-radius: 18px; padding: 26px; max-width: 520px; width: 100%;
+      max-height: 85vh; overflow-y: auto; line-height: 1.5; font-size: 14px;
+    }
+    .overlay-card h2 { margin-bottom: 12px; }
+    .overlay-card h3 { margin: 14px 0 6px; font-size: 15px; color: #fde68a; }
+    .overlay-card ul { padding-left: 18px; }
+    .overlay-card li { margin-bottom: 4px; }
+    .overlay-card table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+    .overlay-card td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .overlay-card .closeBtn { margin-top: 16px; }
+
+    .result {
+      text-align: center; padding: 14px 22px; border-radius: 14px; margin-bottom: 14px;
+      background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.4);
+    }
+    .result h2 { font-size: 22px; margin-bottom: 4px; }
+    .result p { font-size: 14px; opacity: .8; }
+    .result.lose { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.4); }
+
+    /* online lobby */
+    #lobby { display: flex; flex-direction: column; align-items: center; margin-top: 20px; text-align: center; }
+    #lobby h2 { font-size: 24px; margin-bottom: 6px; }
+    .lobby-status {
+      font-size: 15px; margin: 14px 0;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: var(--ray); border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lobby-link-wrap { display: flex; gap: 6px; margin: 14px auto; width: 380px; max-width: 100%; }
+    .lobby-link-input {
+      flex: 1; min-width: 0; padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      background: rgba(0,0,0,.3); color: #fde68a;
+      font-size: 12px; font-family: monospace; outline: none;
+    }
+    .lobby-error { color: #f87171; font-size: 14px; margin: 10px 0; }
+
+    .dc-notice {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(12,10,9,.96); color: #f87171; padding: 24px 36px;
+      border-radius: 16px; font-size: 16px; z-index: 300;
+      border: 1px solid rgba(248,113,113,.3); text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .dc-notice button { display: block; margin: 14px auto 0; }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+  <a class="homeLink" href="index.html">← Hub</a>
+
+  <!-- setup -->
+  <div id="setup">
+    <h1>Black Box</h1>
+    <p class="setup-sub">Fire rays of light into the box, watch where they come out, and work out where the hidden atoms are.</p>
+
+    <div class="setupSection">
+      <div class="setupLabel">Players</div>
+      <div class="modeToggle" data-group="players">
+        <button class="modeBtn" data-value="1">1 Player</button>
+        <button class="modeBtn" data-value="2">2 Players</button>
+      </div>
+    </div>
+
+    <div class="setupSection twoOnly">
+      <div class="setupLabel">Play</div>
+      <div class="modeToggle" data-group="where">
+        <button class="modeBtn" data-value="local">Same screen</button>
+        <button class="modeBtn" data-value="online">Online</button>
+      </div>
+      <div class="setupHint" id="whereHint"></div>
+    </div>
+
+    <div class="setupSection twoOnly">
+      <div class="setupLabel">Game</div>
+      <div class="modeToggle" data-group="game">
+        <button class="modeBtn" data-value="versus">Versus</button>
+        <button class="modeBtn" data-value="coop">Co-op race</button>
+      </div>
+      <div class="setupHint" id="gameHint"></div>
+    </div>
+
+    <div class="setupSection twoOnly">
+      <div class="setupLabel">Turns</div>
+      <div class="modeToggle" data-group="turns">
+        <button class="modeBtn" data-value="turn">Turn by turn</button>
+        <button class="modeBtn" data-value="simul">Simultaneous</button>
+      </div>
+      <div class="setupHint" id="turnsHint"></div>
+    </div>
+
+    <div class="setupSection">
+      <div class="setupLabel">Atoms</div>
+      <div class="modeToggle" data-group="atoms">
+        <button class="modeBtn" data-value="4">4</button>
+        <button class="modeBtn" data-value="5">5</button>
+      </div>
+    </div>
+
+    <button class="startBtn" onclick="launchGame()">Start</button>
+    <div class="rulesLink" onclick="showRules()">How to play</div>
+  </div>
+
+  <!-- online lobby -->
+  <div id="lobby" class="hidden">
+    <h2 id="lobbyTitle"></h2>
+    <div id="lobbyContent"></div>
+    <button class="ghostBtn" onclick="backToSetup()">Cancel</button>
+  </div>
+
+  <!-- secret atom placement -->
+  <div id="place" class="hidden">
+    <h2 id="placeTitle"></h2>
+    <p id="placeSub"></p>
+    <div class="board" id="placeBoard"></div>
+    <div class="row-btns">
+      <button class="ghostBtn" onclick="randomPlacement()">Random</button>
+      <button class="ghostBtn" onclick="clearPlacement()">Clear</button>
+      <button class="actionBtn" id="placeDone" onclick="finishPlacement()">Done</button>
+    </div>
+  </div>
+
+  <!-- hand-off screen between players -->
+  <div id="cover" class="hidden">
+    <h2 id="coverTitle"></h2>
+    <p id="coverSub"></p>
+    <button class="actionBtn" id="coverBtn">Ready</button>
+  </div>
+
+  <!-- game -->
+  <div id="game" class="hidden">
+    <div id="result" class="result hidden"></div>
+    <div id="turnIndicator" class="turn-indicator"></div>
+    <div id="message" class="message"></div>
+    <div id="boards" class="boards"></div>
+    <div class="legend">
+      <span><i class="chip" style="background:#b91c1c"></i>H = hit (absorbed)</span>
+      <span><i class="chip" style="background:#6b7280"></i>R = reflected back</span>
+      <span><i class="chip" style="background:#7c3aed"></i>Same number = entry and exit</span>
+      <span><i class="chip" style="background:radial-gradient(circle at 35% 35%, #fde68a, #d97706)"></i>Your mark</span>
+    </div>
+    <div class="game-btns">
+      <button class="ghostBtn" onclick="launchGame()">New game</button>
+      <button class="ghostBtn" onclick="backToSetup()">Menu</button>
+      <button class="ghostBtn" onclick="showRules()">Rules</button>
+    </div>
+  </div>
+
+  <!-- rules -->
+  <div id="rulesOverlay" class="overlay hidden" onclick="hideRules(event)">
+    <div class="overlay-card">
+      <h2>How to play</h2>
+      <p>Atoms are hidden somewhere on an 8 × 8 box. You can't see inside. Click any numbered spot around the edge to fire a ray of light in, then see what happens to it.</p>
+
+      <h3>How rays move</h3>
+      <ul>
+        <li>A ray goes straight until it gets near an atom.</li>
+        <li>If an atom is directly in its path, the ray is absorbed: a <b>Hit</b>.</li>
+        <li>If an atom sits one square ahead and one square to the side, the ray bends 90° away from it.</li>
+        <li>If atoms sit on both diagonals ahead, the ray turns all the way around and comes back out where it went in: a <b>Reflection</b>.</li>
+        <li>An atom on the edge reflects a ray fired into the entry spot right next to it, before the ray even gets in.</li>
+        <li>Otherwise the ray comes out somewhere. Its entry and exit get the same number.</li>
+      </ul>
+
+      <h3>Scoring (lower is better)</h3>
+      <table>
+        <tr><td>Hit</td><td>1 point</td></tr>
+        <tr><td>Reflection</td><td>1 point</td></tr>
+        <tr><td>Ray exits elsewhere</td><td>2 points</td></tr>
+        <tr><td>Each wrong atom in a guess</td><td>5 points</td></tr>
+      </table>
+
+      <h3>Turns</h3>
+      <ul>
+        <li>Click squares inside the box to mark where you think atoms are. Marking is free and does not use your turn.</li>
+        <li>Each turn you either fire one ray or make a guess. A guess checks all your marks at once, so you need exactly as many marks as there are atoms.</li>
+        <li>A wrong guess tells you how many marks were right and adds the penalty.</li>
+      </ul>
+
+      <h3>Modes</h3>
+      <ul>
+        <li><b>1 Player:</b> the CPU hides the atoms. Find them with the lowest score.</li>
+        <li><b>Versus:</b> each player secretly hides atoms for the other. First to guess the other's atoms wins.</li>
+        <li><b>Co-op race:</b> the CPU hides the atoms and both players share every ray result. First correct guess wins.</li>
+        <li><b>Turn by turn</b> alternates actions. <b>Simultaneous</b> lets both players act whenever they like.</li>
+        <li><b>Online:</b> pick the settings, send the link, and play on two devices. You only see your own marks.</li>
+      </ul>
+      <div style="text-align:center"><button class="actionBtn closeBtn" onclick="hideRules()">Got it</button></div>
+    </div>
+  </div>
+
+  <script>
+    const GRID = 8;
+    const BOARD_SPAN = GRID + 2;
+    const HIT_COST = 1;
+    const REFLECTION_COST = 1;
+    const DETOUR_COST = 2;
+    const WRONG_ATOM_PENALTY = 5;
+    const BEST_SCORE_KEY_PREFIX = 'bb-best-';
+    const DETOUR_COLORS = ['#7c3aed', '#0891b2', '#059669', '#ca8a04', '#c026d3', '#2563eb',
+      '#ea580c', '#0d9488', '#9333ea', '#65a30d', '#db2777', '#4f46e5'];
+
+    const ROOM_ID_PREFIX = 'bb-';
+    const ROOM_ID_LENGTH = 8;
+    const HOST_INDEX = 0;
+    const GUEST_INDEX = 1;
+
+    const settings = { players: 1, where: 'local', game: 'versus', turns: 'turn', atoms: 4 };
+
+    let boxes = [];
+    let players = [];
+    let currentPlayer = 0;
+    let gameOver = false;
+    let winner = null;
+    let placement = { hider: 0, atoms: new Set(), onDone: null };
+    let publicMessage = { text: '', kind: '' };
+
+    // The host owns the hidden atoms and applies every action. The guest sends intents and renders the host's state.
+    let onlineRole = null;
+    let myIndex = HOST_INDEX;
+    let peer = null;
+    let conn = null;
+
+    /* ═══════════ setup ═══════════ */
+
+    document.querySelectorAll('.modeToggle').forEach(group => {
+      group.addEventListener('click', e => {
+        const btn = e.target.closest('.modeBtn');
+        if (!btn) return;
+        const key = group.dataset.group;
+        const raw = btn.dataset.value;
+        settings[key] = isNaN(Number(raw)) ? raw : Number(raw);
+        renderSetup();
+      });
+    });
+
+    function renderSetup() {
+      document.querySelectorAll('.modeToggle').forEach(group => {
+        const key = group.dataset.group;
+        group.querySelectorAll('.modeBtn').forEach(b => {
+          b.classList.toggle('selected', String(settings[key]) === b.dataset.value);
+        });
+      });
+      document.querySelectorAll('.twoOnly').forEach(el => el.classList.toggle('hidden', settings.players !== 2));
+      document.getElementById('whereHint').textContent = settings.where === 'local'
+        ? 'Both players share this screen.'
+        : 'You get a link to send. You pick the settings and play as Player 1.';
+      document.getElementById('gameHint').textContent = settings.game === 'versus'
+        ? 'Each player hides atoms for the other. First to find them wins.'
+        : 'The CPU hides the atoms. You share every ray result. First correct guess wins.';
+      document.getElementById('turnsHint').textContent = settings.turns === 'turn'
+        ? 'Players take turns: fire one ray or make one guess.'
+        : 'Both players act whenever they like. Fastest correct guess wins.';
+    }
+
+    function showScreen(id) {
+      ['setup', 'lobby', 'place', 'cover', 'game'].forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+    }
+
+    function backToSetup() {
+      leaveRoom();
+      showScreen('setup');
+      renderSetup();
+    }
+    function showRules() { document.getElementById('rulesOverlay').classList.remove('hidden'); }
+    function hideRules(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('rulesOverlay').classList.add('hidden');
+    }
+
+    function isVersus() { return settings.players === 2 && settings.game === 'versus'; }
+    function isTwoPlayer() { return settings.players === 2; }
+
+    function newBox(atoms) {
+      return { atoms, ports: new Array(GRID * 4).fill(null), detourCount: 0 };
+    }
+
+    function isOnline() { return onlineRole !== null; }
+    function isGuest() { return onlineRole === 'guest'; }
+
+    function canControl(pi) { return !isOnline() || pi === myIndex; }
+
+    function newPlayer(index, boxIndex) {
+      const name = settings.players === 1 ? 'You' : `Player ${index + 1}`;
+      return { index, name, boxIndex, marks: new Set(), score: 0, rays: 0, guesses: 0 };
+    }
+
+    function resetRound() {
+      gameOver = false;
+      winner = null;
+      currentPlayer = 0;
+    }
+
+    function randomAtoms(count) {
+      const atoms = new Set();
+      while (atoms.size < count) atoms.add(Math.floor(Math.random() * GRID * GRID));
+      return atoms;
+    }
+
+    function launchGame() {
+      if (isTwoPlayer() && settings.where === 'online') { launchOnlineGame(); return; }
+      resetRound();
+      if (!isTwoPlayer()) {
+        boxes = [newBox(randomAtoms(settings.atoms))];
+        players = [newPlayer(0, 0)];
+        startPlay();
+        return;
+      }
+      if (settings.game === 'coop') {
+        boxes = [newBox(randomAtoms(settings.atoms))];
+        players = [newPlayer(0, 0), newPlayer(1, 0)];
+        startPlay();
+        return;
+      }
+      boxes = [null, null];
+      players = [newPlayer(0, 0), newPlayer(1, 1)];
+      showCover('Player 1, hide your atoms', 'Player 2, look away.', () =>
+        startPlacement(0, atoms => {
+          boxes[1] = newBox(atoms);
+          showCover('Pass to Player 2', 'Player 1, look away.', () =>
+            startPlacement(1, atoms => {
+              boxes[0] = newBox(atoms);
+              showCover('Atoms hidden', settings.turns === 'turn'
+                ? 'Player 1 goes first.'
+                : 'Both players play at once.', startPlay);
+            }));
+        }));
+    }
+
+    /* ═══════════ secret placement (versus) ═══════════ */
+
+    function showCover(title, sub, onReady) {
+      document.getElementById('coverTitle').textContent = title;
+      document.getElementById('coverSub').textContent = sub;
+      const btn = document.getElementById('coverBtn');
+      btn.onclick = onReady;
+      btn.classList.toggle('hidden', !onReady);
+      showScreen('cover');
+    }
+
+    function startPlacement(hider, onDone) {
+      placement = { hider, atoms: new Set(), onDone };
+      document.getElementById('placeTitle').textContent = `Player ${hider + 1}: hide ${settings.atoms} atoms`;
+      document.getElementById('placeSub').textContent = `Player ${2 - hider} will try to find them.`;
+      renderPlacement();
+      showScreen('place');
+    }
+
+    function renderPlacement() {
+      const board = document.getElementById('placeBoard');
+      board.innerHTML = '';
+      for (let R = 0; R < BOARD_SPAN; R++) {
+        for (let C = 0; C < BOARD_SPAN; C++) {
+          const div = document.createElement('div');
+          const r = R - 1, c = C - 1;
+          if (isInside(r, c)) {
+            div.className = 'cell' + (placement.atoms.has(r * GRID + c) ? ' atom' : '');
+            div.onclick = () => togglePlacement(r * GRID + c);
+          } else {
+            div.className = 'corner';
+          }
+          board.appendChild(div);
+        }
+      }
+      document.getElementById('placeDone').disabled = placement.atoms.size !== settings.atoms;
+    }
+
+    function togglePlacement(cell) {
+      if (placement.atoms.has(cell)) placement.atoms.delete(cell);
+      else if (placement.atoms.size < settings.atoms) placement.atoms.add(cell);
+      renderPlacement();
+    }
+
+    function randomPlacement() { placement.atoms = randomAtoms(settings.atoms); renderPlacement(); }
+    function clearPlacement() { placement.atoms = new Set(); renderPlacement(); }
+
+    function finishPlacement() {
+      if (placement.atoms.size !== settings.atoms) return;
+      placement.onDone(placement.atoms);
+    }
+
+    /* ═══════════ ray physics ═══════════ */
+
+    function isInside(r, c) { return r >= 0 && r < GRID && c >= 0 && c < GRID; }
+
+    // Ports run clockwise: top (left to right), right (top to bottom), bottom (right to left), left (bottom to top).
+    function portStart(port) {
+      const side = Math.floor(port / GRID), i = port % GRID;
+      if (side === 0) return { r: -1, c: i, dr: 1, dc: 0 };
+      if (side === 1) return { r: i, c: GRID, dr: 0, dc: -1 };
+      if (side === 2) return { r: GRID, c: GRID - 1 - i, dr: -1, dc: 0 };
+      return { r: GRID - 1 - i, c: -1, dr: 0, dc: 1 };
+    }
+
+    function portAt(r, c) {
+      if (r === -1) return c;
+      if (c === GRID) return GRID + r;
+      if (r === GRID) return GRID * 2 + (GRID - 1 - c);
+      return GRID * 3 + (GRID - 1 - r);
+    }
+
+    function traceRay(atoms, port) {
+      let { r, c, dr, dc } = portStart(port);
+      const hasAtom = (rr, cc) => isInside(rr, cc) && atoms.has(rr * GRID + cc);
+      // Perpendicular to the travel direction; the two diagonals ahead are ahead +/- side.
+      const side = () => ({ sr: dc, sc: -dr });
+
+      if (hasAtom(r + dr, c + dc)) return { kind: 'H' };
+      let { sr, sc } = side();
+      if (hasAtom(r + dr + sr, c + dc + sc) || hasAtom(r + dr - sr, c + dc - sc)) return { kind: 'R' };
+
+      const maxSteps = GRID * GRID * 4;
+      for (let step = 0; step < maxSteps; step++) {
+        r += dr; c += dc;
+        if (!isInside(r, c)) {
+          const exit = portAt(r, c);
+          return exit === port ? { kind: 'R' } : { kind: 'D', exit };
+        }
+        for (let turn = 0; turn < 4; turn++) {
+          if (hasAtom(r + dr, c + dc)) return { kind: 'H' };
+          ({ sr, sc } = side());
+          const atomOnPlusSide = hasAtom(r + dr + sr, c + dc + sc);
+          const atomOnMinusSide = hasAtom(r + dr - sr, c + dc - sc);
+          if (atomOnPlusSide && atomOnMinusSide) { dr = -dr; dc = -dc; }
+          else if (atomOnPlusSide) { dr = -sr; dc = -sc; }
+          else if (atomOnMinusSide) { dr = sr; dc = sc; }
+          else break;
+        }
+      }
+      return { kind: 'R' };
+    }
+
+    /* ═══════════ turns and actions ═══════════ */
+
+    function startPlay() {
+      showScreen('game');
+      announce(settings.players === 1
+        ? `${settings.atoms} atoms are hidden. Click an edge number to fire a ray.`
+        : 'Click an edge number to fire a ray, or mark squares and guess.');
+      render();
+    }
+
+    function canAct(pi) {
+      if (gameOver) return false;
+      if (!isTwoPlayer() || settings.turns === 'simul') return true;
+      return currentPlayer === pi;
+    }
+
+    function turnWarning() {
+      return gameOver ? 'Game over.' : `It's ${players[currentPlayer].name}'s turn.`;
+    }
+
+    function endAction() {
+      if (isTwoPlayer() && settings.turns === 'turn' && !gameOver) currentPlayer = 1 - currentPlayer;
+      render();
+    }
+
+    function onPortClick(pi, port) {
+      if (!canControl(pi)) { setMessage("That's your opponent's board.", 'warn'); return; }
+      if (!canAct(pi)) { setMessage(turnWarning(), 'warn'); return; }
+      if (isGuest()) { sendToPeer({ type: 'fire', port }); return; }
+      fireRay(pi, port);
+    }
+
+    function onGuessClick(pi) {
+      if (!canControl(pi)) return;
+      if (!canAct(pi)) { setMessage(turnWarning(), 'warn'); return; }
+      if (isGuest()) { sendToPeer({ type: 'guess', marks: [...players[pi].marks] }); return; }
+      submitGuess(pi);
+    }
+
+    function fireRay(pi, port) {
+      const player = players[pi];
+      const box = boxes[player.boxIndex];
+      if (!canAct(pi) || box.ports[port]) return;
+
+      const result = traceRay(box.atoms, port);
+      const rayLabel = isTwoPlayer() ? `${player.name}: ray ${port + 1}` : `Ray ${port + 1}`;
+      player.rays++;
+      if (result.kind === 'H') {
+        box.ports[port] = { text: 'H', cls: 'hit', by: pi };
+        player.score += HIT_COST;
+        announce(`${rayLabel} was absorbed. Hit, +${HIT_COST}.`);
+      } else if (result.kind === 'R') {
+        box.ports[port] = { text: 'R', cls: 'reflect', by: pi };
+        player.score += REFLECTION_COST;
+        announce(`${rayLabel} came straight back. Reflection, +${REFLECTION_COST}.`);
+      } else {
+        const label = ++box.detourCount;
+        const color = DETOUR_COLORS[(label - 1) % DETOUR_COLORS.length];
+        box.ports[port] = { text: label, color, by: pi };
+        box.ports[result.exit] = { text: label, color, by: pi };
+        player.score += DETOUR_COST;
+        announce(`${rayLabel} came out at ${result.exit + 1}. +${DETOUR_COST}.`);
+      }
+      endAction();
+    }
+
+    function toggleMark(pi, cell) {
+      const player = players[pi];
+      if (gameOver || !canControl(pi)) return;
+      if (player.marks.has(cell)) { player.marks.delete(cell); render(); return; }
+      if (player.marks.size >= settings.atoms) {
+        setMessage(`You can only mark ${settings.atoms} squares. Remove one first.`, 'warn');
+        return;
+      }
+      player.marks.add(cell);
+      render();
+    }
+
+    function submitGuess(pi) {
+      const player = players[pi];
+      if (!canAct(pi) || player.marks.size !== settings.atoms) return;
+      const atoms = boxes[player.boxIndex].atoms;
+      const correct = [...player.marks].filter(cell => atoms.has(cell)).length;
+      player.guesses++;
+      if (correct === settings.atoms) { declareWinner(pi); return; }
+      const wrong = settings.atoms - correct;
+      player.score += wrong * WRONG_ATOM_PENALTY;
+      const who = isTwoPlayer() ? `${player.name}: ` : '';
+      announce(`${who}${correct} of ${settings.atoms} marks are right. +${wrong * WRONG_ATOM_PENALTY} penalty.`, 'warn');
+      endAction();
+    }
+
+    function giveUp() {
+      gameOver = true;
+      winner = null;
+      announce('Atoms revealed.');
+      render();
+    }
+
+    function readBestScore() {
+      try { return Number(localStorage.getItem(BEST_SCORE_KEY_PREFIX + settings.atoms)) || null; } catch (_) { return null; }
+    }
+
+    function saveBestScore(score) {
+      try { localStorage.setItem(BEST_SCORE_KEY_PREFIX + settings.atoms, String(score)); } catch (_) { }
+    }
+
+    function declareWinner(pi) {
+      gameOver = true;
+      winner = pi;
+      const player = players[pi];
+      if (isTwoPlayer()) {
+        announce(`${player.name} found all ${settings.atoms} atoms.`, 'good');
+      } else {
+        const best = readBestScore();
+        const isNewBest = best === null || player.score < best;
+        if (isNewBest) saveBestScore(player.score);
+        announce(isNewBest ? 'New best score!' : `Best score for ${settings.atoms} atoms: ${best}.`, 'good');
+      }
+      render();
+    }
+
+    /* ═══════════ rendering ═══════════ */
+
+    function setMessage(text, kind) {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = 'message' + (kind ? ' ' + kind : '');
+    }
+
+    function announce(text, kind = '') {
+      publicMessage = { text, kind };
+      setMessage(text, kind);
+    }
+
+    function displayName(player) {
+      return isOnline() && player.index === myIndex ? `${player.name} (you)` : player.name;
+    }
+
+    function renderResult() {
+      const el = document.getElementById('result');
+      if (!gameOver) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      if (winner === null) {
+        el.className = 'result lose';
+        el.innerHTML = '<h2>Revealed</h2><p>Grey atoms with a red outline were the ones you missed.</p>';
+        return;
+      }
+      const p = players[winner];
+      if (!isTwoPlayer()) {
+        el.className = 'result';
+        el.innerHTML = `<h2>Solved!</h2><p>Score ${p.score} with ${p.rays} ray${p.rays === 1 ? '' : 's'} and ${p.guesses} guess${p.guesses === 1 ? '' : 'es'}.</p>`;
+        return;
+      }
+      const other = players[1 - winner];
+      const iLost = isOnline() && winner !== myIndex;
+      const title = !isOnline() ? `${p.name} wins!` : (iLost ? `${p.name} wins` : 'You win!');
+      el.className = 'result' + (iLost ? ' lose' : '');
+      el.innerHTML = `<h2>${title}</h2><p>${p.name} scored ${p.score}. ${other.name} scored ${other.score}.</p>`;
+    }
+
+    function renderTurnIndicator() {
+      const el = document.getElementById('turnIndicator');
+      el.className = 'turn-indicator';
+      if (gameOver) { el.textContent = 'Game over'; return; }
+      if (!isTwoPlayer()) { el.textContent = 'Fire a ray or make a guess'; return; }
+      if (settings.turns === 'simul') { el.textContent = 'Simultaneous: both play at once'; return; }
+      const mine = isOnline() && currentPlayer === myIndex;
+      el.textContent = mine ? 'Your turn' : `${players[currentPlayer].name}'s turn`;
+      el.classList.add('p' + currentPlayer);
+    }
+
+    function cellClass(player, box, cell) {
+      const showMarks = !isOnline() || player.index === myIndex || gameOver;
+      const marked = showMarks && player.marks.has(cell);
+      if (!gameOver) return marked ? ' mark' : '';
+      const isAtom = box.atoms.has(cell);
+      if (isAtom && marked) return ' correct';
+      if (isAtom) return ' missed';
+      if (marked) return ' wrong';
+      return '';
+    }
+
+    function boardSubtitle(player) {
+      if (!isTwoPlayer()) return `${settings.atoms} hidden atoms`;
+      if (settings.game === 'coop') return 'Shared box hidden by the CPU';
+      return `Finding Player ${2 - player.index}'s atoms`;
+    }
+
+    function renderPanel(player) {
+      const box = boxes[player.boxIndex];
+      const active = canAct(player.index) && canControl(player.index);
+      const panel = document.createElement('div');
+      const turnState = isTwoPlayer() && settings.turns === 'turn' && !gameOver
+        ? (canAct(player.index) ? ' active' : ' inactive') : '';
+      panel.className = `panel p${player.index}${turnState}`;
+
+      const head = document.createElement('div');
+      head.className = 'panel-head';
+      head.innerHTML = `<span class="pname">${displayName(player)}</span><span class="pscore">Score <b>${player.score}</b></span>`;
+      panel.appendChild(head);
+
+      const sub = document.createElement('div');
+      sub.className = 'panel-sub';
+      sub.textContent = `${boardSubtitle(player)} · ${player.rays} ray${player.rays === 1 ? '' : 's'} · ${player.guesses} guess${player.guesses === 1 ? '' : 'es'}`;
+      panel.appendChild(sub);
+
+      const board = document.createElement('div');
+      board.className = 'board';
+      for (let R = 0; R < BOARD_SPAN; R++) {
+        for (let C = 0; C < BOARD_SPAN; C++) {
+          board.appendChild(renderSquare(player, box, R - 1, C - 1, active));
+        }
+      }
+      panel.appendChild(board);
+
+      if (!canControl(player.index)) return panel;
+      const actions = document.createElement('div');
+      actions.className = 'panel-actions';
+      const guessBtn = document.createElement('button');
+      guessBtn.className = 'actionBtn';
+      guessBtn.textContent = `Guess (${player.marks.size}/${settings.atoms})`;
+      guessBtn.disabled = !active || player.marks.size !== settings.atoms;
+      guessBtn.onclick = () => onGuessClick(player.index);
+      actions.appendChild(guessBtn);
+      if (!isTwoPlayer() && !gameOver) {
+        const giveUpBtn = document.createElement('button');
+        giveUpBtn.className = 'ghostBtn';
+        giveUpBtn.textContent = 'Reveal';
+        giveUpBtn.onclick = giveUp;
+        actions.appendChild(giveUpBtn);
+      }
+      panel.appendChild(actions);
+      return panel;
+    }
+
+    function renderSquare(player, box, r, c, active) {
+      const div = document.createElement('div');
+      const isCorner = (r < 0 || r >= GRID) && (c < 0 || c >= GRID);
+      if (isCorner) { div.className = 'corner'; return div; }
+
+      if (isInside(r, c)) {
+        const cell = r * GRID + c;
+        const locked = gameOver || !canControl(player.index);
+        div.className = 'cell' + cellClass(player, box, cell) + (locked ? ' locked' : '');
+        div.onclick = () => toggleMark(player.index, cell);
+        return div;
+      }
+
+      const port = portAt(r, c);
+      const marker = box.ports[port];
+      if (!marker) {
+        div.className = 'port' + (active ? ' open' : ' locked');
+        div.textContent = port + 1;
+        div.title = `Fire ray ${port + 1}`;
+        div.onclick = () => onPortClick(player.index, port);
+        return div;
+      }
+      const byClass = isTwoPlayer() ? ` by${marker.by}` : '';
+      div.className = `port used locked${marker.cls ? ' ' + marker.cls : ''}${byClass}`;
+      div.textContent = marker.text;
+      if (marker.color) div.style.background = marker.color;
+      return div;
+    }
+
+    function render() {
+      renderResult();
+      renderTurnIndicator();
+      const container = document.getElementById('boards');
+      container.innerHTML = '';
+      players.forEach(p => container.appendChild(renderPanel(p)));
+      if (onlineRole === 'host') sendState();
+    }
+
+    /* ═══════════ online (PeerJS, host is the referee) ═══════════ */
+
+    async function fetchIceServers() {
+      try {
+        const r = await fetch('https://orange-rabbit.metered.live/api/v1/turn/credentials?apiKey=eb0eba44e2c776127c892a044cf44999c5a6');
+        if (!r.ok) throw 0;
+        return { iceServers: await r.json() };
+      } catch (_) {
+        return {
+          iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'turn:global.relay.metered.ca:80', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' },
+            { urls: 'turn:global.relay.metered.ca:443', username: '58b8d0b18984b4d0406a9640', credential: 'u3embk/opEADZGUr' }
+          ]
+        };
+      }
+    }
+
+    function generateRoomId() {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = ROOM_ID_PREFIX;
+      for (let i = 0; i < ROOM_ID_LENGTH; i++) id += chars[Math.floor(Math.random() * chars.length)];
+      return id;
+    }
+
+    function showLobby(title, html) {
+      document.getElementById('lobbyTitle').textContent = title;
+      document.getElementById('lobbyContent').innerHTML = html;
+      showScreen('lobby');
+    }
+
+    function lobbyStatus(text) {
+      return `<div class="lobby-status"><div class="spinner"></div><span>${text}</span></div>`;
+    }
+
+    function showLobbyError(title, err) {
+      const div = document.createElement('div');
+      div.className = 'lobby-error';
+      div.textContent = err && err.message ? err.message : String(err);
+      showLobby(title, '');
+      document.getElementById('lobbyContent').appendChild(div);
+    }
+
+    function sendToPeer(msg) {
+      if (conn && conn.open) conn.send(msg);
+    }
+
+    function leaveRoom() {
+      if (peer) { try { peer.destroy(); } catch (_) { } }
+      peer = null;
+      conn = null;
+      onlineRole = null;
+      myIndex = HOST_INDEX;
+      if (location.hash) history.replaceState(null, '', location.pathname);
+    }
+
+    function showDisconnectNotice() {
+      gameOver = true;
+      const notice = document.createElement('div');
+      notice.className = 'dc-notice';
+      notice.innerHTML = 'Opponent disconnected<button class="ghostBtn">Back to menu</button>';
+      notice.querySelector('button').onclick = () => { notice.remove(); backToSetup(); };
+      document.body.appendChild(notice);
+    }
+
+    function watchConnection(connection) {
+      conn = connection;
+      conn.on('data', isGuest() ? handleHostMessage : handleGuestMessage);
+      conn.on('close', () => { if (isOnline()) showDisconnectNotice(); });
+    }
+
+    function launchOnlineGame() {
+      if (onlineRole === 'host' && conn && conn.open) { startOnlineRound(); return; }
+      if (isGuest()) { sendToPeer({ type: 'rematch' }); setMessage('Asked Player 1 for a new game.'); return; }
+      createRoom();
+    }
+
+    async function createRoom() {
+      leaveRoom();
+      onlineRole = 'host';
+      myIndex = HOST_INDEX;
+      showLobby('Creating room', lobbyStatus('Connecting...'));
+      const ice = await fetchIceServers();
+      peer = new Peer(generateRoomId(), { config: ice });
+      peer.on('open', id => {
+        const link = location.origin + location.pathname + '#room=' + id;
+        showLobby('Room created',
+          '<p style="opacity:.6;font-size:14px;">Send this link to your opponent:</p>' +
+          '<div class="lobby-link-wrap">' +
+          `<input class="lobby-link-input" id="roomLink" value="${link}" readonly>` +
+          '<button class="actionBtn" id="copyBtn" onclick="copyLink()">Copy</button>' +
+          '</div>' + lobbyStatus('Waiting for opponent...'));
+      });
+      peer.on('connection', connection => {
+        if (conn) { connection.close(); return; }
+        watchConnection(connection);
+        connection.on('open', startOnlineRound);
+      });
+      peer.on('error', err => showLobbyError('Error', err));
+    }
+
+    async function joinRoom(roomId) {
+      leaveRoom();
+      onlineRole = 'guest';
+      myIndex = GUEST_INDEX;
+      showLobby('Joining', lobbyStatus('Connecting...'));
+      const ice = await fetchIceServers();
+      peer = new Peer({ config: ice });
+      peer.on('open', () => {
+        const connection = peer.connect(roomId, { reliable: true });
+        watchConnection(connection);
+        connection.on('open', () => showLobby('Connected', lobbyStatus('Waiting for Player 1 to start...')));
+      });
+      peer.on('error', err => showLobbyError('Connection failed', err));
+    }
+
+    function copyLink() {
+      const input = document.getElementById('roomLink');
+      input.select();
+      navigator.clipboard.writeText(input.value).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    function startOnlineRound() {
+      resetRound();
+      sendToPeer({ type: 'start', settings: { ...settings } });
+      if (settings.game === 'coop') {
+        boxes = [newBox(randomAtoms(settings.atoms))];
+        players = [newPlayer(HOST_INDEX, 0), newPlayer(GUEST_INDEX, 0)];
+        startPlay();
+        return;
+      }
+      boxes = [null, null];
+      players = [newPlayer(HOST_INDEX, HOST_INDEX), newPlayer(GUEST_INDEX, GUEST_INDEX)];
+      startPlacement(HOST_INDEX, atoms => {
+        boxes[GUEST_INDEX] = newBox(atoms);
+        startVersusWhenBothHidden();
+      });
+    }
+
+    function startVersusWhenBothHidden() {
+      if (!boxes[GUEST_INDEX]) return;
+      if (!boxes[HOST_INDEX]) { showCover('Atoms hidden', 'Waiting for Player 2 to hide theirs...', null); return; }
+      startPlay();
+    }
+
+    // Hidden atoms and the opponent's marks stay on the host until the round ends.
+    function sendState() {
+      sendToPeer({
+        type: 'state',
+        currentPlayer, gameOver, winner,
+        message: publicMessage,
+        boxes: boxes.map(b => ({ ports: b.ports, detourCount: b.detourCount, atoms: gameOver ? [...b.atoms] : [] })),
+        players: players.map(p => ({
+          name: p.name, boxIndex: p.boxIndex, score: p.score, rays: p.rays, guesses: p.guesses,
+          marks: gameOver ? [...p.marks] : []
+        }))
+      });
+    }
+
+    function handleGuestMessage(msg) {
+      if (msg.type === 'rematch') { startOnlineRound(); return; }
+      if (msg.type === 'atoms') {
+        if (isVersus() && !boxes[HOST_INDEX] && msg.atoms.length === settings.atoms) {
+          boxes[HOST_INDEX] = newBox(new Set(msg.atoms));
+          startVersusWhenBothHidden();
+        }
+        return;
+      }
+      if (!players[GUEST_INDEX] || boxes.some(b => !b)) return;
+      if (msg.type === 'fire') fireRay(GUEST_INDEX, msg.port);
+      if (msg.type === 'guess') {
+        players[GUEST_INDEX].marks = new Set(msg.marks.slice(0, settings.atoms));
+        submitGuess(GUEST_INDEX);
+      }
+    }
+
+    function handleHostMessage(msg) {
+      if (msg.type === 'start') {
+        Object.assign(settings, msg.settings);
+        resetRound();
+        players = [];
+        if (isVersus()) {
+          startPlacement(GUEST_INDEX, atoms => {
+            sendToPeer({ type: 'atoms', atoms: [...atoms] });
+            showCover('Atoms hidden', 'Waiting for Player 1 to hide theirs...', null);
+          });
+        } else {
+          showCover('Connected', 'Waiting for Player 1 to start...', null);
+        }
+        return;
+      }
+      if (msg.type === 'state') applyHostState(msg);
+    }
+
+    function applyHostState(state) {
+      const myMarks = players[myIndex] ? players[myIndex].marks : new Set();
+      boxes = state.boxes.map(b => ({ ports: b.ports, detourCount: b.detourCount, atoms: new Set(b.atoms) }));
+      players = state.players.map((p, i) => ({ ...p, index: i, marks: i === myIndex ? myMarks : new Set(p.marks) }));
+      currentPlayer = state.currentPlayer;
+      gameOver = state.gameOver;
+      winner = state.winner;
+      showScreen('game');
+      if (state.message) setMessage(state.message.text, state.message.kind);
+      render();
+    }
+
+    renderSetup();
+    const roomInHash = location.hash.match(/room=([^&]+)/);
+    if (roomInHash) joinRoom(roomInHash[1]);
+  </script>
+</body>
+
+</html>

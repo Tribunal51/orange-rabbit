@@ -457,6 +457,26 @@
       text-transform: uppercase;
     }
 
+    .game-icon.black-box {
+      background: linear-gradient(135deg, #1c1917, #44403c);
+    }
+
+    .bb-mini {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      background: #0c0a09;
+      border: 1.5px solid rgba(251,191,36,0.5);
+      border-radius: 4px;
+    }
+
+    .bb-mini svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
     .badge-players {
       background: rgba(0, 229, 255, 0.15);
       color: #7dd3fc;
@@ -689,6 +709,22 @@
       <div class="game-title">Aggression</div>
       <div class="game-desc">Deploy troops then conquer neighbouring regions. The attacker always wins — if you have more troops.</div>
       <span class="game-badge badge-players">1–2 Players · Online</span>
+    </a>
+
+    <a class="game-card" href="bb.html">
+      <div class="game-icon black-box">
+        <div class="bb-mini">
+          <svg viewBox="0 0 60 60">
+            <polyline points="0,15 37,15 37,60" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <circle cx="45" cy="7" r="5" fill="#a8a29e" />
+            <circle cx="15" cy="42" r="5" fill="#a8a29e" />
+          </svg>
+        </div>
+      </div>
+      <div class="game-title">Black Box</div>
+      <div class="game-desc">Fire rays into a sealed box and deduce where the hidden atoms are from how the light comes out.</div>
+      <span class="game-badge badge-players">1-2 Players · Online</span>
     </a>
 
     <a class="game-card" href="hm.html">
