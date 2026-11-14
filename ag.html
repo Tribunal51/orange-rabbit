@@ -164,6 +164,8 @@
     @media (max-width: 900px) {
       body:has(#aoeModalHost > .aoe-modal) .board-wrap { justify-content: center; padding-left: 0; }
     }
+    body.aoe-slim .region-troops:not(.projected) { display: none !important; }
+    body.aoe-slim .score-stat:has(#p1Troops), body.aoe-slim .score-stat:has(#p2Troops) { display: none; }
     .map-container {
       position: relative;
       width: min(620px, calc(100vw - 40px));
@@ -920,10 +922,12 @@
       <div id="gameModeToggle" class="modeToggle">
         <button class="modeBtn" onclick="setGameMode('classic')">Classic</button>
         <button class="modeBtn selected" onclick="setGameMode('aoe')">Age of Empires</button>
+        <button class="modeBtn" onclick="setGameMode('aoeSlim')">Age of Empires (Slim)</button>
       </div>
       <div class="helpText" id="gameModeHint">
         <strong>Classic</strong> - sum-of-neighbours conquest. Wipe out enemy regions; no attrition.<br>
-        <strong>Age of Empires</strong> - Assign (alternate fixed placements, optional Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, double attack or double defend, with attacks limited by stamina; night = adjust).
+        <strong>Age of Empires</strong> - Assign (alternate fixed placements, optional Go-style surround captures, pie rule), a Refund step that pays half of every surrounded territory back into your surviving ones, then Battle (day/night parallel turns; day = attack, defend, claim, double attack or double defend, with attacks limited by stamina; night = adjust).<br>
+        <strong>Age of Empires (Slim)</strong> - the same Assign phase with one territory per placement, then days only and no troop counts. An attack needs 2+ bordering territories, a defend blocks it, bigger groups win clashes and claims.
       </div>
     </div>
 
@@ -953,7 +957,7 @@
       </div>
     </div>
 
-    <div class="setupSection">
+    <div class="setupSection" id="troopsSection">
       <div class="setupLabel">Total Troops (each side)</div>
       <div id="troopsToggle" class="modeToggle">
         <button class="modeBtn" onclick="setTroopsPreset(10)">10</button>
@@ -1023,7 +1027,7 @@
         <button class="modeBtn" onclick="setActionsPerDay(1)">1 Action</button>
         <button class="modeBtn selected" onclick="setActionsPerDay(3)">3 Actions</button>
       </div>
-      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks a day. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack. Nights stay one Adjust.</div>
+      <div id="actionsPerDayHint" class="helpText"><strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack. Nights stay one Adjust.</div>
     </div>
 
     <div class="setupSection" id="turnModeSection">
@@ -1205,6 +1209,7 @@ let mapType = 'geo';
 let regionsMode = 'auto';
 let regionsCustomVal = 20;
 let gameMode = 'aoe';          // 'classic' | 'aoe'
+let aoeSlim = false;           // AoE variant: no troop counts, days only, combat by territory count
 let fogOfWar = false;
 let goCaptureEnabled = false; // AoE assign phase: surround captures and the suicide rule
 let turnMode = 'fixed';       // 'fixed' | 'dynamic'
@@ -1243,6 +1248,8 @@ let aoeRevealing = false;
 let aoeHandoffPending = false;
 let aoePendingAttrition = null;
 let aoePendingRoundSummary = null;
+let aoeSlimRemoteWipePicks = null;      // { round, picks } the online opponent sent for this day
+let aoeSlimAwaitingRemotePicks = null;  // continuation run when those picks arrive
 let aoeStamina = { 1: 0, 2: 0 };
 
 /* Battle log: array of round entries.
@@ -1352,17 +1359,22 @@ function setMode(m) {
   document.getElementById('goOrderSection').classList.toggle('hidden', m === 'local');
 }
 
+/* `g` is 'classic', 'aoe' or 'aoeSlim'. Slim runs on the AoE engine with aoeSlim set. */
 function setGameMode(g) {
-  gameMode = g;
+  aoeSlim = (g === 'aoeSlim');
+  gameMode = aoeSlim ? 'aoe' : g;
   document.querySelectorAll('#gameModeToggle .modeBtn').forEach((b, i) => {
-    const which = ['classic', 'aoe'][i];
+    const which = ['classic', 'aoe', 'aoeSlim'][i];
     b.classList.toggle('selected', which === g);
   });
-  document.getElementById('fogSection').classList.toggle('hidden', g !== 'aoe');
-  document.getElementById('assignQuantumSection').classList.toggle('hidden', g !== 'aoe');
-  document.getElementById('goCaptureSection').classList.toggle('hidden', g !== 'aoe');
-  document.getElementById('turnModeSection').style.display = (g === 'aoe') ? '' : 'none';
-  document.getElementById('actionsPerDaySection').style.display = (g === 'aoe') ? '' : 'none';
+  const isAoe = gameMode === 'aoe';
+  document.getElementById('fogSection').classList.toggle('hidden', !isAoe);
+  document.getElementById('troopsSection').classList.toggle('hidden', aoeSlim);
+  document.getElementById('assignQuantumSection').classList.toggle('hidden', !isAoe || aoeSlim);
+  document.getElementById('goCaptureSection').classList.toggle('hidden', !isAoe);
+  document.getElementById('turnModeSection').style.display = isAoe ? '' : 'none';
+  document.getElementById('actionsPerDaySection').style.display = isAoe ? '' : 'none';
+  setActionsPerDay(actionsPerDay);
   updateAutoRegionsPreview();
 }
 
@@ -1371,9 +1383,10 @@ function setActionsPerDay(n) {
   document.querySelectorAll('#actionsPerDayToggle .modeBtn').forEach((b, i) => {
     b.classList.toggle('selected', [1, 3][i] === actionsPerDay);
   });
+  const nightNote = aoeSlim ? ' Slim has no nights.' : ' Nights stay one Adjust.';
   document.getElementById('actionsPerDayHint').innerHTML = actionsPerDay === 3
-    ? '<strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each, with at most 2 attacks a day. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack. Nights stay one Adjust.'
-    : '<strong>1 Action:</strong> each day you pick a single action (attack, defend, or claim). Double actions need the 3-action day. Nights stay one Adjust.';
+    ? '<strong>3 Actions:</strong> each day you spend 3 action points. Attack, defend and claim cost 1 AP each. A double attack or double defend costs 2 AP and can share the day with one more action. Attacks also spend stamina: 1 to start, +1 each new day, 1 per attack and 2 per double attack.' + nightNote
+    : '<strong>1 Action:</strong> each day you pick a single action (attack, defend, or claim). Double actions need the 3-action day.' + nightNote;
 }
 
 function autoAssignQuantum(troops) { return Math.max(1, Math.ceil(troops / 10)); }
@@ -1545,6 +1558,8 @@ function backToSetup() {
 }
 
 function aoeResetAll() {
+  aoeSlimRemoteWipePicks = null;
+  aoeSlimAwaitingRemotePicks = null;
   aoeRound = 0;
   aoeMaxRounds = 0;
   aoeComposed = [];
@@ -1568,6 +1583,12 @@ function performRandomAllocation() {
   // Alternate assignment: P1, P2, P1, P2...
   for (let i = 0; i < shuffled.length; i++) {
     shuffled[i].owner = (i % 2 === 0) ? 1 : 2;
+  }
+  if (aoeSlim) {
+    for (const r of shuffled) r.troops = 1;
+    p1Remaining = 0;
+    p2Remaining = 0;
+    return;
   }
   // Distribute troops
   let rem1 = totalTroops, rem2 = totalTroops;
@@ -1961,6 +1982,12 @@ function startGame(mapData) {
   p2Remaining = totalTroops;
   lastMoveRegion = -1;
   assignQuantum = resolvedAssignQuantum();
+  if (aoeSlim) {
+    // Same number of placements as AoE, each claiming one territory with no count.
+    p1Remaining = p2Remaining = Math.ceil(totalTroops / assignQuantum);
+    assignQuantum = 1;
+  }
+  document.body.classList.toggle('aoe-slim', aoeSlim);
   assignCount = 0;
   assignFirstIdx = -1;
   assignRefunds = { 1: [], 2: [] };
@@ -1986,7 +2013,9 @@ function startGame(mapData) {
     title: 'Game started',
     lines: [{
       kind: 'system',
-      html: gameMode === 'aoe'
+      html: aoeSlim
+        ? '<em>Age of Empires (Slim)</em> mode · ' + p1Remaining + ' placements each · ' + regions.length + ' regions · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '') + (goCaptureEnabled ? '' : ' · Go off')
+        : gameMode === 'aoe'
         ? '<em>Age of Empires</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions · ' + assignQuantum + ' troops/placement · ' + turnInfo + (fogOfWar ? ' · Fog of War on' : '') + (goCaptureEnabled ? '' : ' · Go off')
         : '<em>Classic</em> mode · ' + totalTroops + ' troops each · ' + regions.length + ' regions'
     }]
@@ -2156,7 +2185,7 @@ function updateDeployBar() {
   if (showSwap) {
     const amt = regions[assignFirstIdx] ? regions[assignFirstIdx].troops : assignQuantum;
     document.getElementById('assignSwapText').textContent =
-      playerLabel(1) + ' opened with ' + amt + ' troops on #' + (assignFirstIdx + 1) +
+      playerLabel(1) + ' opened ' + (aoeSlim ? 'on' : 'with ' + amt + ' troops on') + ' #' + (assignFirstIdx + 1) +
       '. Take that placement as yours, or place your own.';
   }
   if (phase !== 'deploy' && phase !== 'refund') { bar.classList.add('hidden'); return; }
@@ -2863,12 +2892,13 @@ function aoePlayerOwnedCount(p) {
    Night actions: adjust (transfers only), pass.
    aoeMaxRounds counts DAYS; nights are free. */
 function aoeIsNightRound(round) {
+  if (aoeSlim) return false;
   round = (round === undefined) ? aoeRound : round;
   return round % 2 === 0;
 }
 function aoeDayNumber(round) {
   round = (round === undefined) ? aoeRound : round;
-  return Math.ceil(round / 2);
+  return aoeSlim ? round : Math.ceil(round / 2);
 }
 function aoeRoundLabel(round) {
   round = (round === undefined) ? aoeRound : round;
@@ -2985,16 +3015,15 @@ function aoeAttritionFrom(opposingPower, ownPowerFactor) {
   return aoeRoundAttrition(opposingPower / 2);
 }
 /* Action-point budget for the current round. Nights are always a single
-   Adjust. Days grant 3 AP: attack, defend and claim cost 1 AP each, with at
-   most 2 attacks, and a double attack / double defend costs 2 AP, so it can
-   share the day with one more action. */
+   Adjust. Days grant 3 AP: attack, defend and claim cost 1 AP each, and a
+   double attack / double defend costs 2 AP, so it can share the day with one
+   more action. */
 const AOE_DOUBLE_AP_COST = 2;
 function aoeMaxActions() {
   if (gameMode !== 'aoe') return 1;
   if (aoeIsNightRound()) return 1;
   return actionsPerDay === 3 ? 3 : 1;
 }
-function aoeMaxAttacks() { return aoeMaxActions() >= 3 ? 2 : 1; }
 function aoeMaxDefends() { return aoeMaxActions(); }
 /* True when the current settings leave room for a double action. */
 function aoeDoublesAllowed() { return aoeMaxActions() >= AOE_DOUBLE_AP_COST; }
@@ -3271,7 +3300,7 @@ function claimPlanValid(player, targetIdx, contributions) {
     if (s.owner !== player) return false;
     if (!isAdjacent(c.source, targetIdx)) return false;
     if (!Number.isFinite(c.amount) || c.amount < 1) return false;
-    const cap = Math.floor(s.troops / 2);
+    const cap = aoeSlim ? 1 : Math.floor(s.troops / 2);
     if (c.amount > cap) return false;
   }
   return true;
@@ -3957,7 +3986,7 @@ function planActionList(plan) {
 }
 
 /* Multi-action round resolve. Order: all adjusts, all claim departures, all
-   defends (bases + regen), attack slot 1, attack slot 2, then the claims land
+   defends (bases + regen), the attack slots in order, then the claims land
    simultaneously. Each attack
    slot runs through resolveAoeRound so chain ordering, base inflation and
    mutual clashes behave exactly as in single-action rounds. Clash attrition
@@ -4019,6 +4048,293 @@ function resolveAoeRoundMulti(planA, planB, rngSeed, opts) {
   return { attackLogs, claimLogs, postSnap: null, mutualClashPending: null, attritionSides };
 }
 
+/* ═══════════════════════════ AoE SLIM RESOLUTION ═══════════════════════════ */
+
+/* Slim has no troop counts. An attack's strength is how many territories it
+   uses, and a double attack counts each of them twice. */
+const AOE_SLIM_MIN_ATTACKERS = 2;
+const AOE_SLIM_DOUBLE_ATTACK_FACTOR = 2;
+const AOE_SLIM_DEFEND = 1;
+const AOE_SLIM_DOUBLE_DEFEND = 2;
+
+function aoeSlimAttackStrength(attack, group) {
+  return group.length * (attack.double ? AOE_SLIM_DOUBLE_ATTACK_FACTOR : 1);
+}
+
+/* True when `upper` targets a territory in `lower`'s attack group. */
+function aoeSlimAttacksInto(upper, lower) {
+  return upper.player !== lower.player && lower.group.indexOf(upper.defender) >= 0;
+}
+
+/* Identifies the defender's wipe pick for one attack on a Double Defend. */
+function aoeSlimWipePickKey(attack) {
+  return attack.player + ':' + attack.defender;
+}
+
+/* Normal attacks on a Double Defend in these plans, each needing the defending
+   player to pick one attacker to wipe out: [{ key, picker, group, defender }]. */
+function aoeSlimWipePicksNeeded(planA, planB) {
+  const actions = planActionList(planA).concat(planActionList(planB));
+  const doubleDefended = new Set();
+  for (const d of actions) {
+    if (d.type === 'defend' && d.double) for (const b of d.bases) doubleDefended.add(b);
+  }
+  return actions
+    .filter(a => a.type === 'attack' && !a.double && doubleDefended.has(a.defender))
+    .map(a => ({ key: aoeSlimWipePickKey(a), picker: otherPlayer(a.player), group: a.group.slice(), defender: a.defender }));
+}
+
+/* Attacks grouped into units that resolve as one. Two attacks that each target
+   a territory in the other's group form a clash unit. Every other attack is a unit of its own. */
+function aoeSlimResolutionUnits(attacks) {
+  const parent = attacks.map((_, i) => i);
+  const root = (i) => (parent[i] === i ? i : (parent[i] = root(parent[i])));
+  attacks.forEach((a, i) => attacks.forEach((b, j) => {
+    if (i < j && aoeSlimAttacksInto(a, b) && aoeSlimAttacksInto(b, a)) parent[root(j)] = root(i);
+  }));
+  const units = new Map();
+  attacks.forEach((a, i) => {
+    const r = root(i);
+    if (!units.has(r)) units.set(r, []);
+    units.get(r).push(a);
+  });
+  return [...units.values()];
+}
+
+function aoeSlimUnitWaitsOn(unit, other) {
+  return unit !== other && unit.some(u => other.some(l => aoeSlimAttacksInto(u, l)));
+}
+
+/* Units in resolution order. In a chain the attack being hit resolves before
+   the attack hitting its group. A loop of chains with no clear end resolves together. */
+function aoeSlimResolutionTiers(units) {
+  const tiers = [], done = new Set();
+  while (done.size < units.length) {
+    const pending = units.filter(u => !done.has(u));
+    let ready = pending.filter(u => !pending.some(o => aoeSlimUnitWaitsOn(u, o)));
+    if (ready.length === 0) ready = pending;
+    for (const u of ready) done.add(u);
+    tiers.push(ready);
+  }
+  return tiers;
+}
+
+/* Reason an attack is called off on the current board, or null when it stands. */
+function aoeSlimCalledOffReason(attack, liveGroup) {
+  if (regions[attack.defender].owner !== otherPlayer(attack.player)) return 'targetGone';
+  if (liveGroup.length < AOE_SLIM_MIN_ATTACKERS) return 'groupBroken';
+  return null;
+}
+
+/* Result of an attack that is still standing, against the defend level on its
+   target. Writes the territories it changes into `ownerChanges` (idx to new
+   owner, 0 for gray) and returns the log fields. */
+function aoeSlimAttackOutcome(attack, defendLevel, wonClash, wipedAttacker, ownerChanges) {
+  if (defendLevel === AOE_SLIM_DOUBLE_DEFEND) {
+    if (attack.double) return { outcome: 'fail', reason: 'nullified' };
+    ownerChanges.set(wipedAttacker, 0);
+    return { outcome: 'fail', reason: 'wiped', wiped: wipedAttacker };
+  }
+  if (defendLevel === AOE_SLIM_DEFEND && !attack.double) return { outcome: 'fail', reason: 'blocked' };
+  if (defendLevel === AOE_SLIM_DEFEND) {
+    ownerChanges.set(attack.defender, 0);
+    return { outcome: 'win', reason: 'brokeDefend' };
+  }
+  // A normal attack razes its target. A double attack converts it unless it had to win a clash.
+  if (attack.double && !wonClash) {
+    ownerChanges.set(attack.defender, attack.player);
+    return { outcome: 'convert', reason: null };
+  }
+  ownerChanges.set(attack.defender, 0);
+  return { outcome: 'win', reason: wonClash ? 'clashWon' : null };
+}
+
+/* Resolves one unit against the current board and returns its attack logs. */
+function aoeSlimResolveUnit(unit, defendLevels, wipePicks, ownerChanges) {
+  const standing = [], logs = [];
+  for (const a of unit) {
+    const liveGroup = a.group.filter(g => regions[g].owner === a.player);
+    const log = { player: a.player, defender: a.defender, group: a.group.slice(), double: !!a.double,
+                  strength: aoeSlimAttackStrength(a, liveGroup), clashed: unit.length > 1 };
+    logs.push(log);
+    const calledOff = aoeSlimCalledOffReason(a, liveGroup);
+    if (calledOff) Object.assign(log, { outcome: 'fail', reason: calledOff });
+    else standing.push({ attack: a, liveGroup, log });
+  }
+  for (const s of standing) {
+    const rivals = standing.filter(o => o.attack.player !== s.attack.player);
+    if (rivals.some(o => o.log.strength >= s.log.strength)) {
+      Object.assign(s.log, { outcome: 'fail', reason: 'clashLost' });
+      continue;
+    }
+    const picked = wipePicks ? wipePicks[aoeSlimWipePickKey(s.attack)] : undefined;
+    const wiped = s.liveGroup.indexOf(picked) >= 0 ? picked : s.liveGroup[0];
+    Object.assign(s.log, aoeSlimAttackOutcome(s.attack, defendLevels.get(s.attack.defender) || 0,
+                                              rivals.length > 0, wiped, ownerChanges));
+  }
+  return logs;
+}
+
+function aoeSlimApplyOwnerChanges(ownerChanges) {
+  for (const [idx, owner] of ownerChanges) {
+    regions[idx].owner = owner;
+    regions[idx].troops = owner ? 1 : 0;
+  }
+}
+
+/* Resolves one Slim day on the live board. Attacks resolve in chain order and
+   clashes by strength. `wipePicks` maps aoeSlimWipePickKey to the attacker each
+   Double Defend owner chose to wipe out. Claims count the territories each side
+   committed and land last. Returns attack and claim logs in the shape flashOutcomes reads. */
+function resolveAoeRoundSlim(planA, planB, wipePicks) {
+  const actions = planActionList(planA).concat(planActionList(planB));
+  const attacks = actions.filter(a => a.type === 'attack');
+  const defendLevels = new Map();
+  for (const d of actions) {
+    if (d.type !== 'defend') continue;
+    for (const b of d.bases) defendLevels.set(b, d.double ? AOE_SLIM_DOUBLE_DEFEND : AOE_SLIM_DEFEND);
+  }
+
+  const attackLogs = [];
+  for (const tier of aoeSlimResolutionTiers(aoeSlimResolutionUnits(attacks))) {
+    const ownerChanges = new Map();
+    for (const unit of tier) attackLogs.push(...aoeSlimResolveUnit(unit, defendLevels, wipePicks, ownerChanges));
+    aoeSlimApplyOwnerChanges(ownerChanges);
+  }
+
+  const claimCounts = new Map();
+  for (const c of actions) {
+    if (c.type !== 'claim') continue;
+    for (const cl of planClaimList(c)) {
+      const counts = claimCounts.get(cl.target) || { 1: 0, 2: 0 };
+      counts[c.player] += cl.contributions.length;
+      claimCounts.set(cl.target, counts);
+    }
+  }
+  const claimLogs = [], claimChanges = new Map();
+  for (const [target, counts] of claimCounts) {
+    const winner = counts[1] > counts[2] ? 1 : counts[2] > counts[1] ? 2 : 0;
+    if (winner) claimChanges.set(target, winner);
+    claimLogs.push({ target, counts, winner, outcome: winner ? 'win' : 'repelled' });
+  }
+  aoeSlimApplyOwnerChanges(claimChanges);
+  return { attackLogs, claimLogs, attritionSides: [] };
+}
+
+const AOE_SLIM_ATTACK_RESULT_TEXT = {
+  clashLost: 'lost the clash, repelled',
+  nullified: 'cancelled by the double defend',
+  blocked: 'blocked by the defend',
+  brokeDefend: 'broke the defend',
+  clashWon: 'won the clash',
+  targetGone: 'called off, the target had already fallen',
+  groupBroken: 'called off, fewer than ' + AOE_SLIM_MIN_ATTACKERS + ' attackers were left'
+};
+
+function aoeSlimAttackResultText(log) {
+  if (log.reason === 'wiped') return 'hit a double defend, ' + regionRef(log.wiped) + ' was wiped out';
+  const parts = [];
+  if (log.reason) parts.push(AOE_SLIM_ATTACK_RESULT_TEXT[log.reason]);
+  if (log.outcome === 'convert') parts.push('captured it');
+  if (log.outcome === 'win') parts.push('the target turned gray');
+  return parts.join(', ');
+}
+
+/* Picks the attacker none of the picker's own attacks target, so those attacks still land. */
+function cpuSlimWipePick(need, pickerPlan) {
+  const ownTargets = new Set(planActionList(pickerPlan).filter(a => a.type === 'attack').map(a => a.defender));
+  const spare = need.group.find(g => !ownTargets.has(g));
+  return spare === undefined ? need.group[0] : spare;
+}
+
+function openSlimWipePickModal(need, onPick) {
+  const host = document.getElementById('aoeModalHost');
+  host.innerHTML =
+    '<div class="aoe-modal"><div class="aoe-modal-card">' +
+      '<h3>' + playerName(need.picker) + ': Double Defend on ' + regionRef(need.defender) + '</h3>' +
+      '<div class="modal-info">' + need.group.map(regionRef).join(', ') + ' attacked it. Pick one attacker to wipe out. It turns gray.</div>' +
+      '<div class="modal-foot">' +
+        need.group.map(g => '<button class="actionBtn primary" data-wipe="' + g + '">Wipe ' + regionRef(g) + '</button>').join('') +
+      '</div>' +
+    '</div></div>';
+  host.querySelectorAll('[data-wipe]').forEach(b => {
+    b.onclick = () => onPick(parseInt(b.dataset.wipe, 10));
+  });
+}
+
+/* Gathers every Double Defend wipe pick for the revealed plans, then calls
+   done(picks). Local players pick in a modal, the CPU picks at once, and an
+   online opponent's picks arrive as an aoe-slim-picks message. */
+function collectSlimWipePicks(planA, planB, done) {
+  const needed = aoeSlimWipePicksNeeded(planA, planB);
+  const picks = {};
+  const humanNeeds = needed.filter(n => mode === 'local' || n.picker === myPlayer);
+  for (const n of needed) {
+    if (mode === 'cpu' && n.picker !== myPlayer) picks[n.key] = cpuSlimWipePick(n, aoePlans[n.picker]);
+  }
+  const awaitRemote = mode === 'online' && needed.some(n => n.picker !== myPlayer);
+
+  const afterHumanPicks = () => {
+    closeAoeModal();
+    if (mode === 'online' && humanNeeds.length && conn && conn.open) {
+      const mine = {};
+      for (const n of humanNeeds) mine[n.key] = picks[n.key];
+      conn.send({ type: 'aoe-slim-picks', round: aoeRound, picks: mine });
+    }
+    if (!awaitRemote) { done(picks); return; }
+    const mergeRemote = () => {
+      Object.assign(picks, aoeSlimRemoteWipePicks.picks);
+      aoeSlimRemoteWipePicks = null;
+      done(picks);
+    };
+    if (aoeSlimRemoteWipePicks && aoeSlimRemoteWipePicks.round === aoeRound) mergeRemote();
+    else {
+      flashMessage('Waiting for the opponent to pick…', 'good');
+      aoeSlimAwaitingRemotePicks = mergeRemote;
+    }
+  };
+
+  let next = 0;
+  const askNext = () => {
+    if (next >= humanNeeds.length) { afterHumanPicks(); return; }
+    const n = humanNeeds[next++];
+    openSlimWipePickModal(n, (idx) => { picks[n.key] = idx; askNext(); });
+  };
+  askNext();
+}
+
+/* Battle-log entry for one resolved Slim day. */
+function buildAoeSlimRoundLog(roundNum, planA, planB, res) {
+  const lines = [];
+  for (const plan of [planA, planB]) {
+    if (!plan) continue;
+    const acts = planActionList(plan);
+    if (acts.length === 0) {
+      lines.push({ kind: classOfPlayer(plan.player), html: '<strong>' + playerName(plan.player) + '</strong> passed.' });
+    }
+    for (const d of acts) {
+      if (d.type !== 'defend') continue;
+      lines.push({ kind: classOfPlayer(d.player),
+                   html: '<strong>' + playerName(d.player) + '</strong> ' + (d.double ? '🛡🛡 double defended ' : '🛡 defended ') +
+                         d.bases.map(regionRef).join(', ') + '.' });
+    }
+  }
+  for (const L of res.attackLogs) {
+    const result = aoeSlimAttackResultText(L);
+    lines.push({ kind: classOfPlayer(L.player),
+                 html: '<strong>' + playerName(L.player) + '</strong> ' + (L.double ? '⚔⚔ double attacked ' : '⚔ attacked ') +
+                       regionRef(L.defender) + ' with ' + L.group.map(regionRef).join(', ') +
+                       ' (strength ' + L.strength + '): ' + result + '.' });
+  }
+  for (const C of res.claimLogs) {
+    const tally = 'Player 1 ' + C.counts[1] + ' vs Player 2 ' + C.counts[2];
+    lines.push({ kind: classOfPlayer(C.winner),
+                 html: '▣ Claim on ' + regionRef(C.target) + ' (' + tally + '): ' +
+                       (C.winner ? '<strong>' + playerName(C.winner) + '</strong> takes it.' : 'tied, it stays gray.') });
+  }
+  return { title: aoeRoundLabel(roundNum), lines };
+}
+
 /* ═══════════════════════════ AoE — PLAN LIFECYCLE ═══════════════════════════ */
 
 function captureBoardSnapshot(label, plans) {
@@ -4068,6 +4384,7 @@ function aoeStartRound() {
   aoeComposed = [];
   aoeRevealing = false;
   aoeHandoffPending = false;
+  aoeSlimAwaitingRemotePicks = null;
   captureBoardSnapshot('Start of ' + aoeRoundLabel(aoeRound));
 
   // Turn limit: aoeMaxRounds counts days; nights are free.
@@ -4146,9 +4463,6 @@ function composedAdditionError(player, act) {
            ' costs ' + cost + ' AP, you have ' + aoeApLeft() + ' left.';
   }
   if (act.type === 'attack') {
-    if (aoeComposedAttackCount() >= aoeMaxAttacks()) {
-      return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
-    }
     const staminaErr = aoeStaminaShortfall(player, aoeComposed, act.double);
     if (staminaErr) return staminaErr;
     for (const a of aoeComposed) {
@@ -4212,7 +4526,7 @@ function aoeActionSummary(a) {
   if (a.type === 'defend') {
     const level = a.double ? 2 : 1;
     return (a.double ? '🛡🛡 ' : '🛡 ') + a.bases.map(b =>
-      regionRef(b) + ' +' + aoeDefendRegenForBase(b, a.player, null, level)).join(' ');
+      regionRef(b) + (aoeSlim ? '' : ' +' + aoeDefendRegenForBase(b, a.player, null, level))).join(' ');
   }
   if (a.type === 'claim') {
     return '▣ ' + planClaimList(a).map(cl =>
@@ -4228,7 +4542,7 @@ function aoeComposedStripHtml() {
   const max = aoeMaxActions();
   const stamina = aoeStaminaOf(aoePlanningPlayer);
   let html = '<div style="margin-bottom:6px;">AP <span class="pwr">' + aoeApUsedBy(aoeComposed) + '/' + max + '</span>' +
-             ' <span class="sub">(1 AP per action, at most 2 attacks; a double action costs ' + AOE_DOUBLE_AP_COST + ')</span>' +
+             ' <span class="sub">(1 AP per action; a double action costs ' + AOE_DOUBLE_AP_COST + ')</span>' +
              ' · Stamina <span class="pwr">' + Math.max(0, stamina - aoeStaminaUsedBy(aoeComposed)) + '/' + stamina + '</span>' +
              ' <span class="sub">(attack 1, double attack ' + AOE_DOUBLE_ATTACK_STAMINA + ', +' + AOE_STAMINA_PER_DAY + ' each new day)</span>';
   if (aoeComposed.length === 0) {
@@ -4335,7 +4649,7 @@ function validatePlan(plan) {
     if (aoeStaminaUsedBy(acts) > aoeStaminaOf(plan.player)) {
       return 'Plan needs ' + aoeStaminaUsedBy(acts) + ' stamina; only ' + aoeStaminaOf(plan.player) + ' left.';
     }
-    let attacks = 0, defends = 0;
+    let defends = 0;
     const defenders = new Set(), targets = new Set(), adjSrc = new Set(), committed = new Map();
     for (const a of acts) {
       if (!a || a.type === 'multi' || a.type === 'pass') return 'Invalid action in plan.';
@@ -4347,8 +4661,6 @@ function validatePlan(plan) {
         committed.set(t, a.type);
       }
       if (a.type === 'attack') {
-        attacks++;
-        if (attacks > aoeMaxAttacks()) return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
         if (defenders.has(a.defender)) return 'Two attacks on the same territory.';
         defenders.add(a.defender);
       } else if (a.type === 'claim') {
@@ -4383,6 +4695,7 @@ function validatePlan(plan) {
     if (staminaErr) return staminaErr;
     if (!Array.isArray(plan.group) || plan.group.length === 0) return 'Pick at least one attacking territory.';
     if (!attackPlanValid(plan.player, plan.group, plan.defender)) return 'Invalid attack plan (adjacency/ownership).';
+    if (aoeSlim && plan.group.length < AOE_SLIM_MIN_ATTACKERS) return aoeSlimTooFewAttackersMessage();
     return null;
   }
   if (plan.type === 'adjust') {
@@ -4506,38 +4819,46 @@ function aoeBeginReveal() {
 function aoePerformResolutionWithSeed(rngSeed) {
   drawIntentArrows();
   setTimeout(() => {
-    const planA = aoePlans[1], planB = aoePlans[2];
-    const thisRound = aoeRound;
-    // Snapshot the pre-resolution state with plans attached — this is the
-    // "attack pattern" view in history (board still untouched, arrows drawn).
-    const plansSnap = captureBoardSnapshot('Plans for ' + aoeRoundLabel(thisRound), { 1: planA, 2: planB });
-    const preSnap = regions.map(r => r.troops);
-    const preOwners = regions.map(r => r.owner);
-    aoePendingRoundSummary = { round: thisRound, preOwners };
-    const isMulti = (planA && planA.type === 'multi') || (planB && planB.type === 'multi');
-    const opts = { canDefer: aoeAttritionDeferral(planA, planB), slot: 0 };
-    aoeSpendStamina(planA, planB);
-    const res = isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed, opts)
-                        : resolveAoeRound(planA, planB, rngSeed, opts);
-    stampSnapshotDefenses(plansSnap);
-    flashOutcomes(res);
-    setTimeout(() => {
-      clearIntentArrows();
-      render();
-
-      // A won single attack razes the target to gray; taking it needs a Claim on
-      // a later turn. Only a double attack converts territory outright.
-      // The round log is written after the attrition modals so it can report
-      // the losses each player actually placed.
-      const finish = () => {
-        appendLogEntry(buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
-        aoePostResolution();
-      };
-      const pending = roundAttritionPending(res);
-      if (pending) processAttritionDistribution(pending, null, finish);
-      else finish();
-    }, 1800);
+    if (aoeSlim) collectSlimWipePicks(aoePlans[1], aoePlans[2], picks => aoeResolveRevealedRound(rngSeed, picks));
+    else aoeResolveRevealedRound(rngSeed, null);
   }, 1500);
+}
+
+/* Resolves the revealed plans on the board, animates the outcome, then moves to the next round. */
+function aoeResolveRevealedRound(rngSeed, slimWipePicks) {
+  const planA = aoePlans[1], planB = aoePlans[2];
+  const thisRound = aoeRound;
+  // Snapshot the pre-resolution state with plans attached — this is the
+  // "attack pattern" view in history (board still untouched, arrows drawn).
+  const plansSnap = captureBoardSnapshot('Plans for ' + aoeRoundLabel(thisRound), { 1: planA, 2: planB });
+  const preSnap = regions.map(r => r.troops);
+  const preOwners = regions.map(r => r.owner);
+  aoePendingRoundSummary = { round: thisRound, preOwners };
+  const isMulti = (planA && planA.type === 'multi') || (planB && planB.type === 'multi');
+  const opts = { canDefer: aoeAttritionDeferral(planA, planB), slot: 0 };
+  aoeSpendStamina(planA, planB);
+  const res = aoeSlim ? resolveAoeRoundSlim(planA, planB, slimWipePicks)
+            : isMulti ? resolveAoeRoundMulti(planA, planB, rngSeed, opts)
+                      : resolveAoeRound(planA, planB, rngSeed, opts);
+  stampSnapshotDefenses(plansSnap);
+  flashOutcomes(res);
+  setTimeout(() => {
+    clearIntentArrows();
+    render();
+
+    // A won single attack razes the target to gray; taking it needs a Claim on
+    // a later turn. Only a double attack converts territory outright.
+    // The round log is written after the attrition modals so it can report
+    // the losses each player actually placed.
+    const finish = () => {
+      appendLogEntry(aoeSlim ? buildAoeSlimRoundLog(thisRound, planA, planB, res)
+                             : buildAoeRoundLog(thisRound, planA, planB, res, preSnap));
+      aoePostResolution();
+    };
+    const pending = roundAttritionPending(res);
+    if (pending) processAttritionDistribution(pending, null, finish);
+    else finish();
+  }, 1800);
 }
 
 function processAttritionDistribution(pending, clashLog, callback) {
@@ -4727,9 +5048,6 @@ function aoeActionUnavailableReason(action, composed) {
   if (apLeft <= 0) return 'All ' + aoeMaxActions() + ' AP used. Submit, or remove an action.';
   let atk = 0, def = 0;
   for (const a of composed) { if (a.type === 'attack') atk++; else if (a.type === 'defend') def++; }
-  if (base === 'attack' && !isDouble && atk >= aoeMaxAttacks()) {
-    return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
-  }
   if (base === 'defend' && !isDouble && def >= aoeMaxDefends()) {
     return 'Only ' + aoeMaxDefends() + ' Defend actions per turn.';
   }
@@ -4776,7 +5094,8 @@ function aoeUncontestedOutcome() {
   const planB = plan.player === 2 ? plan : null;
   const saved = regions.map(r => AOE_PREVIEW_REGION_FIELDS.map(f => r[f]));
   try {
-    if (plan.type === 'multi') resolveAoeRoundMulti(planA, planB, AOE_PREVIEW_RNG_SEED, null);
+    if (aoeSlim) resolveAoeRoundSlim(planA, planB);
+    else if (plan.type === 'multi') resolveAoeRoundMulti(planA, planB, AOE_PREVIEW_RNG_SEED, null);
     else resolveAoeRound(planA, planB, AOE_PREVIEW_RNG_SEED, null);
     return regions.map((r, i) => ({ owner: r.owner, troops: r.troops, auraBonus: aoeAuraBonusAt(i) }));
   } finally {
@@ -4866,6 +5185,12 @@ function onRegionClickAoe(idx) {
           return;
         }
       }
+      if (aoeSlim) {
+        if (G.length < AOE_SLIM_MIN_ATTACKERS) { flashMessage(aoeSlimTooFewAttackersMessage(), 'warn'); return; }
+        aoeWorking.attackDefender = idx;
+        flashMessage('Attack ready. Add it to the plan or submit.', 'good');
+        render(); return;
+      }
       aoeWorking.attackDefender = idx;
       openAttackConfirmModal(G, idx);
       return;
@@ -4931,7 +5256,8 @@ function onRegionClickAoe(idx) {
       aoeWorking.claimTargetSel = idx;
       if (aoeWorking.claimSourceSel >= 0 && isAdjacent(aoeWorking.claimSourceSel, idx)) {
         const src = aoeWorking.claimSourceSel;
-        openClaimAmountModal(src, idx);
+        if (aoeSlim) addSlimClaimSource(src, idx);
+        else openClaimAmountModal(src, idx);
         return;
       }
       render(); return;
@@ -4946,7 +5272,7 @@ function onRegionClickAoe(idx) {
       }
       const busy = aoeTerritoryBusyReason(aoeComposed, idx);
       if (busy) { flashMessage(busy, 'warn'); return; }
-      if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops (cap is floor/2).', 'warn'); return; }
+      if (!aoeSlim && r.troops < 2) { flashMessage('Source must have ≥ 2 troops (cap is floor/2).', 'warn'); return; }
       if (aoeWorking.claimTargetSel < 0) {
         const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
         if (!hasGrayAdj) { flashMessage('That territory has no adjacent gray.', 'warn'); return; }
@@ -4956,6 +5282,7 @@ function onRegionClickAoe(idx) {
       if (!isAdjacent(idx, aoeWorking.claimTargetSel)) {
         flashMessage('Source must be adjacent to the focused gray target.', 'warn'); return;
       }
+      if (aoeSlim) { addSlimClaimSource(idx, aoeWorking.claimTargetSel); return; }
       aoeWorking.claimSourceSel = idx;
       openClaimAmountModal(idx, aoeWorking.claimTargetSel);
       return;
@@ -5119,6 +5446,20 @@ function openAdjustAmountModal(sourceIdx, destIdx) {
     };
   }
   render2();
+}
+
+function aoeSlimTooFewAttackersMessage() {
+  return 'An attack needs at least ' + AOE_SLIM_MIN_ATTACKERS + ' of your territories bordering the target.';
+}
+
+/* Slim claims carry no amount: each bordering territory adds one to the claim. */
+function addSlimClaimSource(sourceIdx, targetIdx) {
+  aoeWorking.claimSourceSel = -1;
+  const claim = workingFindClaim(aoeWorking, targetIdx);
+  if (claim && !claim.contributions.some(c => c.source === sourceIdx)) {
+    claim.contributions.push({ source: sourceIdx, amount: 1 });
+  }
+  render();
 }
 
 function openClaimAmountModal(sourceIdx, targetIdx) {
@@ -6046,7 +6387,8 @@ function render() {
     const afterTroops = (after && (after.owner === 1 || after.owner === 2)) ? after.troops : 0;
     const projected = !!after && (after.owner !== r.owner || afterTroops !== liveTroops);
     tEl.classList.toggle('projected', projected);
-    if (projected) tEl.textContent = (liveTroops > 0 ? liveTroops : '') + '→' + afterTroops;
+    if (projected && aoeSlim) tEl.textContent = (after.owner === 0) ? '✕' : '→';
+    else if (projected) tEl.textContent = (liveTroops > 0 ? liveTroops : '') + '→' + afterTroops;
     else tEl.textContent = (liveTroops > 0 ? liveTroops : '');
   });
 
@@ -6167,11 +6509,13 @@ function render() {
     // Banner
     let html = '';
     if (aoeMultiMode()) html += aoeComposedStripHtml();
-    if (!w.action) {
+    if (aoeSlim) {
+      html += aoeSlimPlanningHint(w, planner);
+    } else if (!w.action) {
       html += night
         ? '<div class="sub">🌙 Night: ↔ Adjust troops (move only, no combat) or ⏭ Pass. Nights do not count against the day limit.</div>'
         : aoeMultiMode()
-          ? '<div class="sub">☀ Day (' + aoeMaxActions() + ' AP): ⚔ Attack (1 AP, up to 2), 🛡 Defend (1 AP, up to 3), ▣ Claim a gray (1 AP), ⚔⚔ Double Attack or 🛡🛡 Double Defend (' + AOE_DOUBLE_AP_COST + ' AP, plus one more action). Attacks spend stamina (' + Math.max(0, aoeStaminaOf(planner) - aoeStaminaUsedBy(aoeComposed)) + ' left): 1 per attack, ' + AOE_DOUBLE_ATTACK_STAMINA + ' per double attack.</div>'
+          ? '<div class="sub">☀ Day (' + aoeMaxActions() + ' AP): ⚔ Attack (1 AP), 🛡 Defend (1 AP, up to 3), ▣ Claim a gray (1 AP), ⚔⚔ Double Attack or 🛡🛡 Double Defend (' + AOE_DOUBLE_AP_COST + ' AP, plus one more action). Attacks spend stamina (' + Math.max(0, aoeStaminaOf(planner) - aoeStaminaUsedBy(aoeComposed)) + ' left): 1 per attack, ' + AOE_DOUBLE_ATTACK_STAMINA + ' per double attack.</div>'
           : '<div class="sub">☀ Day: pick one action, ⚔ Attack, 🛡 Defend or ▣ Claim a gray. An attack spends 1 stamina (' + aoeStaminaOf(planner) + ' left).</div>';
     } else if (w.action === 'defend') {
       const level = w.isDouble ? 2 : 1;
@@ -6256,7 +6600,9 @@ function render() {
     } else if (w.action === 'pass') {
       html += '<div class="sub">Pass: take no action this round.</div>';
     }
-    if (uncontested) {
+    if (uncontested && aoeSlim) {
+      html += '<div class="sub" style="margin-top:4px;">Yellow marks on the map show what changes if your opponent does nothing: → becomes yours, ✕ turns gray.</div>';
+    } else if (uncontested) {
       const projectsAura = uncontested.some(o => o.auraBonus > 0);
       html += '<div class="sub" style="margin-top:4px;">Yellow <span class="pwr">a→b</span> numbers on the map: troops after this round if your opponent does nothing.' +
               (projectsAura ? ' <span class="pwr">+%</span> badges: the defend bonus each of your territories gets this round.' : '') +
@@ -6323,6 +6669,49 @@ function render() {
   else { ov.classList.add('hidden'); }
 }
 
+/* Planning-banner help for the Slim action being built. */
+function aoeSlimPlanningHint(w, planner) {
+  const staminaLeft = Math.max(0, aoeStaminaOf(planner) - aoeStaminaUsedBy(aoeComposed));
+  if (!w.action) {
+    return '<div class="sub">☀ Day (' + aoeMaxActions() + ' AP): ⚔ Attack with ' + AOE_SLIM_MIN_ATTACKERS +
+           '+ bordering territories turns the target gray (1 AP), 🛡 Defend blocks normal attacks on one territory (1 AP), ▣ Claim a gray (1 AP), ' +
+           '⚔⚔ Double Attack converts the target, 🛡🛡 Double Defend (' + AOE_DOUBLE_AP_COST + ' AP each). Stamina left: ' + staminaLeft +
+           ' (1 per attack, ' + AOE_DOUBLE_ATTACK_STAMINA + ' per double attack). Each territory joins one action a day.</div>';
+  }
+  if (w.action === 'attack') {
+    const n = w.attackGroup.size;
+    const strength = n * (w.isDouble ? AOE_SLIM_DOUBLE_ATTACK_FACTOR : 1);
+    const head = (w.isDouble ? '⚔⚔ <strong>Double Attack</strong>' : '⚔ <strong>Attack</strong>') +
+                 ': <span class="pwr">' + n + '</span> territor' + (n === 1 ? 'y' : 'ies') +
+                 ', strength <span class="pwr">' + strength + '</span>' + (w.isDouble ? ' (each counts twice)' : '');
+    const next = w.attackDefender >= 0 ? 'Target ' + regionRef(w.attackDefender) + '.'
+               : n < AOE_SLIM_MIN_ATTACKERS ? 'Click at least ' + AOE_SLIM_MIN_ATTACKERS + ' of your territories that border one enemy territory.'
+               : 'Click the enemy territory they all border.';
+    const rules = w.isDouble
+      ? 'Converts the target, or turns it gray if it is defended or if you win a clash for it. A double defend cancels it.'
+      : 'Turns the target gray unless it is defended. A double defend blocks it and its owner wipes out one of your attackers.';
+    return '<div>' + head + '</div><div class="sub">' + next + ' ' + rules +
+           ' When two attacks each hit the other\'s group it is a clash: the bigger strength wins and a tie repels both. ' +
+           'When only one hits the other\'s group it is a chain: the attack being hit resolves first.</div>';
+  }
+  if (w.action === 'defend') {
+    const pick = (w.defendBases && w.defendBases.size) ? regionRef([...w.defendBases][0]) : 'none yet';
+    return '<div>' + (w.isDouble ? '🛡🛡 <strong>Double Defend</strong>' : '🛡 <strong>Defend</strong>') +
+           ': <span class="pwr">' + pick + '</span></div><div class="sub">Click a border territory. ' +
+           (w.isDouble ? 'It blocks every attack. After plans are revealed you pick one attacker of each normal attack on it to wipe out. It cancels a double attack.'
+                       : 'It blocks every normal attack. A double attack still turns it gray.') + '</div>';
+  }
+  if (w.action === 'claim') {
+    const claim = (w.claims || [])[0];
+    const n = claim ? claim.contributions.length : 0;
+    const status = claim ? 'Claiming ' + regionRef(claim.target) + ' with <span class="pwr">' + n + '</span> territor' + (n === 1 ? 'y' : 'ies') + '.' : 'Click a gray to claim.';
+    return '<div>▣ ' + status + '</div><div class="sub">Then click your territories that border it. ' +
+           'If both sides claim it, more territories wins and a tie leaves it gray.</div>';
+  }
+  if (w.action === 'pass') return '<div class="sub">Pass: take no action this day.</div>';
+  return '';
+}
+
 function computeAttackTargets(player, group) {
   const map = new Map();
   if (!group || group.length === 0) return map;
@@ -6337,6 +6726,7 @@ function computeAttackTargets(player, group) {
     const def = regions[idx];
     const allAdj = group.every(g => isAdjacent(g, idx));
     if (!allAdj) { map.set(idx, { beatable: false }); continue; }
+    if (aoeSlim) { map.set(idx, { beatable: group.length >= AOE_SLIM_MIN_ATTACKERS }); continue; }
     const pwr = aoePower(group, aoeWorking && aoeWorking.isDouble);
     map.set(idx, { beatable: pwr.total > effectiveDefense(idx) });
   }
@@ -6632,6 +7022,7 @@ function cpuTurnAoeBattle(player, difficulty) {
 /* Pure planner for the current round's day/night window. Reused by the CPU
    turn and by headless simulation. */
 function cpuPlanForRound(player, difficulty) {
+  if (aoeSlim) return cpuComposeDaySlim(player, difficulty);
   if (aoeIsNightRound()) {
     const adjusts = enumerateAdjustCandidates(player);
     if (difficulty === 'easy') {
@@ -6672,7 +7063,7 @@ function cpuThreatenedCount(player) {
    threatened border first, while easy takes long-odds attacks. */
 function cpuComposeDay(player, difficulty) {
   cpuDifficulty = difficulty;
-  const budget = aoeMaxActions(), maxA = aoeMaxAttacks(), maxD = aoeMaxDefends();
+  const budget = aoeMaxActions(), maxD = aoeMaxDefends();
   const acts = [], actValues = [];
   const usedDefenders = new Set(), usedSources = new Set(), usedBases = new Set();
   let attacksTaken = 0, defendsTaken = 0, dayValue = 0;
@@ -6709,7 +7100,6 @@ function cpuComposeDay(player, difficulty) {
 
   for (const { a, s } of scoredAll) {
     if (a.double) continue;
-    if (attacksTaken >= maxA) break;
     if (s <= prof.floor) break;
     if (aoeActionApCost('attack', attacksTaken) > apLeft()) break;
     if (aoeStaminaShortfall(player, acts, false)) break;
@@ -6770,6 +7160,83 @@ function cpuComposeDay(player, difficulty) {
   }
 
   if (acts.length === 0) return { type: 'pass', player };
+  return { type: 'multi', player, actions: acts };
+}
+
+/* Slim CPU day. Candidates are built from the territories still free after the
+   actions already chosen, and each one is kept only if the plan stays valid.
+   Easy picks at random; medium and hard defend the most exposed border, prefer
+   the biggest attacks and claims, and hard spends spare stamina on doubles. */
+const AOE_SLIM_CPU_DOUBLE_STAMINA_RESERVE = 3;
+const AOE_SLIM_CPU_DOUBLE_DEFEND_THREAT = 3;
+function cpuComposeDaySlim(player, difficulty) {
+  const opp = otherPlayer(player);
+  const acts = [];
+  const shuffle = (xs) => { for (let i = xs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [xs[i], xs[j]] = [xs[j], xs[i]]; } return xs; };
+  const freeOwnNeighbors = (idx) => {
+    const busy = aoeCommittedTerritories(acts);
+    return regions[idx].neighbors.filter(n => regions[n] && regions[n].owner === player && !busy.has(n));
+  };
+  const tryAdd = (act) => {
+    if (validatePlan({ type: 'multi', player, actions: acts.concat([act]) })) return false;
+    acts.push(act);
+    return true;
+  };
+  const enemyNeighborCount = (idx) => regions[idx].neighbors.filter(n => regions[n] && regions[n].owner === opp).length;
+  const attackCandidates = () => regions.filter(r => r.owner === opp)
+    .map(r => ({ defender: r.id, group: freeOwnNeighbors(r.id) }))
+    .filter(c => c.group.length >= AOE_SLIM_MIN_ATTACKERS);
+  const claimCandidates = () => regions.filter(r => r.owner === 0)
+    .map(r => ({ target: r.id, group: freeOwnNeighbors(r.id) }))
+    .filter(c => c.group.length > 0);
+  const exposedBorders = () => regions
+    .filter(r => r.owner === player && enemyNeighborCount(r.id) >= AOE_SLIM_MIN_ATTACKERS)
+    .sort((a, b) => enemyNeighborCount(b.id) - enemyNeighborCount(a.id));
+  const attackAct = (c, double) => ({ type: 'attack', player, group: c.group, defender: c.defender, double,
+                                      autoBleed: true, failDist: null, successDist: null });
+  const claimAct = (c) => ({ type: 'claim', player,
+                             claims: [{ target: c.target, contributions: c.group.map(source => ({ source, amount: 1 })) }] });
+  const defendAct = (idx, double) => ({ type: 'defend', player, bases: [idx], double });
+  const apLeft = () => aoeMaxActions() - aoeApUsedBy(acts);
+
+  if (difficulty === 'easy') {
+    for (let tries = 0; tries < 12 && apLeft() > 0; tries++) {
+      const pick = shuffle(['attack', 'claim', 'defend', 'pass'])[0];
+      if (pick === 'pass') break;
+      const pool = pick === 'attack' ? attackCandidates() : pick === 'claim' ? claimCandidates() : exposedBorders();
+      if (pool.length === 0) continue;
+      const c = pool[Math.floor(Math.random() * pool.length)];
+      tryAdd(pick === 'attack' ? attackAct(c, false) : pick === 'claim' ? claimAct(c) : defendAct(c.id, false));
+    }
+  } else {
+    const hard = difficulty === 'hard';
+    const exposed = exposedBorders();
+    if (exposed.length) {
+      const top = exposed[0];
+      const double = hard && enemyNeighborCount(top.id) >= AOE_SLIM_CPU_DOUBLE_DEFEND_THREAT;
+      if (!(double && tryAdd(defendAct(top.id, true)))) tryAdd(defendAct(top.id, false));
+    }
+    for (const c of attackCandidates().sort((a, b) => b.group.length - a.group.length)) {
+      if (apLeft() <= 0) break;
+      const fresh = { defender: c.defender, group: freeOwnNeighbors(c.defender) };
+      if (fresh.group.length < AOE_SLIM_MIN_ATTACKERS) continue;
+      const spareStamina = aoeStaminaOf(player) - aoeStaminaUsedBy(acts);
+      const double = hard && spareStamina >= AOE_SLIM_CPU_DOUBLE_STAMINA_RESERVE;
+      if (!(double && tryAdd(attackAct(fresh, true)))) tryAdd(attackAct(fresh, false));
+    }
+    for (const c of claimCandidates().sort((a, b) => b.group.length - a.group.length)) {
+      if (apLeft() <= 0) break;
+      const group = freeOwnNeighbors(c.target);
+      if (group.length) tryAdd(claimAct({ target: c.target, group }));
+    }
+    for (const r of exposedBorders()) {
+      if (apLeft() <= 0) break;
+      tryAdd(defendAct(r.id, false));
+    }
+  }
+
+  if (acts.length === 0) return { type: 'pass', player };
+  if (!aoeMultiMode()) return acts[0];
   return { type: 'multi', player, actions: acts };
 }
 
@@ -7161,7 +7628,7 @@ async function createRoom() {
         firstPlayer: 1,
         totalTroops, gameMode, fogOfWar,
         turnMode, fixedTurnCount, preAllocRandom, actionsPerDay,
-        assignQuantumSetting, goCaptureEnabled,
+        assignQuantumSetting, goCaptureEnabled, aoeSlim,
         map: serializeMap(map)
       });
       startGame(map);
@@ -7202,6 +7669,7 @@ function handlePeerData(d) {
       if (typeof d.preAllocRandom === 'boolean') preAllocRandom = d.preAllocRandom;
       if (typeof d.assignQuantumSetting === 'number') assignQuantumSetting = d.assignQuantumSetting;
       if (typeof d.goCaptureEnabled === 'boolean') goCaptureEnabled = d.goCaptureEnabled;
+      aoeSlim = d.aoeSlim === true;
       if (d.map) {
         startGame(deserializeMap(d.map));
       }
@@ -7251,6 +7719,16 @@ function handlePeerData(d) {
         aoeRevealing = true;
         render();
         aoePerformResolutionWithSeed(d.rng_seed);
+      }
+      break;
+    case 'aoe-slim-picks':
+      if (phase === 'battle' && aoeSlim && d.picks && typeof d.round === 'number') {
+        aoeSlimRemoteWipePicks = { round: d.round, picks: d.picks };
+        if (aoeSlimAwaitingRemotePicks && d.round === aoeRound) {
+          const resume = aoeSlimAwaitingRemotePicks;
+          aoeSlimAwaitingRemotePicks = null;
+          resume();
+        }
       }
       break;
     case 'aoe-attrition':
@@ -7408,7 +7886,33 @@ function renderRulesCard() {
     '<li><strong>Geographic:</strong> randomly-shaped countries with irregular borders. Two regions are neighbours if their borders touch.</li></ul>';
 
   let body;
-  if (gameMode === 'aoe') {
+  if (aoeSlim) {
+    body =
+      '<h2>How to Play: Age of Empires (Slim)</h2>' +
+      '<h3>Phase 1 · Assign</h3>' +
+      '<ul>' +
+        '<li>Players alternate placing on an empty territory. Each placement claims one territory. There are no troop counts.</li>' +
+        '<li><strong>Pie rule:</strong> Player 2 may take Player 1\'s opening territory instead of placing.</li>' +
+        (goCaptureEnabled
+          ? '<li><strong>Go on:</strong> surround captures work as in Age of Empires, with every territory counting as one.</li>'
+          : '<li><strong>Go off:</strong> place on any empty territory.</li>') +
+      '</ul>' +
+      '<h3>Phase 2 · Battle (days only)</h3>' +
+      '<p>Both players plan in secret, then the plans resolve together, with chains resolving in order (see below). There are no nights. Each territory can join only one action a day.</p>' +
+      '<ul>' +
+        '<li><strong>Action points:</strong> ' + (actionsPerDay === 3 ? '3 a day. Attack, Defend and Claim cost 1, a Double Attack or Double Defend costs ' + AOE_DOUBLE_AP_COST + '.' : '1 a day, one action.') + '</li>' +
+        '<li><strong>Stamina:</strong> you start with ' + AOE_STAMINA_START + ' and gain ' + AOE_STAMINA_PER_DAY + ' each new day. An attack costs 1, a double attack ' + AOE_DOUBLE_ATTACK_STAMINA + '.</li>' +
+        '<li><strong>⚔ Attack:</strong> pick ' + AOE_SLIM_MIN_ATTACKERS + ' or more of your territories that all border one enemy territory. If nothing stops it, the target turns gray. Take it later with a Claim.</li>' +
+        '<li><strong>Clash:</strong> when each side attacks a territory that is part of the other side\'s attack, the attack with more strength wins and the other fails. A tie repels both. Strength is the number of attacking territories, doubled for a double attack.</li>' +
+        '<li><strong>Chain:</strong> when only one side attacks a territory that is part of the other side\'s attack, the attack being hit resolves first, then the one hitting it. An attack whose target already fell, or that has fewer than ' + AOE_SLIM_MIN_ATTACKERS + ' attackers left, is called off.</li>' +
+        '<li><strong>⚔⚔ Double Attack:</strong> converts the target to you when unopposed. Against a defended territory, or after winning a clash, it turns the target gray instead.</li>' +
+        '<li><strong>🛡 Defend:</strong> blocks every normal attack on that border territory for the day.</li>' +
+        '<li><strong>🛡🛡 Double Defend:</strong> blocks every attack. After plans are revealed, its owner picks one attacker of each normal attack on it, and that territory turns gray. A double attack on it does nothing.</li>' +
+        '<li><strong>▣ Claim:</strong> pick a gray and your territories that border it. Unopposed, it is yours. If both sides claim it, more territories wins and a tie leaves it gray.</li>' +
+        '<li>The game ends on the day limit or when one side has no territories. Most territories wins.</li>' +
+      '</ul>' +
+      mapBlock;
+  } else if (gameMode === 'aoe') {
     body =
       '<h2>How to Play — Aggression: Age of Empires</h2>' +
       assignBlock +
@@ -7417,12 +7921,12 @@ function renderRulesCard() {
       (actionsPerDay === 3
         ? '<h3>Day actions (3 AP per day)</h3>' +
           '<ul>' +
-            '<li>Each day you spend <strong>3 action points</strong>. Attack, Defend and Claim cost 1 AP each, with at most 2 attacks a day. A <strong>double attack</strong> or <strong>double defend</strong> costs ' + AOE_DOUBLE_AP_COST + ' AP, so it can be paired with one more attack, defend or claim.</li>' +
-            '<li>Legal full days: attack + attack + claim, attack + attack + defend, attack + defend + defend, defend + defend + defend, defend + defend + claim, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, or a double attack or double defend plus one attack, defend or claim. A double attack and a double defend cannot share a day.</li>' +
+            '<li>Each day you spend <strong>3 action points</strong>. Attack, Defend and Claim cost 1 AP each. A <strong>double attack</strong> or <strong>double defend</strong> costs ' + AOE_DOUBLE_AP_COST + ' AP, so it can be paired with one more attack, defend or claim.</li>' +
+            '<li>Legal full days: attack + attack + attack, attack + attack + claim, attack + attack + defend, attack + defend + defend, defend + defend + defend, defend + defend + claim, attack + defend + claim, attack + claim + claim, defend + claim + claim, claim + claim + claim, or a double attack or double defend plus one attack, defend or claim. A double attack and a double defend cannot share a day.</li>' +
             '<li><strong>Stamina:</strong> attacks also spend stamina. Each player starts the battle with ' + AOE_STAMINA_START + ' and gains ' + AOE_STAMINA_PER_DAY + ' at the start of every new day, and unspent stamina carries over. An attack costs 1 and a double attack costs ' + AOE_DOUBLE_ATTACK_STAMINA + '. With no stamina left you cannot attack. Defend and Claim cost none.</li>' +
             '<li>Build an action on the map, then press <strong>＋ Add to Plan</strong>. Switching action type banks a finished action automatically. Press × on a listed action to drop it. Submit sends the whole set.</li>' +
             '<li>No two attacks may target the same territory, no two claims the same gray, and each territory may supply only one claim.</li>' +
-            '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then attack slot 2, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
+            '<li><strong>Resolution order:</strong> night adjustments, then all Defends (reinforcement), then attack slot 1 for both players, then slot 2 and slot 3, then every Claim at once. Attacks are re-checked before their slot: an attack whose attackers died or whose target already flipped is simply dropped.</li>' +
             '<li>Whoever pays attrition places it. After the round resolves you are asked to spread your own losses across the territories that took part, for every attack that bled and for a clash alike. An attack whose losses a later attack in the same round depends on is settled automatically instead, and so is any side played by the CPU.</li>' +
           '</ul>'
         : '<h3>Day actions (1 per day)</h3><p>Each day you pick a single action: Attack, Defend, Claim, or Pass. Double actions need the 3-action day. An attack spends 1 stamina: you start with ' + AOE_STAMINA_START + ', gain ' + AOE_STAMINA_PER_DAY + ' each new day, and cannot attack at 0.</p>') +
@@ -7549,6 +8053,8 @@ window.AG = {
   setFog: (f) => { fogOfWar = f; },
   setGoCapture: (on) => { goCaptureEnabled = on; },
   setGameMode: (g) => { gameMode = g; },
+  setAoeSlim: (on) => { aoeSlim = !!on; },
+  resolveAoeRoundSlim, cpuComposeDaySlim,
   setPhase: (p) => { phase = p; },
   setAoeRound: (r) => { aoeRound = r; },
   getAoeRound: () => aoeRound,
