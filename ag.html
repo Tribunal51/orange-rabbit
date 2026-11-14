@@ -4102,6 +4102,37 @@ function maybeTriggerCpuPlan() {
   }, 350);
 }
 
+const AOE_TERRITORY_ROLE = { attack: 'attacking', defend: 'fortified', claim: 'sending troops to a claim' };
+
+/* Own territories an action ties up for the day: attackers, the fortified base, claim sources. */
+function aoeActionTerritories(a) {
+  if (a.type === 'attack') return a.group.slice();
+  if (a.type === 'defend') return a.bases.slice();
+  if (a.type === 'claim') {
+    const sources = [];
+    for (const cl of planClaimList(a)) for (const c of cl.contributions) sources.push(c.source);
+    return sources;
+  }
+  return [];
+}
+
+/* Map from each territory tied up by `actions` to the type of the action holding it. */
+function aoeCommittedTerritories(actions) {
+  const committed = new Map();
+  for (const a of actions) for (const t of aoeActionTerritories(a)) committed.set(t, a.type);
+  return committed;
+}
+
+function aoeTerritoryBusyMessage(idx, type) {
+  return regionRef(idx) + ' is already ' + AOE_TERRITORY_ROLE[type] + ' this turn.';
+}
+
+/* Why own territory `idx` cannot join another action in `actions`, or null. */
+function aoeTerritoryBusyReason(actions, idx) {
+  const committed = aoeCommittedTerritories(actions);
+  return committed.has(idx) ? aoeTerritoryBusyMessage(idx, committed.get(idx)) : null;
+}
+
 /* Why an action cannot join the current player's composed plan, or null. */
 function composedAdditionError(player, act) {
   if (!act) return 'Finish building the action first.';
@@ -4125,41 +4156,20 @@ function composedAdditionError(player, act) {
     }
   }
   if (act.type === 'claim') {
-    const targets = new Set(), sources = new Set();
+    const targets = new Set();
     for (const a of aoeComposed) {
-      if (a.type !== 'claim') continue;
-      for (const cl of planClaimList(a)) {
-        targets.add(cl.target);
-        for (const c of cl.contributions) sources.add(c.source);
-      }
+      if (a.type === 'claim') for (const cl of planClaimList(a)) targets.add(cl.target);
     }
     for (const cl of planClaimList(act)) {
       if (targets.has(cl.target)) return 'Already claiming ' + regionRef(cl.target) + ' this turn.';
-      for (const c of cl.contributions) {
-        if (sources.has(c.source)) return regionRef(c.source) + ' already sent troops to another claim.';
-      }
     }
   }
-  if (act.type === 'attack') {
-    // A territory cannot both march out and dig in on the same day.
-    for (const a of aoeComposed) {
-      if (a.type !== 'defend') continue;
-      for (const g of act.group) {
-        if (a.bases[0] === g) return regionRef(g) + ' is fortified this turn, so it cannot attack.';
-      }
-    }
+  if (act.type === 'defend' && aoeComposedDefendCount() >= aoeMaxDefends()) {
+    return 'Only ' + aoeMaxDefends() + ' Defend action' + (aoeMaxDefends() === 1 ? '' : 's') + ' per turn.';
   }
-  if (act.type === 'defend') {
-    if (aoeComposedDefendCount() >= aoeMaxDefends()) {
-      return 'Only ' + aoeMaxDefends() + ' Defend action' + (aoeMaxDefends() === 1 ? '' : 's') + ' per turn.';
-    }
-    const b = act.bases[0];
-    for (const a of aoeComposed) {
-      if (a.type === 'defend' && a.bases[0] === b) return regionRef(b) + ' is already fortified this turn.';
-      if (a.type === 'attack' && a.group.indexOf(b) >= 0) {
-        return regionRef(b) + ' is attacking this turn, so it cannot be fortified.';
-      }
-    }
+  const committed = aoeCommittedTerritories(aoeComposed);
+  for (const t of aoeActionTerritories(act)) {
+    if (committed.has(t)) return aoeTerritoryBusyMessage(t, committed.get(t));
   }
   if (act.type === 'adjust') {
     const srcs = new Set();
@@ -4326,44 +4336,35 @@ function validatePlan(plan) {
       return 'Plan needs ' + aoeStaminaUsedBy(acts) + ' stamina; only ' + aoeStaminaOf(plan.player) + ' left.';
     }
     let attacks = 0, defends = 0;
-    const defenders = new Set(), targets = new Set(), claimSrc = new Set(), adjSrc = new Set(),
-          defBases = new Set(), attackers = new Set();
+    const defenders = new Set(), targets = new Set(), adjSrc = new Set(), committed = new Map();
     for (const a of acts) {
       if (!a || a.type === 'multi' || a.type === 'pass') return 'Invalid action in plan.';
       if (a.player !== plan.player) return 'Action belongs to the wrong player.';
       const e = validatePlan(a);
       if (e) return e;
+      for (const t of aoeActionTerritories(a)) {
+        if (committed.has(t)) return aoeTerritoryBusyMessage(t, committed.get(t));
+        committed.set(t, a.type);
+      }
       if (a.type === 'attack') {
         attacks++;
         if (attacks > aoeMaxAttacks()) return 'Only ' + aoeMaxAttacks() + ' attack' + (aoeMaxAttacks() === 1 ? '' : 's') + ' per turn.';
         if (defenders.has(a.defender)) return 'Two attacks on the same territory.';
         defenders.add(a.defender);
-        for (const g of a.group) attackers.add(g);
       } else if (a.type === 'claim') {
         for (const cl of planClaimList(a)) {
           if (targets.has(cl.target)) return 'Two claims on the same territory.';
           targets.add(cl.target);
-          for (const c of cl.contributions) {
-            if (claimSrc.has(c.source)) return 'A territory sent troops to two claims.';
-            claimSrc.add(c.source);
-          }
         }
       } else if (a.type === 'defend') {
         defends++;
         if (defends > aoeMaxDefends()) return 'Only ' + aoeMaxDefends() + ' Defend actions per turn.';
-        const b = a.bases[0];
-        if (defBases.has(b)) return 'That base is already fortified this turn.';
-        defBases.add(b);
       } else if (a.type === 'adjust') {
         for (const t of a.transfers) {
           if (adjSrc.has(t.source)) return 'A territory moved troops twice.';
           adjSrc.add(t.source);
         }
       }
-    }
-    // A territory either marches out or digs in, never both on the same day.
-    for (const b of defBases) {
-      if (attackers.has(b)) return regionRef(b) + ' cannot both attack and be fortified this turn.';
     }
     return null;
   }
@@ -4847,11 +4848,8 @@ function onRegionClickAoe(idx) {
     if (r.owner === player) {
       if (aoeWorking.attackGroup.has(idx)) aoeWorking.attackGroup.delete(idx);
       else {
-        for (const a of aoeComposed) {
-          if (a.type === 'defend' && a.bases[0] === idx) {
-            flashMessage(regionRef(idx) + ' is fortified this turn, so it cannot attack.', 'warn'); return;
-          }
-        }
+        const busy = aoeTerritoryBusyReason(aoeComposed, idx);
+        if (busy) { flashMessage(busy, 'warn'); return; }
         aoeWorking.attackGroup.add(idx);
       }
       aoeWorking.attackDefender = -1;
@@ -4882,16 +4880,8 @@ function onRegionClickAoe(idx) {
     if (!isBorderTerritory(idx, player) && !r.isBase) {
       flashMessage('A base must be on your border (next to a gray or enemy territory).', 'warn'); return;
     }
-    // One base per Defend action; a base may only be fortified once a turn and
-    // may not also be marching out in an attack.
-    for (const a of aoeComposed) {
-      if (a.type === 'defend' && a.bases[0] === idx) {
-        flashMessage(regionRef(idx) + ' is already fortified this turn.', 'warn'); return;
-      }
-      if (a.type === 'attack' && a.group.indexOf(idx) >= 0) {
-        flashMessage(regionRef(idx) + ' is attacking this turn, so it cannot be fortified.', 'warn'); return;
-      }
-    }
+    const busy = aoeTerritoryBusyReason(aoeComposed, idx);
+    if (busy) { flashMessage(busy, 'warn'); return; }
     aoeWorking.defendBases = new Set([idx]);
     render(); return;
   }
@@ -4954,6 +4944,8 @@ function onRegionClickAoe(idx) {
         cl.contributions = cl.contributions.filter(c => c.source !== idx);
         render(); return;
       }
+      const busy = aoeTerritoryBusyReason(aoeComposed, idx);
+      if (busy) { flashMessage(busy, 'warn'); return; }
       if (r.troops < 2) { flashMessage('Source must have ≥ 2 troops (cap is floor/2).', 'warn'); return; }
       if (aoeWorking.claimTargetSel < 0) {
         const hasGrayAdj = r.neighbors.some(nid => regions[nid] && regions[nid].owner === 0);
@@ -6697,8 +6689,7 @@ function cpuComposeDay(player, difficulty) {
   function addDefend() {
     if (defendsTaken >= prof.maxDefends) return false;
     if (aoeActionApCost('defend', defendsTaken) > apLeft()) return false;
-    const skip = new Set(usedBases);
-    for (const g of usedAttackers) skip.add(g);
+    const skip = new Set([...usedBases, ...usedAttackers, ...usedSources]);
     const b = cpuPickBestBase(player, skip);
     if (b < 0) return false;
     usedBases.add(b);
@@ -6741,7 +6732,7 @@ function cpuComposeDay(player, difficulty) {
       let taken = 0;
       for (const cl of bC.plan.claims) {
         if (apLeft() <= 0 || taken >= prof.maxClaims) break;
-        if (cl.contributions.some(c => usedSources.has(c.source))) continue;
+        if (cl.contributions.some(c => usedSources.has(c.source) || usedAttackers.has(c.source) || usedBases.has(c.source))) continue;
         for (const c of cl.contributions) usedSources.add(c.source);
         acts.push({ type: 'claim', player, claims: [{ target: cl.target, contributions: cl.contributions }] });
         actValues.push(scoreClaimAction(cl));
